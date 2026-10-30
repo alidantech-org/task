@@ -30,17 +30,31 @@ This is the intended starting organization, not a claim that all directories alr
 
 There is no generated SDK directory in this repository. Internal schemas and contracts may live with the code that owns them.
 
-### Project records and documentation
+### Documentation and Task workspace
 
-Use **`tasks/`** as the visible, repository-level workspace directory. Do not use `.tasks/` or `.task/` for this purpose.
+We use two distinct locations with different responsibilities:
+
+- **`.docs/`** contains documentation about the Task software project: architecture, development setup, contributor guidance, implementation guides, and operational/reference material.
+- **`tasks/`** is the Task-managed workspace. It holds the repository's own task records and evolving project context, including product requirements, research, decisions, handoffs, and workspace state. This is also the visible workspace convention that `task init` should create in other projects.
+
+Do not duplicate the same document in both locations. Use `.docs/` to explain how the software is built and maintained; use `tasks/` for the work and project knowledge managed through Task.
+
+The intended starting shapes are:
 
 ```text
+.docs/
+├── README.md
+├── architecture/
+├── development/
+├── guides/
+└── reference/
+
 tasks/
+├── README.md
 ├── config.yaml
 ├── TASK-0001.md
 ├── docs/
 │   ├── product/
-│   ├── architecture/
 │   ├── research/
 │   └── benchmarks/
 ├── decisions/
@@ -49,11 +63,10 @@ tasks/
 └── archive/
 ```
 
-This is the intended convention for this repository and for projects initialized by `task init`. The exact subdirectories can grow as real needs emerge.
+These are conventions, not a requirement to create empty directories. Add subdirectories and workspace records as real needs emerge.
 
-- Individual task and knowledge records are the source of truth.
+- Individual task and knowledge records in `tasks/` are authoritative.
 - Root-level `TODO.md` is a convenient overview/index, not a second source of truth.
-- Keep task records, project documentation, decisions, handoffs, and related records together under `tasks/`.
 - Prefer stable task identifiers so records can link to one another.
 
 ### CLI names
@@ -67,8 +80,8 @@ The product is named **Task**. The CLI should be available through both `task` a
 - Day-to-day implementation and feature work should happen on `develop`.
 - Promote reviewed, working changes from `develop` to `main` when ready for a stable milestone.
 
-Keep changes focused and document meaningful architectural decisions in `tasks/decisions/`.
+Keep changes focused. Record meaningful product/work decisions in `tasks/decisions/` and keep repository engineering documentation in `.docs/`.
 
 ## Current status
 
-This README records the initial project direction and repository conventions. The directory tree above is a proposed structure; it does not imply that the applications, packages, or workspace tooling have been implemented yet.
+This README records the initial project direction and repository conventions. The directory trees above are proposed structures; they do not imply that the applications, packages, or workspace tooling have been implemented yet.
