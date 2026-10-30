@@ -25,6 +25,10 @@ export function createLocalServer(): Server {
 
 if (import.meta.main) {
   const port = Number(process.env.TASK_LOCAL_PORT ?? 4317);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("TASK_LOCAL_PORT must be an integer between 1 and 65535");
+  }
+
   const server = createLocalServer();
   server.listen(port, host, () => {
     process.stdout.write(`Task local runtime listening on http://${host}:${port}\n`);
