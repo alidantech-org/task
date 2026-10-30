@@ -15,7 +15,7 @@ From the repository root:
 bun install
 ```
 
-This installs the root development tools and links workspace packages.
+This installs the root development tools and links the CLI workspace.
 
 ## Run the CLI
 

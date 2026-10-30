@@ -3,8 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "source/apps/*",
-    "source/packages/*"
+    "source/apps/cli"
   ],
   "scripts": {
     "dev": "bun run --filter @task/cli dev",
