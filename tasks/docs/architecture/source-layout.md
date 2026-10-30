@@ -33,7 +33,7 @@ Architecture decisions:
     │   └── tui/                 # OpenTUI + React terminal application
     └── packages/
         ├── contracts/           # Shared TypeScript contracts
-        └── workspace/           # Shared local workspace primitives
+        └── workspace/           # Shared local workspace index and path primitives
 
 Root-level scripts/ contains small Bun bridges for native toolchains such as Flutter; it is not an application source directory.
 
@@ -97,7 +97,7 @@ source/packages is the home for reusable code shared across applications. Extrac
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
-- @task/workspace: local workspace path primitives shared by local consumers.
+- @task/workspace: read-only in-memory Markdown summaries, reconciliation/watching, on-demand body reads, and path preflight shared by local consumers.
 
 TypeScript packages are not directly consumable by Flutter/Dart. The mobile client must use generated or separately maintained Dart contracts from a language-neutral schema or API definition.
 
@@ -107,7 +107,7 @@ The hosted API's conceptual modules remain internal modules of one NestJS applic
 
 The CLI is the primary scriptable interface for people and AI agents. It must work without the local application running. Commands invoke workspace operations directly rather than routing every command through HTTP. Human-facing output should be polished and coloured; JSON output and exit codes remain stable for automation.
 
-The local application exposes those same capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. The workspace package is the intended home for genuinely shared local operations as those operations are implemented.
+The local application will expose approved capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. `@task/workspace` currently supplies a read-only summary index and explicit Markdown body reads; browser access remains gated on origin/capability authorization and safe operation-boundary filesystem protections.
 
 ## Local runtime security
 

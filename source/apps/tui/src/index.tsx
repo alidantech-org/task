@@ -1,9 +1,10 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { buildWorkspaceIndex } from "@task/workspace";
 import { useState } from "react";
 import { navigationSections } from "#/navigation";
 
-function WorkspaceTui() {
+function WorkspaceTui({ documentCount }: { documentCount: number | undefined }) {
   const [active, setActive] = useState(0);
   const renderer = useRenderer();
 
@@ -67,8 +68,15 @@ function WorkspaceTui() {
             A focused terminal workspace for projects, tasks, documents and activity.
           </text>
           <box style={{ height: 1 }} />
-          <text fg="#FBBF24">Workspace connection is the next phase</text>
-          <text fg="#94A3B8">This interactive shell is ready for shared workspace operations.</text>
+          <text fg="#FBBF24">
+            {documentCount === undefined
+              ? "Workspace root not configured"
+              : `${documentCount} documents indexed`}
+          </text>
+          <text fg="#94A3B8">
+            Summaries come from the shared workspace index. Editing and task workflows are not
+            enabled.
+          </text>
         </box>
       </box>
       <box style={{ flexDirection: "row", justifyContent: "space-between", paddingX: 1 }}>
@@ -80,4 +88,8 @@ function WorkspaceTui() {
 }
 
 const renderer = await createCliRenderer({ exitOnCtrlC: true });
-createRoot(renderer).render(<WorkspaceTui />);
+const workspaceRoot = process.env.TASK_WORKSPACE_ROOT;
+const workspaceIndex = workspaceRoot
+  ? await buildWorkspaceIndex({ root: workspaceRoot })
+  : undefined;
+createRoot(renderer).render(<WorkspaceTui documentCount={workspaceIndex?.documents.size} />);

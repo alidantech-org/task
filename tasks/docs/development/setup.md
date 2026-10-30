@@ -29,6 +29,14 @@ Flutter remains outside the Bun workspace. Before the first mobile build, analys
 
 ## Run applications
 
+Start the API, hosted site, local runtime, and local dashboard together:
+
+    bun dev
+
+The root supervisor prefixes service logs, keeps the processes attached to the terminal, stops peers if a process exits, and shuts everything down on Ctrl+C. Defaults are API `127.0.0.1:3000`, hosted site `127.0.0.1:5174`, local dashboard `127.0.0.1:5173`, and local runtime `127.0.0.1:4317`.
+
+Run terminal tools separately: CLI commands are short-lived and the TUI needs its own interactive terminal.
+
     bun run dev:cli
     bun run dev:local
     bun run dev:site
@@ -113,4 +121,4 @@ Flutter/Dart does not import TypeScript package source. Cross-language contracts
 
 ## Current implementation scope
 
-These are starter foundations, not completed product capabilities. The local runtime exposes only a loopback health endpoint; the Next.js apps render starter screens; the CLI provides help, version, JSON metadata and a Bun environment check; the TUI has interactive keyboard navigation; and the workspace package provides lexical plus symlink-aware path validation. Workspace discovery/CRUD, safe file mutation primitives, authenticated local HTTP operations, WebSocket reconciliation, API persistence/authentication, cloud sync, and complete user workflows remain future implementation work.
+These are starter foundations, not completed product capabilities. The local runtime exposes only a loopback health endpoint; the Next.js apps render starter screens; the CLI provides help, version, JSON metadata and a Bun environment check; the TUI has interactive keyboard navigation; and `@task/workspace` provides a read-only in-memory Markdown summary index with reconciliation and optional watching. Set `TASK_WORKSPACE_ROOT` to an already resolved workspace directory for the CLI doctor, TUI overview, or local runtime index. Workspace commands/CRUD, browser access to indexed content, safe mutations, authenticated local HTTP operations, WebSocket updates, API persistence/authentication, cloud sync, and complete user workflows remain future implementation work.

@@ -32,7 +32,13 @@ From the repository root:
 
     bun install
 
-Run individual applications:
+Start the complete local development stack:
+
+    bun dev
+
+This keeps the API, hosted site, local runtime, and local dashboard running together. The development URLs are API `http://127.0.0.1:3000` (OpenAPI at `/api/docs`), hosted site `http://127.0.0.1:5174`, and local dashboard `http://127.0.0.1:5173`; the local runtime listens on `127.0.0.1:4317`. Press Ctrl+C to stop the stack. If any service exits, the stack stops its peers.
+
+Run individual applications or terminal tools separately:
 
     bun run dev:cli
     bun run dev:local
@@ -41,7 +47,7 @@ Run individual applications:
     bun run dev:tui
     bun run dev:mobile
 
-The local command starts the loopback runtime and local Next.js dashboard together. Flutter commands are delegated to the Flutter SDK from the root scripts.
+The local command starts the loopback runtime and local Next.js dashboard together. The CLI and TUI run separately because the CLI is one-shot and the TUI needs an interactive terminal. Flutter commands are delegated to the Flutter SDK from the root scripts.
 
 ## Quality gates
 
@@ -82,4 +88,4 @@ See [development setup](tasks/docs/development/setup.md) and [source layout](tas
 
 ## Project status
 
-The repository contains working starter entry points and root-managed quality commands, not completed product capabilities. The API and local runtime expose liveness/readiness endpoints; the browser apps render starter screens; the CLI supports help, version, JSON metadata and environment checks; the TUI has keyboard navigation; and the workspace package includes lexical and symlink-aware path preflight checks. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries. Full workspace discovery/CRUD, authentication, persistence, local API security, collaboration, synchronization, and production distribution remain future implementation work.
+The repository contains working starter entry points and root-managed quality commands, not completed product capabilities. The API and local runtime expose liveness/readiness endpoints; the browser apps render starter screens; the CLI supports help, version, JSON metadata and environment checks; the TUI has keyboard navigation; and `@task/workspace` provides an in-memory Markdown metadata index, incremental reconciliation, explicit body reads, and optional watching. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries. Full workspace commands/CRUD, browser access to workspace data, authentication, persistence, local API security, collaboration, synchronization, and production distribution remain future implementation work.

@@ -50,7 +50,7 @@ async function bootstrap(): Promise<void> {
     .setVersion("1")
     .build();
   SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, openApi));
-  await app.listen(readPort(process.env.PORT), process.env.HOST ?? "0.0.0.0");
+  await app.listen(readPort(process.env.PORT), process.env.HOST ?? "127.0.0.1");
 }
 
 void bootstrap();

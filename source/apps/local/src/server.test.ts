@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createLocalServer } from "@/server";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createLocalServer, monitorWorkspace } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
 
@@ -35,5 +38,18 @@ describe("local runtime HTTP boundary", () => {
 
     const wrongMethod = await fetch(`${baseUrl}/health/live`, { method: "POST" });
     expect(wrongMethod.status).toBe(405);
+  });
+
+  test("runtime can maintain the shared index without exposing it through HTTP", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-index-"));
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      await writeFile(join(root, "tasks", "one.md"), "---\nid: T-1\nname: One\ntype: task\n---\n");
+      const monitor = await monitorWorkspace(root);
+      expect(monitor.index.documents.size).toBe(1);
+      monitor.watcher.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

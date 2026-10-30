@@ -238,10 +238,18 @@ Do not build a second task model in the runtime/dashboard, route ordinary CLI co
 At the time of writing:
 
 - CLI is a starter entry point, not the complete workspace command set.
-- @task/workspace contains only a lexical path-containment helper.
+- @task/workspace provides a read-only in-memory Markdown summary index, explicit body reads, incremental reconciliation, optional filesystem watching, and lexical/symlink-aware path preflight. Metadata validation currently covers common required fields and tags, not the complete future type-specific registry. There is no persistent cache or full-text search.
 - Local runtime is a starter HTTP server with a health endpoint only.
 - Local React dashboard is a starter screen, not connected to workspace operations.
 - Local workspace HTTP API, WebSocket protocol, filesystem reconciliation, and CLI-managed runtime lifecycle are not complete.
 - Concurrency/conflict handling and origin/capability/symlink protections are requirements, not completed features.
+
+## 17. Shared Markdown index foundation
+
+`@task/workspace` accepts an explicit resolved root; repository discovery and `task.yaml` parsing remain separate. It scans Markdown files, skips configured generated/dependency directories and symlinks, parses frontmatter summaries, and reports invalid documents as diagnostics without discarding valid entries. The `type` field classifies records, including `documentation` documents in `tasks/docs/`. Full bodies are loaded only through an explicit safe-path-checked read operation.
+
+Reconciliation inventories the filesystem and reuses cached summaries when file identity, size, modification time, and change time are unchanged. Changed files are read, hashed, and reparsed; deletions leave the in-memory index. The optional watcher coalesces hints and reconciles against disk. Missing filenames, watcher errors, and periodic checks trigger full snapshot reconciliation. Callers can also request reconciliation and must treat events as hints rather than a durable change log.
+
+The first consumers may use the shared index locally for diagnostics and a terminal summary. The local runtime may maintain an index when given `TASK_WORKSPACE_ROOT`, but the current health-only HTTP API does not expose its data. Persistent caching and content search should be considered only after startup and reconciliation timings are measured. Indexing does not make reads/writes race-safe; browser workspace routes remain gated on origin/capability authorization and safe operation-boundary filesystem protections.
 
 Implement incrementally and keep this status accurate as capabilities land.

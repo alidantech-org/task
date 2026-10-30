@@ -2,7 +2,7 @@
 
 import { intro, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { getCliMetadata, resolveCommand } from "#/command";
+import { getCliMetadata, inspectWorkspace, resolveCommand } from "#/command";
 
 const metadata = getCliMetadata("0.1.0");
 const args = process.argv.slice(2);
@@ -59,6 +59,14 @@ async function main(): Promise<void> {
     console.log(compatible ? pc.green("✓") : pc.red("✗"), `Bun ${Bun.version}`);
     console.log(pc.green("✓"), "CLI entry point is running");
     console.log(pc.green("✓"), `Platform ${process.platform} · ${process.arch}`);
+    const workspaceRoot = process.env.TASK_WORKSPACE_ROOT;
+    if (workspaceRoot) {
+      const summary = await inspectWorkspace(workspaceRoot);
+      console.log(pc.green("✓"), `Indexed ${summary.documents} documents`);
+      if (summary.invalid > 0) {
+        console.log(pc.yellow("!"), `${summary.invalid} document(s) have invalid frontmatter`);
+      }
+    }
     outro(compatible ? "Environment checks passed." : "Upgrade Bun to 1.3.14 or later.");
     if (!compatible) process.exitCode = 1;
     return;
