@@ -1,9 +1,3 @@
----
-id: TASK-README
-name: Task project overview
-type: overview
----
-
 # Task
 
 Task is a repository-native task and project management system built with Bun and TypeScript.
@@ -19,9 +13,10 @@ All interfaces will operate on one shared workspace and domain model. Markdown a
 ## Repository conventions
 
 - `source/` contains application and package source code.
-- `.docs/` contains engineering documentation about the Task software project.
-- `tasks/` is the Task-managed workspace for task records, product context, research, decisions, and handoffs.
-- Every managed Markdown file, including documentation, must begin with YAML frontmatter containing structured metadata.
+- `.docs/` contains engineering documentation about the Task software project by convention.
+- The Task-managed workspace defaults to `tasks/`, but can be configured to use another directory such as `.docs/` or `.tasks/`.
+- Only Markdown files inside the configured Task-managed workspace require Task YAML frontmatter.
+- Root/common Markdown files outside that workspace, such as this README, do not require Task frontmatter.
 - Root `TODO.md`, when introduced, is an overview/index rather than a second source of truth.
 - No generated SDK directory is planned.
 
@@ -63,4 +58,4 @@ See [development setup](.docs/development/setup.md) for details.
 
 ## Project status
 
-The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The common Markdown frontmatter requirement is accepted; complete type-specific schemas, workspace persistence, lifecycle, command architecture, shared core, and dashboard remain to be designed.
+The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The Task-managed workspace frontmatter contract is accepted; complete type-specific schemas, workspace configuration, persistence, lifecycle, command architecture, shared core, and dashboard remain to be designed.
