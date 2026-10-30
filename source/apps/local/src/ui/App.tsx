@@ -1,4 +1,6 @@
-export function App(): React.JSX.Element {
+import type { JSX } from "react";
+
+export function App(): JSX.Element {
   return (
     <main className="shell">
       <header className="topbar">
