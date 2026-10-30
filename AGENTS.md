@@ -24,7 +24,9 @@
 - The Task-managed workspace is selected by repository configuration in `task.yaml`; when no configuration file or workspace setting exists, the default workspace directory is `tasks/`.
 - The workspace may be configured to another directory, for example `.docs/` or `.tasks/`. The configured directory is the boundary for Task-managed content.
 - Every Markdown file inside the configured Task-managed workspace must begin with YAML frontmatter delimited by `---`.
-- Frontmatter must include the common required fields `id`, `name`, and `type`; apply the appropriate type-specific schema when one has been defined.
+- Frontmatter must include the common required fields `id`, `name`, and `type`; apply the appropriate type-specific schema.
+- Frontmatter is a strict, extensible metadata contract: use structured `tags` for categorisation and an explicit `extra` mapping for supplemental data. Unknown top-level fields are invalid unless the applicable schema or supported workspace extension declares them. Do not treat `extra` as a way to bypass validation.
+- Repository-level `task.yaml` configures Task and the workspace; it is not the YAML frontmatter placed in individual Markdown files.
 - Markdown files outside the configured workspace, including ordinary root `README.md`, `AGENTS.md`, and engineering documentation under `.docs/` when it is not the configured workspace, do not need Task frontmatter.
 - The YAML frontmatter is machine-readable metadata; the Markdown body is human-readable content.
 - Create new Markdown files inside the managed workspace with frontmatter from the outset.
