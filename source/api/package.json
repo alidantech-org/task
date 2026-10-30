@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json --noEmit false --outDir dist",
     "start": "node dist/main.js",
-    "build": "nest build",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
