@@ -2,11 +2,20 @@
   "name": "task",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "bun@1.3.0",
   "workspaces": [
-    "source/apps/cli"
+    "source/api",
+    "source/apps/*",
+    "source/packages/*"
   ],
   "scripts": {
     "dev": "bun run --filter @task/cli dev",
+    "dev:cli": "bun run --filter @task/cli dev",
+    "dev:local": "bun run --filter @task/local dev",
+    "dev:local:web": "bun run --filter @task/local dev:web",
+    "dev:site": "bun run --filter @task/site dev",
+    "dev:api": "bun run --filter @task/api dev",
+    "dev:tui": "bun run --filter @task/tui dev",
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
