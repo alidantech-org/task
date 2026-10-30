@@ -3,9 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "./App.js";
 
 describe("local dashboard starter", () => {
-  test("renders the local workspace landing screen", () => {
-    const markup = renderToStaticMarkup(<App />);
+  test("renders the local workspace landing screen and runtime state", () => {
+    const markup = renderToStaticMarkup(<App runtimeStatus="connected" />);
     expect(markup).toContain("Your work, in one place.");
     expect(markup).toContain("Local workspace");
+    expect(markup).toContain("Local runtime connected");
+  });
+
+  test("shows when the local runtime is unavailable", () => {
+    const markup = renderToStaticMarkup(<App runtimeStatus="offline" />);
+    expect(markup).toContain("Local runtime offline");
   });
 });
