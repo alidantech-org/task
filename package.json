@@ -5,7 +5,10 @@
   "packageManager": "bun@1.3.0",
   "workspaces": [
     "source/api",
-    "source/apps/*",
+    "source/apps/cli",
+    "source/apps/local",
+    "source/apps/site",
+    "source/apps/tui",
     "source/packages/*"
   ],
   "scripts": {
