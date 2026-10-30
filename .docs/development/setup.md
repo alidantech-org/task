@@ -1,9 +1,3 @@
----
-id: TASK-DEV-SETUP
-name: Development setup
-type: guide
----
-
 # Development setup
 
 ## Requirements
@@ -39,9 +33,11 @@ The planned local web application will be started with `task run`; for example, 
 bun run typecheck
 ```
 
-## Markdown files
+## Task-managed Markdown files
 
-All Task-managed Markdown files, including documentation, require YAML frontmatter with the common `id`, `name`, and `type` fields. Add frontmatter when creating a document; the future `task validate` command will treat missing or invalid metadata as an error.
+YAML frontmatter is required only for Markdown files inside the configured Task-managed workspace. The workspace defaults to `tasks/`; a repository can select another directory in `task.yaml`. Ordinary repository Markdown outside that directory, including this engineering documentation, does not need Task frontmatter.
+
+The common metadata fields are `id`, `name`, and `type`. Add frontmatter when creating Markdown files inside the managed workspace; the future `task validate` command will treat missing or invalid metadata there as an error.
 
 ## Current scope
 
