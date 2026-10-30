@@ -15,30 +15,36 @@ Architecture decisions:
 
 ## Source tree
 
-```text
-source/
-├── api/                     # NestJS hosted API
-├── apps/
-│   ├── cli/                 # Scriptable CLI: task / tk
-│   ├── local/               # Local runtime + Next.js dashboard
-│   ├── site/                # Hosted Next.js website
-│   ├── mobile/              # Flutter/Dart cloud client
-│   └── tui/                 # OpenTUI + React terminal application
-└── packages/
-    ├── contracts/           # Shared TypeScript contracts
-    └── workspace/           # Shared local workspace primitives
-```
+    source/
+    ├── api/                     # NestJS hosted API
+    ├── apps/
+    │   ├── cli/                 # Scriptable CLI: task / tk
+    │   ├── local/               # Local runtime + Next.js dashboard
+    │   ├── site/                # Hosted Next.js website
+    │   ├── mobile/              # Flutter/Dart cloud client
+    │   └── tui/                 # OpenTUI + React terminal application
+    └── packages/
+        ├── contracts/           # Shared TypeScript contracts
+        └── workspace/           # Shared local workspace primitives
 
-## Root Bun workspace
+Root-level scripts/ contains small Bun bridges for native toolchains such as Flutter; it is not an application source directory.
 
-The repository root package.json manages the Bun workspaces:
-- source/api
-- source/apps/*
-- source/packages/*
+## Root Bun workspace and quality gates
 
-Each Bun-managed project keeps its own package.json for its package name, dependencies, scripts, and exports. The root manifest provides shared development dependencies and cross-project commands. Run Bun installation and root scripts from the repository root.
+The repository root package.json manages source/api, source/apps/cli, source/apps/local, source/apps/site, source/apps/tui, and source/packages/*. Each Bun-managed project has its own package.json and independently runnable scripts. Flutter is intentionally excluded from Bun workspaces and is managed by pubspec.yaml and Flutter tooling.
 
-The root commands include dev:cli, dev:local, dev:local:runtime, dev:local:web, dev:site, dev:api, dev:tui, and typecheck. The root Bun version is set to 1.3.14 or later because the OpenTUI native runtime requires it. Flutter is intentionally excluded from Bun workspaces and is managed independently through source/apps/mobile/pubspec.yaml and Flutter tooling.
+The root provides commands for every application and a single quality gate:
+
+- dev:cli, dev:local, dev:site, dev:api, dev:tui, dev:mobile
+- format / format:check / lint / lint:fix
+- typecheck / test / test:watch / test:coverage
+- audit / security / build / validate
+
+bun run validate checks formatting, dependency advisories, lint/security rules, all Bun workspace typechecks and tests, API and Next.js builds, and Flutter analysis/tests. It requires Bun dependencies and the lockfile to be current, Flutter SDK/dependencies, and network access for the advisory audit. See [development setup](../development/setup.md).
+
+Biome is configured once at the root in biome.json. It formats and lints JavaScript/TypeScript/JSX/TSX and JSON/JSONC configuration files, and organizes imports. Generated output and dependencies are excluded.
+
+OpenTUI requires Bun 1.3.14 or later. The root packageManager field pins Bun 1.3.14. Flutter is managed independently through source/apps/mobile/pubspec.yaml and root scripts delegate to its native CLI without treating Dart as a Bun workspace.
 
 ## Application responsibilities
 
@@ -62,14 +68,14 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 
 ## Current scaffold status
 
-- The CLI has a styled help surface, terminal-aware colours, task/tk aliases, and a JSON metadata mode. @clack/prompts is installed for future interactive workflows. Full workspace commands are not implemented.
-- The NestJS API has a bootstrap, application module, and health endpoint only.
-- The local application has a Next.js dashboard starter and a separate loopback-only HTTP runtime exposing only /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
-- The hosted site has a separate Next.js App Router starter and no authentication or API-backed workflows yet.
-- The Flutter project has a minimal Material application entry point.
-- The TUI has an OpenTUI/React interactive navigation shell. It does not yet read or mutate workspace files.
-- @task/contracts exports initial shared TypeScript interfaces.
-- @task/workspace exports a lexical workspace path-containment helper. This does not by itself prevent symlink escapes; filesystem consumers must add realpath-aware protections and managed-boundary validation.
+- The CLI has styled help, terminal-aware colours, task/tk aliases, JSON metadata, version output and a Bun-version doctor check. Full workspace commands are not implemented.
+- The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
+- The local application has a Next.js dashboard starter and a separate loopback-only HTTP runtime exposing only GET /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
+- The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.
+- The Flutter project has a minimal Material application and widget smoke test, with Flutter analyze/test wired into root scripts.
+- The TUI has an OpenTUI/React interactive navigation shell and navigation test. It does not yet read or mutate workspace files.
+- @task/contracts exports initial transport-neutral interfaces and a runtime health-payload guard.
+- @task/workspace exports lexical containment and an asynchronous symlink-aware path preflight, with traversal/symlink tests. This preflight is not a race-free filesystem operation; actual reads/writes must use safe file-handle strategies and repeat boundary checks at the operation boundary.
 
 A scaffold is not evidence that its product capabilities are implemented.
 
@@ -79,7 +85,7 @@ source/packages is the home for reusable code shared across applications. Extrac
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
-- @task/workspace: local workspace primitives shared by local consumers.
+- @task/workspace: local workspace path primitives shared by local consumers.
 
 TypeScript packages are not directly consumable by Flutter/Dart. The mobile client must use generated or separately maintained Dart contracts from a language-neutral schema or API definition.
 
@@ -95,7 +101,7 @@ The local application exposes those same capabilities to the browser through its
 
 The browser never receives arbitrary filesystem access. Bind to loopback by default, validate browser origins, protect sensitive operations with a per-runtime capability/token or equivalent, and restrict operations to the selected workspace. Do not expose arbitrary paths, shell execution, credentials, or unrestricted filesystem operations.
 
-Before the local API exposes workspace data or mutations, implement workspace-scoped operations, symlink-aware path protections, origin protection, and authorization. WebSocket updates are for local dashboard live updates, not cloud sync.
+The current runtime exposes only a read-only health endpoint and binds to 127.0.0.1. Before it exposes workspace data or mutations, implement workspace-scoped operations, symlink-safe file operations (including race protection), origin protection, and authorization. WebSocket updates are for local dashboard live updates, not cloud sync.
 
 ## Local files and Git
 
@@ -105,7 +111,7 @@ Root task.yaml configures the workspace and managed content boundary. The defaul
 
 ## Future two-way, multi-device synchronization
 
-Task Cloud must eventually support two-way synchronisation between a cloud workspace and multiple local replicas. Each replica has its own device/client identity and sync progress. The protocol must provide stable IDs, revisions/cursors, idempotent retries, tombstones, conflict preservation, explicit initial reconciliation, permission revocation, and recovery. Never silently overwrite work or assume universal last-write-wins.
+Task Cloud must eventually support two-way changes between a cloud workspace and multiple local replicas. Each replica has its own device/client identity and sync progress. The protocol must provide stable IDs, revisions/cursors, idempotent retries, tombstones, conflict preservation, explicit initial reconciliation, permission revocation, and recovery. Never silently overwrite work or assume universal last-write-wins.
 
 Git history, local WebSocket updates, and Task cloud sync are separate mechanisms. The sync engine is a later implementation phase.
 
