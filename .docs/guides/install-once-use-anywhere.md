@@ -34,7 +34,7 @@ Computer
         └── tasks/                     # default workspace; config is optional
 ```
 
-Each repository can be committed, branched, reviewed, cloned, or shared independently. Task does not require a central hosted account or a separate database for this workflow.
+Each repository can be committed, branched, reviewed, cloned, or shared independently. This local workflow does not require a central hosted account or a cloud database. Task also supports an optional hosted account for users who want cross-device access, collaboration, or cloud-native projects.
 
 ## 2. Install Task once
 
@@ -201,9 +201,39 @@ Because project records live with the repository:
 - **Multiple projects:** switch directories; Task uses the configuration and workspace of the current repository.
 - **No Task configuration:** use the default `tasks/` workspace unless the user initializes or configures another one.
 
-No per-project Task executable, global task database, or hosted account should be necessary for the core repository-native workflow.
+No per-project Task executable, global task database, or hosted account is necessary for the core repository-native workflow. Cloud features are opt-in for local users; cloud-native projects are also supported for people who do not want to manage a Git repository.
 
-## 9. Design and implementation checklist
+
+
+## 9. Choose how each workspace is used
+
+Task supports three workspace modes:
+
+| Mode | Where work lives | Account/network |
+| --- | --- | --- |
+| Local | In the repository's configured workspace and Git history | Not required |
+| Connected | In the local repository and a linked Task Cloud workspace | Account and network required for cloud synchronization; local work remains available offline |
+| Cloud-native | In Task Cloud, without a required Git repository | Account and network required for hosted operations |
+
+A user can have personal work and participate in multiple organizations from one account. Organization workspaces have their own membership and access rules. The hosted website and mobile app provide access to work the user is authorized to see.
+
+Connecting a repository is an explicit action. Task must not silently upload a repository or make local work dependent on the cloud. The connected-workspace synchronization design must define initial reconciliation, record identity, revisions, conflict handling, deletion behavior, and recovery before implementation.
+
+## 10. One account across web, mobile, and CLI
+
+The intended account experience lets a user:
+
+- Sign in to the hosted website and see personal work and work shared with them by organizations.
+- See assigned tasks across all workspaces they are authorized to access.
+- Access supported tasks and project information from the mobile app.
+- Authenticate the CLI when they choose to use cloud-native or connected workspaces.
+- Continue using local-only repositories without signing in.
+
+A profile represents a person; it is not itself a project or organization. A user may belong to several organizations. Workspace membership and permissions determine which shared records appear in cross-project views.
+
+The exact sign-in methods, CLI authentication commands, organization roles, and invitation flows remain to be designed.
+
+## 11. Design and implementation checklist
 
 The user experience is not complete until these pieces exist:
 
@@ -220,9 +250,13 @@ The user experience is not complete until these pieces exist:
 - [ ] Define application update, version compatibility, and explicit workspace migration behavior.
 - [ ] Document uninstall, upgrade, downgrade, and recovery procedures.
 - [ ] Verify the complete install → initialize → use in multiple repositories workflow on every supported platform.
+- [ ] Implement optional account authentication without making it a prerequisite for local-only use.
+- [ ] Implement personal and organization workspace ownership and API authorization.
+- [ ] Define and implement connected-workspace synchronization and conflict recovery.
+- [ ] Implement cloud-native workspaces and hosted web/mobile clients.
 
-## 10. Current repository status
+## 12. Current repository status
 
-At the time this guide was written, the repository contains a minimal Bun/TypeScript CLI shell and the accepted direction for a repository-local, Markdown-based workspace. The following are not yet implemented: production CLI packaging, published binaries, installers, package-manager distribution, `task init`, automatic repository/workspace discovery, `task validate`, `task run`, the dashboard, and self-update.
+At the time this guide was written, the repository contains a minimal Bun/TypeScript CLI shell and the accepted direction for a repository-local, Markdown-based workspace. The following are not yet implemented: production CLI packaging, published binaries, installers, package-manager distribution, `task init`, automatic repository/workspace discovery, `task validate`, `task run`, the dashboard, hosted API, cloud persistence, authentication, synchronization, hosted web/mobile clients, and self-update.
 
 Until those features are implemented and official releases are published, this guide describes the agreed product direction and planned user experience — not a currently installable release.
