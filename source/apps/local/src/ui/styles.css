@@ -19,3 +19,10 @@ body { margin: 0; min-width: 320px; }
 .eyebrow { color: #737b89; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 h1 { margin: 14px 0; font-size: clamp(36px, 6vw, 56px); letter-spacing: -.055em; }
 .muted { max-width: 560px; line-height: 1.7; }
+.runtime-status,
+.api-status {
+  margin-top: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
