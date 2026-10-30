@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "bun run --filter @task/cli dev",
-    "typecheck": "bun run --filter @task/cli typecheck"
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",

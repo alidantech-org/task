@@ -69,3 +69,7 @@ The workspace boundary and the direction for a strict, extensible frontmatter sc
 - Keep `main` stable.
 - Use `.docs/` for engineering documentation and the configured workspace for Task-managed work and project context.
 - Prefer small, reviewable commits. Do not add generated output or dependency directories to Git.
+
+## Source scaffold status
+
+The source skeleton now includes five application boundaries (`cli`, `web`, `api`, `mobile`, and `tui`) and the shared package boundaries documented in [source layout](source-layout.md). The CLI retains its existing help/version behavior; all other application and package entry points are placeholders. API module directories document planned modular-monolith responsibilities only. Technology choices and domain contracts remain deferred as recorded in the platform architecture.

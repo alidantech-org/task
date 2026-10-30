@@ -290,3 +290,7 @@ These require dedicated design work:
 - Git provider integration and repository access authorization.
 
 These decisions must be resolved in their own design records before implementation depends on them.
+
+## Source scaffold status
+
+The source boundaries described in section 12 have now been created under `source/apps/` and `source/packages/`. The CLI remains the only functional application entry point. Web, API, mobile, and TUI are TypeScript workspace shells; the API also contains documentation-only module boundaries. Shared packages have placeholder entry points but no accepted domain contracts yet. See [source layout and package boundaries](source-layout.md) for the exact mapping and status. Creating a directory does not mean its capability is implemented.
