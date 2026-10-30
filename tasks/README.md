@@ -1,3 +1,9 @@
+---
+id: TASK-WORKSPACE-README
+name: Task workspace guide
+type: workspace-guide
+---
+
 # Task workspace
 
 This directory is the repository's own Task-managed workspace (dogfooding). It demonstrates the visible workspace convention that `task init` should create in other projects.
@@ -29,6 +35,12 @@ tasks/
 ```
 
 Do not create empty folders just to match this illustration. Add structure as the product's workspace model and real records require it.
+
+## Markdown frontmatter is mandatory
+
+Every Markdown file in the managed workspace must start with YAML frontmatter delimited by `---`, including documentation, research, handoffs, decisions, and task records. The common required fields are `id`, `name`, and `type`; type-specific schemas may require additional metadata.
+
+The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document.
 
 ## Source of truth
 
