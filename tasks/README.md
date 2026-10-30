@@ -36,11 +36,21 @@ tasks/
 
 Do not create empty folders just to match this illustration. Add structure as the product's workspace model and real records require it.
 
-## Markdown frontmatter is mandatory
+## Markdown frontmatter
 
-Every Markdown file in the managed workspace must start with YAML frontmatter delimited by `---`, including documentation, research, handoffs, decisions, and task records. The common required fields are `id`, `name`, and `type`; type-specific schemas may require additional metadata.
+Every Markdown file in the managed workspace must start with YAML frontmatter delimited by `---`, including documentation, research, handoffs, decisions, and task records.
 
-The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document.
+The metadata contract is strict and extensible:
+
+- Common required fields: `id`, `name`, and `type`.
+- Type-specific schemas define the fields and constraints for each document type.
+- `tags` is a structured sequence of strings for categorisation and filtering.
+- `extra` is an explicit mapping for supplemental data that does not belong to the common or type-specific schema.
+- Unknown top-level fields are invalid unless declared by the applicable schema or a supported workspace extension.
+
+The repository-level `task.yaml` configures Task and selects the managed workspace. It is not the frontmatter block inside each Markdown file.
+
+The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document. See [Markdown metadata and schema architecture](../.docs/architecture/markdown-metadata-schema.md) and [Decision 0003](decisions/0003-structured-frontmatter-schema.md).
 
 ## Source of truth
 
