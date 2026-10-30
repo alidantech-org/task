@@ -43,6 +43,6 @@ The common metadata fields are `id`, `name`, and `type`. Add frontmatter when cr
 
 This setup is intentionally small. There is not yet a dashboard, `task run` command, validator, test runner, formatter/linter, shared core package, or persistence implementation. Add tooling when the corresponding architecture and workflow are agreed.
 
-## Workspace package status
+## Workspace status
 
-The repository now includes Bun workspace shells for the CLI, hosted web, API, mobile, and TUI applications, plus the shared packages documented in [source layout](../architecture/source-layout.md). Run `bun install` at the repository root to link the workspaces. `bun run typecheck` invokes each workspace's TypeScript check. This is a structural check only; it does not build or run placeholder applications. The CLI remains the only application with functional commands. Frameworks, API persistence, domain contracts, and synchronization are not implemented.
+The only Bun workspace is the CLI under `source/apps/cli`. The root `typecheck` script checks the current workspace. Other product surfaces and shared packages are intentionally not scaffolded until their contracts and implementation boundaries are ready.
