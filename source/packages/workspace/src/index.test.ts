@@ -99,6 +99,10 @@ describe("shared workspace index", () => {
     expect(index.documents.get("tasks/docs/architecture/overview.md")?.metadata.type).toBe(
       "documentation",
     );
+    expect(index.documents.get("tasks/docs/architecture/overview.md")?.classification).toBe(
+      "document",
+    );
+    expect(index.documents.get("tasks/one.md")?.classification).toBe("task-record");
     expect(index.documents.get("tasks/one.md")?.metadata.status).toBe("active");
     expect(index.diagnostics).toEqual([]);
   });
