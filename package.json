@@ -1,0 +1,14 @@
+{
+  "name": "task",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "bun@1.3.0",
+  "workspaces": [
+    "source/apps/*",
+    "source/packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter @task/cli dev",
+    "typecheck": "bun --filter @task/cli typecheck"
+  }
+}
