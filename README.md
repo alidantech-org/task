@@ -20,7 +20,7 @@ All interfaces will operate on one shared workspace and domain model. Markdown a
 - Root `TODO.md`, when introduced, is an overview/index rather than a second source of truth.
 - No generated SDK directory is planned.
 
-See [Repository documentation](.docs/README.md) and [Task workspace conventions](tasks/README.md).
+See [Repository documentation](.docs/README.md), [Task workspace conventions](tasks/README.md), and the [install-once, use-in-any-project guide](.docs/guides/install-once-use-anywhere.md).
 
 ## CLI
 
