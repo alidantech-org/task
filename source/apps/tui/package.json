@@ -1,0 +1,4 @@
+{
+  "name": "@task/tui", "private": true, "version": "0.1.0", "type": "module",
+  "scripts": { "dev": "bun run src/index.ts", "typecheck": "tsc --noEmit -p tsconfig.json" }
+}
