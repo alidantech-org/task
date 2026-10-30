@@ -49,7 +49,7 @@ function WorkspaceTui() {
         </box>
       </box>
       <box style={{ flexDirection: "row", justifyContent: "space-between", paddingX: 1 }}>
-        <text fg="#64748B">↑/k ↓/j Navigate   Enter Select</text>
+        <text fg="#64748B">↑/k ↓/j Navigate</text>
         <text fg="#64748B">q / Esc Quit</text>
       </box>
     </box>
