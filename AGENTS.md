@@ -28,9 +28,19 @@
 - The CLI uses terminal-aware colour and polished output, with picocolors and @clack/prompts as the accepted presentation foundation.
 - Preserve task and tk aliases, machine-readable JSON output, stable exit codes, and non-interactive use for agents and scripts.
 - The root Bun workspace manages TypeScript applications and packages. OpenTUI requires Bun 1.3.14 or later.
-- Flutter/Dart remains outside the Bun workspace and uses Flutter tooling.
+- Flutter/Dart remains outside the Bun workspace and uses Flutter tooling. Root scripts may delegate Flutter commands but must not make Dart packages Bun workspaces.
 
-See Decision 0011 and .docs/architecture/source-layout.md for the accepted details.
+## Quality and safety gates
+
+- Biome is the repository formatter, linter, and import organizer. Keep its single root configuration in biome.json.
+- Run bun run format to apply formatting and bun run format:check to verify it.
+- bun run validate is the single root validation gate: formatting, dependency audit, lint/security rules, all Bun workspace typechecks and tests, API/Next.js builds, and Flutter analyze/tests.
+- Keep each Bun workspace's typecheck and test scripts working independently; add tests with new behavior, especially for path boundaries, filesystem operations, authorization and transport.
+- Use bun audit to identify known dependency advisories. Do not suppress advisories without a recorded, reviewed reason.
+- Local filesystem operations must enforce managed-workspace containment and symlink-aware checks. Lexical path checks alone are not sufficient; account for symlink races when implementing actual writes.
+- Local runtime binds to loopback by default. Do not add arbitrary file, shell, or credential endpoints. Add origin/capability protection before exposing workspace data or mutations.
+
+See Decision 0011 and .docs/architecture/source-layout.md for the accepted application boundaries.
 
 ## Task workspace and Markdown contract
 
