@@ -9,7 +9,8 @@
     "dev:web": "next dev --hostname 127.0.0.1 --port 5173",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 5173",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
   },
   "dependencies": {
     "@task/contracts": "workspace:*",
