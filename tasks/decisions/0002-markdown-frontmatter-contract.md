@@ -1,56 +1,57 @@
 ---
 id: DEC-0002
-name: Markdown frontmatter is required for every document
+name: Frontmatter applies only inside the configured Task workspace
 type: decision
 status: accepted
 created_at: 2026-10-31
 ---
 
-# Decision 0002: Markdown frontmatter is required for every document
+# Decision 0002: Frontmatter applies only inside the configured Task workspace
 
 - **Status:** Accepted
 - **Date:** 2026-10-31
-- **Scope:** Task-managed workspaces, repository documentation, validation, and the local web UI
+- **Scope:** Task-managed workspace, validation, and local web UI
 
 ## Context
 
-Task uses Markdown as its human-readable document format. The CLI, dashboard, and terminal interface need a reliable way to discover, classify, validate, navigate, and present Markdown documents without relying on folder names or parsing headings to guess what a file represents.
+Task needs structured metadata for the Markdown documents it manages so the CLI and web UI can discover, classify, validate, navigate, and present those documents. However, repositories also contain ordinary Markdown files that are not Task records, such as a root `README.md`, `AGENTS.md`, or engineering documentation.
 
-This requirement applies to documentation as much as it applies to task records and decisions. A documentation file is still a structured Task document.
+Requiring Task metadata in every Markdown file across the repository would impose Task-specific rules on unrelated documentation and common repository files.
 
 ## Decisions
 
-1. Every Markdown file managed by Task must begin with a YAML frontmatter block delimited by `---`.
-2. Frontmatter is required for all document categories, including documentation, guides, research, handoffs, task records, projects, and decisions.
-3. The common metadata contract starts with required `id`, `name`, and `type` fields. Type-specific schemas may require additional fields.
-4. The YAML frontmatter is the machine-readable document contract. The Markdown body is the human-readable content.
-5. `task validate` and `tk validate` must discover and validate all in-scope Markdown files, including documentation. Missing or malformed frontmatter and schema violations are validation errors.
-6. Validation should report the file path and actionable field/line details. Identifier uniqueness and semantic/reference checks belong in validation where the relevant schemas define them.
-7. The local web application started by `task run` (for example, `task run -p 3004`) must use this metadata to discover and present documents. It should be able to build document navigation, listings, filters, and document pages from the workspace rather than maintaining a separate manual registry.
-8. CLI, dashboard, and terminal interfaces must share the same document schemas and interpretation rules.
+1. YAML frontmatter is mandatory for every Markdown file **inside the configured Task-managed workspace**.
+2. Markdown files outside that workspace are ordinary repository Markdown and do not require Task frontmatter.
+3. The Task-managed workspace defaults to the `tasks/` directory when no `task.yaml` configuration file or workspace setting is present.
+4. A repository may configure a different workspace directory in `task.yaml`, such as `.docs/` or `.tasks/`. When selected, that directory becomes the managed boundary and all Markdown files inside it require frontmatter.
+5. The common metadata contract begins with required `id`, `name`, and `type` fields. Type-specific schemas may require additional fields.
+6. The YAML frontmatter is the machine-readable document contract. The Markdown body is the human-readable content.
+7. `task validate` and `tk validate` must discover and validate every in-scope Markdown file inside the configured workspace. Missing or malformed frontmatter and schema violations are errors. They must not impose this rule on unrelated Markdown outside the workspace.
+8. Validation should report the file path and actionable field/line details. Identifier uniqueness and semantic/reference checks belong in validation where the relevant schemas define them.
+9. The local web application started by `task run` (for example, `task run -p 3004`) must discover and present documents from the configured workspace using their metadata. It should build navigation, listings, filters, and document pages from that workspace rather than maintaining a separate manual registry.
+10. CLI, dashboard, and terminal interfaces must share the same schema definitions and interpretation rules.
 
 ## Consequences
 
-- Existing Markdown files in the Task repository and future Task-managed workspaces must follow the frontmatter convention.
-- New Markdown documents must include frontmatter from creation.
+- New Markdown files inside the managed workspace must include frontmatter from creation.
+- Ordinary Markdown outside the managed workspace remains unaffected.
 - The validator and UI must use the same schema definitions; they must not independently invent document types or required fields.
-- Workspace discovery must define explicit exclusions for generated or third-party Markdown rather than silently ignoring files.
-- The complete type-specific schemas, field types, allowed values, relationship rules, and exclusion configuration remain to be designed before implementing validation.
+- Workspace discovery must define explicit exclusions for generated or third-party Markdown found inside the managed workspace rather than silently ignoring files.
+- The exact `task.yaml` configuration key, complete type-specific schemas, field types, allowed values, relationship rules, and exclusion configuration remain to be designed before implementation.
 
 ## Example
 
-```markdown
----
-id: TASK-0001
-name: Define the workspace document schema
-type: task
-status: planned
-created_at: 2026-10-31
----
+A repository with no `task.yaml` uses:
 
-# Define the workspace document schema
-
-Document content goes here.
+```text
+repository/
+├── README.md             # ordinary Markdown; no Task frontmatter required
+├── AGENTS.md             # ordinary Markdown; no Task frontmatter required
+└── tasks/                # default Task-managed workspace
+    ├── README.md         # Task frontmatter required
+    ├── TASK-0001.md      # Task frontmatter required
+    └── decisions/
+        └── DEC-0001.md   # Task frontmatter required
 ```
 
-The example illustrates the format; the final task-specific fields and allowed values are governed by the schemas that will be designed separately.
+A repository may instead configure `.docs/` or `.tasks/` as its managed workspace. In that case, Markdown inside the selected directory follows the frontmatter contract.
