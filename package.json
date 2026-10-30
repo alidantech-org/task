@@ -33,7 +33,11 @@
     "test:watch": "bun run --filter '@task/*' test --watch",
     "test:coverage": "bun run --filter '@task/*' test --coverage",
     "audit": "bun audit",
-    "validate:mobile": "bun run scripts/validate-mobile.ts"
+    "dev:mobile": "bun run scripts/flutter.ts run",
+    "mobile:pub:get": "bun run scripts/flutter.ts pub get",
+    "mobile:analyze": "bun run scripts/flutter.ts analyze",
+    "mobile:test": "bun run scripts/flutter.ts test",
+    "validate:mobile": "bun run mobile:analyze && bun run mobile:test"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
