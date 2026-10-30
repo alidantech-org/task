@@ -82,3 +82,13 @@ The following are intentionally not fixed by this decision:
 - Data residency, retention, deletion, and compliance requirements.
 
 These decisions must be designed before the corresponding production features are implemented; they must not be guessed in individual clients.
+
+## Later architectural clarifications
+
+The accepted hybrid platform direction remains in force. The following later decisions make parts of this decision more precise:
+
+- [Decision 0006](0006-local-and-hosted-application-boundaries.md) separates the local application from the hosted website.
+- [Decision 0007](0007-file-based-local-workspaces.md) establishes file-based local workspace storage and makes Git optional. A local workspace is not required to be a Git repository.
+- [Decision 0008](0008-multi-device-two-way-sync.md) explicitly requires two-way synchronisation across multiple local device replicas of a cloud workspace.
+
+These clarifications do not change the local-first and cloud-optional product direction.
