@@ -11,7 +11,6 @@ The product has one domain model and multiple clients:
 - Hosted web application for personal and organizational work.
 - Mobile application for cross-project access and mobile workflows.
 - Hosted API as the service boundary for cloud-native and connected workspaces.
-- TUI as an additional local interface.
 
 The accepted product decision is recorded in [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
 
@@ -35,7 +34,6 @@ The accepted product decision is recorded in [Decision 0004](../../tasks/decisio
 | Local dashboard | Visual management of the current repository workspace | Runs locally; cloud connection optional |
 | Hosted web | Account, personal work, organizations, projects, collaboration | Authenticated Task Cloud client |
 | Mobile | My Work, project/task access, updates, notifications, supported offline actions | Authenticated cloud client with local cache and sync |
-| TUI | Keyboard-driven local task workflows | Local first; cloud capabilities can be added through shared services |
 | Hosted API | Shared cloud operations and authorization | Required for cloud-native and connected cloud operations |
 
 These are product responsibilities, not a claim that all surfaces or features already exist.
@@ -230,33 +228,14 @@ A hosted product introduces responsibilities absent from local-only mode:
 
 Do not expose the local dashboard to a network by default. Local-only mode should not unexpectedly transmit repository contents.
 
-## 12. Repository structure direction
+## 12. Repository structure and implementation boundaries
 
-Keep source under source/. A possible target shape is:
+Keep all application and package source under `source/`, but do not scaffold every conceptual product surface as an empty workspace. The current implementation tree contains only the CLI. The local dashboard, hosted web client, hosted modular API, and mobile client are future implementation boundaries; their responsibilities are described in [source layout and implementation boundaries](source-layout.md).
 
-~~~text
-source/
-├── apps/
-│   ├── cli/
-│   ├── web/
-│   ├── api/
-│   ├── mobile/
-│   └── tui/
-└── packages/
-    ├── core/
-    ├── schemas/
-    ├── documents/
-    ├── workspace/
-    ├── projects/
-    ├── tasks/
-    ├── validation/
-    ├── synchronization/
-    ├── identity/
-    ├── authorization/
-    └── api-client/
-~~~
+The local dashboard and hosted web are distinct runtime responsibilities. Whether they share one web application/UI package or use separate application shells over shared client code remains open until the local runtime and hosted API contracts are designed. Mobile framework selection is deferred. TUI is an optional future interface, not a required product surface or current application boundary.
 
-This is a logical target, not an instruction to scaffold empty directories immediately. Package boundaries should follow stable contracts and real implementation needs. The API client generation strategy and distribution of generated artifacts are not yet decided.
+Shared packages must emerge from stable contracts and real reuse. Do not create one package per domain noun, API module, or planned feature. Start with cohesive code inside the application that owns the workflow, then extract a package when multiple consumers, independent versioning, or a clear architectural boundary justify it. The API starts as a modular monolith; its domain modules are internal modules, not microservices or separate packages.
+
 
 ## 13. Recommended implementation sequence
 
@@ -291,6 +270,6 @@ These require dedicated design work:
 
 These decisions must be resolved in their own design records before implementation depends on them.
 
-## Source scaffold status
+## Source implementation status
 
-The source boundaries described in section 12 have now been created under `source/apps/` and `source/packages/`. The CLI remains the only functional application entry point. Web, API, mobile, and TUI are TypeScript workspace shells; the API also contains documentation-only module boundaries. Shared packages have placeholder entry points but no accepted domain contracts yet. See [source layout and package boundaries](source-layout.md) for the exact mapping and status. Creating a directory does not mean its capability is implemented.
+Only the CLI is currently scaffolded as an application. The local dashboard, hosted web, hosted API, and mobile clients remain architectural targets, not implemented code. The API module map is conceptual and will be materialized inside one modular monolith as each module is designed. No shared package boundaries have been established yet. See [source layout and implementation boundaries](source-layout.md).
