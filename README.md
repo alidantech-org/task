@@ -1,14 +1,17 @@
 # Task
 
-Task is a repository-native task and project management system built with Bun and TypeScript.
+Task is a hybrid task and project management platform for individuals and organizations, built with Bun and TypeScript. It supports local repository work, optional cloud-connected workspaces, and cloud-native projects.
 
 The intended interfaces are:
 
 - **CLI** for developers and AI agents.
 - **Local dashboard** for visual project and Kanban management.
+- **Hosted web application** for personal and organizational work across projects.
+- **Mobile application** for access to work across devices.
+- **Hosted API** for identity, organizations, cloud workspaces, collaboration, and synchronization.
 - **Terminal interface** for interactive terminal workflows.
 
-All interfaces will operate on one shared workspace and domain model. Markdown and Git are the foundation; a hosted service or external database should not be required.
+All interfaces will use one shared domain model. Local-only workflows remain useful without an account or hosted service. Users may optionally connect repository workspaces to Task Cloud or create cloud-native workspaces without Git.
 
 ## Repository conventions
 
@@ -20,7 +23,7 @@ All interfaces will operate on one shared workspace and domain model. Markdown a
 - Root `TODO.md`, when introduced, is an overview/index rather than a second source of truth.
 - No generated SDK directory is planned.
 
-See [Repository documentation](.docs/README.md), [Task workspace conventions](tasks/README.md), and the [install-once, use-in-any-project guide](.docs/guides/install-once-use-anywhere.md).
+See [Repository documentation](.docs/README.md), [Task workspace conventions](tasks/README.md), the [install-once, use-in-any-project guide](.docs/guides/install-once-use-anywhere.md), [platform architecture](.docs/architecture/platform-architecture.md), and [Decision 0004](tasks/decisions/0004-hybrid-cloud-platform.md).
 
 ## CLI
 
@@ -58,4 +61,4 @@ See [development setup](.docs/development/setup.md) for details.
 
 ## Project status
 
-The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The Task-managed workspace frontmatter contract is accepted; complete type-specific schemas, workspace configuration, persistence, lifecycle, command architecture, shared core, and dashboard remain to be designed.
+The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The hybrid local-first and cloud-native product direction is accepted and documented. The hosted API, identity and organization model, cloud persistence, synchronization protocol, hosted web/mobile clients, local dashboard, and production distribution are architectural direction only; they have not yet been implemented. Detailed schemas, authorization rules, and sync conflict policies remain to be designed.
