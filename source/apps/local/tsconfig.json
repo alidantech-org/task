@@ -1,8 +1,11 @@
 {
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "types": ["bun"]
+    "jsx": "preserve",
+    "plugins": [{ "name": "next" }],
+    "incremental": true,
+    "types": ["bun", "node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+  "include": ["next-env.d.ts", ".next/types/**/*.ts", ".next/dev/types/**/*.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
 }
