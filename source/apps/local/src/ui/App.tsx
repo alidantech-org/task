@@ -1,6 +1,10 @@
 import type { JSX } from "react";
 
-export function App(): JSX.Element {
+interface AppProps {
+  runtimeStatus: "connected" | "offline";
+}
+
+export function App({ runtimeStatus }: AppProps): JSX.Element {
   return (
     <main className="shell">
       <header className="topbar">
@@ -13,6 +17,10 @@ export function App(): JSX.Element {
         <p className="muted">
           The local dashboard foundation is ready. Workspace discovery and task
           views will be connected to the local runtime in the next implementation phase.
+        </p>
+        <p className="runtime-status" role="status">
+          <span aria-hidden="true">{runtimeStatus === "connected" ? "●" : "○"}</span>
+          {runtimeStatus === "connected" ? "Local runtime connected" : "Local runtime offline"}
         </p>
       </section>
     </main>
