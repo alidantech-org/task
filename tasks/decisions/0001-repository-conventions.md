@@ -1,3 +1,11 @@
+---
+id: DEC-0001
+name: Repository conventions
+type: decision
+status: accepted
+created_at: 2026-10-31
+---
+
 # Decision 0001: Repository conventions
 
 - **Status:** Accepted
@@ -27,4 +35,4 @@ Task needs clear separation between source code, engineering documentation, and 
 
 ## Deferred
 
-The task file schema, workspace configuration schema, lifecycle/status model, command registration, shared package boundaries, dashboard framework, and local API design require separate decisions.
+The complete task-specific and document-type schemas, workspace configuration schema, lifecycle/status model, command registration, shared package boundaries, dashboard framework, and local API design require separate decisions.
