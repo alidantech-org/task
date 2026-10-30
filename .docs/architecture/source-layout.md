@@ -10,6 +10,7 @@ Architecture decisions:
 - [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
 - [0009 — Bun monorepo, application scaffolds, and shared packages](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md)
 - [0010 — Shared local workspace engine for CLI and dashboard](../../tasks/decisions/0010-shared-local-workspace-engine.md)
+- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../tasks/decisions/0011-application-experience-tooling.md)
 - [Shared local workspace engine and CLI/dashboard collaboration](local-workspace-engine.md)
 
 ## Source tree
@@ -19,10 +20,10 @@ source/
 ├── api/                     # NestJS hosted API
 ├── apps/
 │   ├── cli/                 # Scriptable CLI: task / tk
-│   ├── local/               # Local runtime and React + Vite dashboard
-│   ├── site/                # Hosted React + Vite website
+│   ├── local/               # Local runtime + Next.js dashboard
+│   ├── site/                # Hosted Next.js website
 │   ├── mobile/              # Flutter/Dart cloud client
-│   └── tui/                 # TypeScript terminal interface
+│   └── tui/                 # OpenTUI + React terminal application
 └── packages/
     ├── contracts/           # Shared TypeScript contracts
     └── workspace/           # Shared local workspace primitives
@@ -30,36 +31,43 @@ source/
 
 ## Root Bun workspace
 
-The root package.json manages the Bun workspaces:
+The repository root package.json manages the Bun workspaces:
 - source/api
 - source/apps/*
 - source/packages/*
 
 Each Bun-managed project keeps its own package.json for its package name, dependencies, scripts, and exports. The root manifest provides shared development dependencies and cross-project commands. Run Bun installation and root scripts from the repository root.
 
-The root commands include dev:cli, dev:local, dev:local:web, dev:site, dev:api, dev:tui, and typecheck. Flutter is intentionally excluded from Bun workspaces and is managed independently through source/apps/mobile/pubspec.yaml and Flutter tooling.
+The root commands include dev:cli, dev:local, dev:local:runtime, dev:local:web, dev:site, dev:api, dev:tui, and typecheck. The root Bun version is set to 1.3.14 or later because the OpenTUI native runtime requires it. Flutter is intentionally excluded from Bun workspaces and is managed independently through source/apps/mobile/pubspec.yaml and Flutter tooling.
 
 ## Application responsibilities
 
 | Application | Responsibility | Runtime/deployment |
 | --- | --- | --- |
 | api/ | Identity, organisations, workspaces, records, authorization, cloud persistence and future sync endpoints | Standalone NestJS modular monolith at task-api.alidantech.org |
-| apps/cli/ | Workspace discovery, task/document commands, validation, agent workflows and later cloud commands | Local executable; ordinary local commands need no server, account or network |
-| apps/local/ | Local dashboard, local HTTP API, WebSocket live updates, filesystem watching/reconciliation and controlled workspace access | Local runtime binds to loopback; React dashboard served separately during development |
-| apps/site/ | Hosted account, personal workspace, organisation, project and collaboration experience | React + Vite; hosted at task.alidantech.org; calls hosted API directly |
+| apps/cli/ | Polished, scriptable task/tk commands, validation, agent workflows and later cloud commands | Local executable; ordinary local commands need no server, account or network |
+| apps/local/ | Local dashboard, local HTTP API, WebSocket live updates, filesystem watching/reconciliation and controlled workspace access | Local runtime binds to loopback; dashboard is a separate Next.js process during development |
+| apps/site/ | Hosted account, personal workspace, organisation, project and collaboration experience | Next.js App Router; hosted at task.alidantech.org; calls hosted API directly |
 | apps/mobile/ | Focused mobile workflows for authorised cloud workspaces | Flutter app connecting directly to hosted API |
-| apps/tui/ | Keyboard-driven terminal interface for people | Bun-managed TypeScript client reusing workspace operations |
- 
-The local application and hosted website use React + Vite + TypeScript, but remain distinct applications with separate entry points, runtime responsibilities, state, routing, and deployment. Sharing a frontend toolchain does not merge their product boundaries.
+| apps/tui/ | Advanced keyboard-driven terminal workspace with navigation, focus, interactive views and future task operations | OpenTUI + React, running on Bun |
+
+All web applications use Next.js App Router. The local dashboard and hosted website remain distinct applications with separate entry points, runtime responsibilities, state, routing, security boundaries, and deployment. The local HTTP runtime remains a separate process from the Next.js dashboard; it owns controlled local filesystem access and must not be replaced by browser-side filesystem access.
+
+## Framework and experience standards
+
+- **Web:** Next.js App Router for every website and browser application. Do not introduce Vite as the application framework for new web surfaces.
+- **TUI:** OpenTUI with React bindings. Use its native renderer, responsive terminal layout, keyboard events, focus/selection primitives and component model. The TUI reuses shared workspace operations and must not create another domain model.
+- **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tk, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
+- **Runtime:** Bun manages the TypeScript workspace. OpenTUI requires Bun 1.3.14 or later. Flutter remains on its independent Dart toolchain.
 
 ## Current scaffold status
 
-- The CLI retains its initial task/tk help and version entry point.
+- The CLI has a styled help surface, terminal-aware colours, task/tk aliases, and a JSON metadata mode. @clack/prompts is installed for future interactive workflows. Full workspace commands are not implemented.
 - The NestJS API has a bootstrap, application module, and health endpoint only.
-- The local application has a React/Vite dashboard starter and a separate loopback-only HTTP server exposing only /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
-- The hosted site has a separate React/Vite starter and no authentication or API-backed workflows yet.
+- The local application has a Next.js dashboard starter and a separate loopback-only HTTP runtime exposing only /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
+- The hosted site has a separate Next.js App Router starter and no authentication or API-backed workflows yet.
 - The Flutter project has a minimal Material application entry point.
-- The TUI has a minimal TypeScript entry point.
+- The TUI has an OpenTUI/React interactive navigation shell. It does not yet read or mutate workspace files.
 - @task/contracts exports initial shared TypeScript interfaces.
 - @task/workspace exports a lexical workspace path-containment helper. This does not by itself prevent symlink escapes; filesystem consumers must add realpath-aware protections and managed-boundary validation.
 
@@ -79,7 +87,7 @@ The hosted API's conceptual modules remain internal modules of one NestJS applic
 
 ## CLI and shared workspace operations
 
-The CLI is the primary scriptable interface for people and AI agents. It must work without the local application running. Commands invoke workspace operations directly rather than routing every command through HTTP.
+The CLI is the primary scriptable interface for people and AI agents. It must work without the local application running. Commands invoke workspace operations directly rather than routing every command through HTTP. Human-facing output should be polished and coloured; JSON output and exit codes remain stable for automation.
 
 The local application exposes those same capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. The workspace package is the intended home for genuinely shared local operations as those operations are implemented.
 
@@ -91,13 +99,13 @@ Before the local API exposes workspace data or mutations, implement workspace-sc
 
 ## Local files and Git
 
-Local workspace records are stored in files. Files are authoritative for local workspace content. Git is optional and independent of Task sync.
+Local workspace records are stored in files. Files are authoritative for local workspace content. Git is optional and independent of Task Cloud sync.
 
-Root task.yaml configures the workspace and managed content boundary. The default managed folder is tasks/; a workspace may configure .tasks/ or .docs/. Task frontmatter rules apply only inside that configured boundary. Ordinary Markdown elsewhere remains ordinary Markdown, and unrelated project files must not be rewritten.
+Root task.yaml configures the workspace and managed content boundary. The default managed folder is tasks/; a workspace may configure .tasks/ or .docs/. Task Markdown frontmatter rules apply only inside that configured boundary. Ordinary Markdown elsewhere remains ordinary Markdown, and unrelated project files must not be rewritten.
 
 ## Future two-way, multi-device synchronization
 
-Task Cloud must eventually support two-way synchronisation between one cloud workspace and multiple local replicas. Each replica has its own device/client identity and sync progress. The protocol must provide stable IDs, revisions/cursors, idempotent retries, tombstones, conflict preservation, explicit initial reconciliation, permission revocation, and recovery. Never silently overwrite work or assume universal last-write-wins.
+Task Cloud must eventually support two-way synchronisation between a cloud workspace and multiple local replicas. Each replica has its own device/client identity and sync progress. The protocol must provide stable IDs, revisions/cursors, idempotent retries, tombstones, conflict preservation, explicit initial reconciliation, permission revocation, and recovery. Never silently overwrite work or assume universal last-write-wins.
 
 Git history, local WebSocket updates, and Task cloud sync are separate mechanisms. The sync engine is a later implementation phase.
 
@@ -109,9 +117,9 @@ Git history, local WebSocket updates, and Task cloud sync are separate mechanism
 4. Build the local dashboard against the local runtime and integrate bidirectional updates.
 5. Harden file integrity, recovery, and offline behavior.
 6. Define cloud identity, ownership, authorization, persistence, and API contracts.
-7. Implement the hosted NestJS API and hosted website.
+7. Implement the hosted NestJS API and hosted website using Next.js.
 8. Design and implement two-way multi-device sync.
 9. Build the Flutter mobile client against stable API contracts.
-10. Expand the TUI using established workspace operations.
+10. Expand the OpenTUI terminal application using established workspace operations.
 
 A directory's existence is not evidence that a capability is implemented.
