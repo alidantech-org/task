@@ -1,0 +1,126 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "task",
+      "devDependencies": {
+        "@types/bun": "^1.3.0",
+        "typescript": "^5.9.0",
+      },
+    },
+    "source/apps/api": {
+      "name": "@task/api",
+      "version": "0.1.0",
+    },
+    "source/apps/cli": {
+      "name": "@task/cli",
+      "version": "0.1.0",
+      "bin": {
+        "task": "./src/index.ts",
+        "tk": "./src/index.ts",
+      },
+    },
+    "source/apps/mobile": {
+      "name": "@task/mobile",
+      "version": "0.1.0",
+    },
+    "source/apps/tui": {
+      "name": "@task/tui",
+      "version": "0.1.0",
+    },
+    "source/apps/web": {
+      "name": "@task/web",
+      "version": "0.1.0",
+    },
+    "source/packages/api-client": {
+      "name": "@task/api-client",
+      "version": "0.1.0",
+    },
+    "source/packages/authorization": {
+      "name": "@task/authorization",
+      "version": "0.1.0",
+    },
+    "source/packages/core": {
+      "name": "@task/core",
+      "version": "0.1.0",
+    },
+    "source/packages/documents": {
+      "name": "@task/documents",
+      "version": "0.1.0",
+    },
+    "source/packages/identity": {
+      "name": "@task/identity",
+      "version": "0.1.0",
+    },
+    "source/packages/projects": {
+      "name": "@task/projects",
+      "version": "0.1.0",
+    },
+    "source/packages/schemas": {
+      "name": "@task/schemas",
+      "version": "0.1.0",
+    },
+    "source/packages/synchronization": {
+      "name": "@task/synchronization",
+      "version": "0.1.0",
+    },
+    "source/packages/tasks": {
+      "name": "@task/tasks",
+      "version": "0.1.0",
+    },
+    "source/packages/validation": {
+      "name": "@task/validation",
+      "version": "0.1.0",
+    },
+    "source/packages/workspace": {
+      "name": "@task/workspace",
+      "version": "0.1.0",
+    },
+  },
+  "packages": {
+    "@task/api": ["@task/api@workspace:source/apps/api"],
+
+    "@task/api-client": ["@task/api-client@workspace:source/packages/api-client"],
+
+    "@task/authorization": ["@task/authorization@workspace:source/packages/authorization"],
+
+    "@task/cli": ["@task/cli@workspace:source/apps/cli"],
+
+    "@task/core": ["@task/core@workspace:source/packages/core"],
+
+    "@task/documents": ["@task/documents@workspace:source/packages/documents"],
+
+    "@task/identity": ["@task/identity@workspace:source/packages/identity"],
+
+    "@task/mobile": ["@task/mobile@workspace:source/apps/mobile"],
+
+    "@task/projects": ["@task/projects@workspace:source/packages/projects"],
+
+    "@task/schemas": ["@task/schemas@workspace:source/packages/schemas"],
+
+    "@task/synchronization": ["@task/synchronization@workspace:source/packages/synchronization"],
+
+    "@task/tasks": ["@task/tasks@workspace:source/packages/tasks"],
+
+    "@task/tui": ["@task/tui@workspace:source/apps/tui"],
+
+    "@task/validation": ["@task/validation@workspace:source/packages/validation"],
+
+    "@task/web": ["@task/web@workspace:source/apps/web"],
+
+    "@task/workspace": ["@task/workspace@workspace:source/packages/workspace"],
+
+    "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
+
+    "@types/node": ["@types/node@26.6.6", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog=="],
+
+    "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "undici-types": ["undici-types@8.12.3", "", {}, "sha512-EXE4ydL3S76dFb27UFjNVZHTyv/TLdATj/KUe29ptdcg6qXL48J2tZ3126E5kICj5jn781OR+XlVH1N6Mz8jbA=="],
+
+    "@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
+  }
+}
