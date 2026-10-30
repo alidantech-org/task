@@ -6,12 +6,12 @@ Task is a local-first task and project work platform for individuals and organis
 
 The platform has separate product surfaces:
 
-- CLI: scriptable local interface for people and AI agents.
-- Local application: local runtime and browser dashboard for a selected file-based workspace.
-- Hosted website: cloud client at task.alidantech.org.
+- CLI: polished, scriptable local interface for people and AI agents.
+- Local application: local runtime and Next.js browser dashboard for a selected file-based workspace.
+- Hosted website: Next.js cloud client at task.alidantech.org.
 - Hosted API: standalone NestJS modular monolith at task-api.alidantech.org.
 - Mobile: Flutter application connecting directly to the hosted API.
-- TUI: terminal interface reusing local workspace operations.
+- TUI: advanced OpenTUI/React terminal interface reusing local workspace operations.
 
 ## Accepted architecture decisions
 
@@ -22,6 +22,7 @@ The platform has separate product surfaces:
 - [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
 - [0009 — Bun monorepo, application scaffolds, and shared packages](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md)
 - [0010 — Shared local workspace engine for CLI and dashboard](../../tasks/decisions/0010-shared-local-workspace-engine.md)
+- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../tasks/decisions/0011-application-experience-tooling.md)
 - [Shared local workspace engine and CLI/dashboard collaboration](local-workspace-engine.md)
 
 ## Product and runtime boundaries
@@ -29,19 +30,21 @@ The platform has separate product surfaces:
 | Surface | Responsibility | Connectivity |
 | --- | --- | --- |
 | CLI | Workspace discovery, task/document operations, validation, automation and later cloud commands | Local commands work offline and without the local server |
-| Local app | Browser dashboard, local HTTP API, WebSocket, file watching/reconciliation and controlled workspace access | Local computer; loopback by default |
-| Hosted website | Accounts, personal workspaces, organisations and collaboration | Hosted site calls hosted API directly |
+| Local app | Next.js browser dashboard, local HTTP API, WebSocket, file watching/reconciliation and controlled workspace access | Local computer; runtime loopback by default |
+| Hosted website | Accounts, personal workspaces, organisations and collaboration | Next.js hosted site calls hosted API directly |
 | Hosted API | Identity, authorization, cloud workspaces, persistence and future sync | Standalone NestJS modular monolith |
 | Flutter mobile | Access to authorised cloud workspaces | Direct hosted API client |
-| TUI | Keyboard-driven local interface | Reuses shared workspace operations |
+| TUI | Advanced keyboard-driven local interface | OpenTUI/React; reuses shared workspace operations |
 
-The local application and hosted website are separate applications. Both use React + Vite + TypeScript, but have separate entry points, runtime responsibilities, state, routing, and deployment. Shared tooling does not merge their product boundaries.
+The local application and hosted website are separate Next.js applications. The local runtime is a separate local process; Next.js is the dashboard presentation/server framework, not a replacement for the filesystem security boundary or workspace engine.
 
 ## Repository tooling
 
 The repository root package.json manages one Bun workspace containing source/api, source/apps/*, and source/packages/*. Each Bun-managed app/package keeps its own package.json. Root scripts orchestrate the CLI, local runtime/dashboard, hosted site, API, TUI, and typechecking.
 
-The Flutter app under source/apps/mobile is outside the Bun workspace and is managed through pubspec.yaml and Flutter tooling. Dart code does not import TypeScript packages; cross-language contracts must be generated from a language-neutral source or maintained for Dart.
+The web applications use Next.js App Router. The local dashboard and hosted website are independently runnable Next.js projects. The CLI uses picocolors for terminal-aware styling and @clack/prompts for interactive workflows. The TUI uses OpenTUI with React bindings for native terminal rendering and keyboard interaction.
+
+OpenTUI requires Bun 1.3.14 or later. The root packageManager field pins the minimum compatible Bun release. The Flutter app under source/apps/mobile is outside the Bun workspace and is managed through pubspec.yaml and Flutter tooling. Dart code does not import TypeScript packages; cross-language contracts must be generated from a language-neutral source or maintained for Dart.
 
 The source tree and current scaffold status are documented in [source layout](source-layout.md).
 
@@ -66,7 +69,7 @@ Supported product modes:
 - Connected: local files remain usable offline and explicitly sync with a cloud workspace.
 - Cloud-native: workspace is managed in Task Cloud without a local replica and remains exportable.
 
-## Future two-way multi-device sync
+## Future two-way, multi-device synchronization
 
 Task Cloud must support two-way changes between a cloud workspace and multiple local replicas. Each replica has independent device identity and sync progress. The protocol must provide stable workspace/record IDs, revisions and cursors, idempotent retries, tombstones, conflict detection and preservation, explicit initial reconciliation, permission revocation, and interrupted-session recovery.
 
@@ -77,16 +80,16 @@ Never silently overwrite work or assume universal last-write-wins. Git history, 
 1. Define workspace configuration, file/document contracts, stable IDs, discovery and validation; implement useful CLI operations.
 2. Implement shared local workspace operations.
 3. Implement local runtime security, HTTP/WebSocket contracts, filesystem reconciliation and CLI-managed lifecycle.
-4. Build the local dashboard against the local runtime and verify bidirectional updates, including external file edits.
+4. Build the local Next.js dashboard against the local runtime and verify bidirectional updates, including external file edits.
 5. Harden local integrity, recovery and offline behavior.
 6. Define cloud identity, ownership, authorization, persistence and API contracts.
-7. Implement the hosted NestJS API and hosted website.
+7. Implement the hosted NestJS API and Next.js website.
 8. Design and implement two-way multi-device sync.
 9. Build the Flutter mobile client against stable API contracts.
-10. Expand the TUI using established workspace operations.
+10. Expand the OpenTUI TUI using established workspace operations.
 
 ## Current implementation status
 
-Starter projects now exist for the CLI, local application, hosted site, NestJS API, Flutter mobile app, TUI, and two shared TypeScript packages. They are scaffolds only. The local runtime currently has a health endpoint; the browser applications are starter screens; the API has no domain persistence or authentication; the CLI and TUI have no full task workflows; and sync is not implemented.
+Starter projects exist for the CLI, local application, hosted site, NestJS API, Flutter mobile app, TUI, and two shared TypeScript packages. They are scaffolds only. The local runtime currently has a health endpoint; the Next.js browser applications are starter screens; the API has no domain persistence or authentication; the CLI has a polished help surface but no full workspace commands; the TUI has an interactive navigation shell but no workspace integration; and sync is not implemented.
 
 Do not treat project setup as feature completion. See [source layout and implementation boundaries](source-layout.md) for the precise file inventory and current limitations.
