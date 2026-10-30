@@ -45,7 +45,7 @@ Task frontmatter applies only within the configured Task-managed workspace, not 
 
 See [Markdown metadata and schema architecture](markdown-metadata-schema.md) and the accepted decisions in `tasks/decisions/`.
 
-The local UI is intended to run through `task run`, with a configurable port such as `task run -p 3004`. It should discover documents from the configured workspace and use their metadata to organize navigation, listings, filters, and document pages. It must remain useful without an account or network connection. Hosted web and mobile clients will use the hosted Task API; connected repositories will synchronize through a separately designed sync subsystem. See [platform architecture](platform-architecture.md) and [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
+The local site dashboard is intended to run through `task run`, with a configurable port such as `task run -p 3004`. The CLI starts or manages a local runtime that mediates workspace access and exposes local HTTP and WebSocket interfaces. The site discovers documents from the configured workspace and uses their metadata to organize navigation, listings, filters, and document pages. It remains useful without an account or network connection. The same site product has a hosted mode deployed publicly and connected directly to the hosted API. Mobile also connects directly to the hosted API. Connected repositories synchronize through a separately designed sync subsystem. See [Decision 0005](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md). See [platform architecture](platform-architecture.md) and [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
 
 ## Deliberately deferred
 
@@ -56,7 +56,9 @@ The local UI is intended to run through `task run`, with a configurable port suc
 - Task lifecycle, statuses, dependencies, and semantic validation rules.
 - CLI command framework and command registration design.
 - Shared core/workspace package APIs.
-- Dashboard framework and local server/API design.
+- Site framework and shared-code boundary between local and hosted modes.
+- Local runtime HTTP/WebSocket API, process lifecycle, origin protection, and reconnect/snapshot design.
+- TUI framework, interaction model, and keybindings.
 - Hosted API module contracts, identity/organization ownership model, and cloud persistence.
 - Connected-workspace sync protocol, authority rules, and conflict resolution.
 - Automated test framework and CI workflows.
@@ -72,4 +74,4 @@ The workspace boundary and the direction for a strict, extensible frontmatter sc
 
 ## Source implementation status
 
-Only `source/apps/cli` is scaffolded. The local dashboard, hosted web, hosted modular API, and mobile client remain documented product targets and will be added when their runtime boundaries and contracts are ready. TUI is deferred. Shared packages and API module directories are not pre-created; see [source layout](source-layout.md) for the package extraction rules.
+Only `source/apps/cli` is scaffolded. The intended source layout is a standalone NestJS project at `source/api/` plus `source/apps/site/`, `source/apps/mobile/`, and `source/apps/tui/`. The site has local-dashboard and hosted-website modes. The CLI-managed local runtime mediates local workspace access and live updates over HTTP/WebSocket; hosted site and mobile clients connect directly to the hosted API. These applications will be added when their contracts and implementation are ready. Shared packages and API module directories are not pre-created; see [source layout](source-layout.md) and [Decision 0005](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md).
