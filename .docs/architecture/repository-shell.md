@@ -27,7 +27,7 @@ Only create a package or application directory when it contains real code or an 
 - The repository is a private Bun workspace, even though the GitHub repository is public.
 - The first executable is the CLI app under `source/apps/cli`.
 - The CLI package exposes both `task` and `tk` binaries from one entry point.
-- Core domain behavior, workspace/file persistence, and dashboard integration will be introduced as explicit packages when their contracts are designed.
+- Core domain behavior, workspace/file persistence, hosted API capabilities, synchronization, and dashboard integration will be introduced as explicit packages when their contracts are designed. The accepted product direction is hybrid: local-first, connected repository, and cloud-native workspaces.
 - No generated SDK, database, hosted service, framework, or test runner is introduced at this stage.
 
 ## Task-managed Markdown architecture
@@ -45,7 +45,7 @@ Task frontmatter applies only within the configured Task-managed workspace, not 
 
 See [Markdown metadata and schema architecture](markdown-metadata-schema.md) and the accepted decisions in `tasks/decisions/`.
 
-The local UI is intended to run through `task run`, with a configurable port such as `task run -p 3004`. It should discover documents from the configured workspace and use their metadata to organize navigation, listings, filters, and document pages.
+The local UI is intended to run through `task run`, with a configurable port such as `task run -p 3004`. It should discover documents from the configured workspace and use their metadata to organize navigation, listings, filters, and document pages. It must remain useful without an account or network connection. Hosted web and mobile clients will use the hosted Task API; connected repositories will synchronize through a separately designed sync subsystem. See [platform architecture](platform-architecture.md) and [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
 
 ## Deliberately deferred
 
@@ -57,6 +57,8 @@ The local UI is intended to run through `task run`, with a configurable port suc
 - CLI command framework and command registration design.
 - Shared core/workspace package APIs.
 - Dashboard framework and local server/API design.
+- Hosted API module contracts, identity/organization ownership model, and cloud persistence.
+- Connected-workspace sync protocol, authority rules, and conflict resolution.
 - Automated test framework and CI workflows.
 
 The workspace boundary and the direction for a strict, extensible frontmatter schema are accepted; detailed schemas and configuration contracts remain to be designed.
