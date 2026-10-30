@@ -234,9 +234,9 @@ Do not expose the local dashboard to a network by default. Local-only mode shoul
 
 ## 12. Repository structure and implementation boundaries
 
-Keep all application and package source under `source/`, but do not scaffold every conceptual product surface as an empty workspace. The current implementation tree contains only the CLI. The local dashboard, hosted web client, hosted modular API, and mobile client are future implementation boundaries; their responsibilities are described in [source layout and implementation boundaries](source-layout.md).
+Keep all application and package source under `source/`, but do not scaffold every conceptual product surface as an empty workspace. The current implementation tree contains only the CLI. The standalone hosted API, site (local dashboard and hosted website modes), mobile app, and TUI are intended application boundaries but are not scaffolded yet; their responsibilities are described in [source layout and implementation boundaries](source-layout.md).
 
-The local dashboard and hosted web are distinct runtime responsibilities. Whether they share one web application/UI package or use separate application shells over shared client code remains open until the local runtime and hosted API contracts are designed. Mobile framework selection is deferred. TUI is an accepted future application boundary for an interactive terminal experience; it is not scaffolded yet.
+The local dashboard and hosted website are distinct runtime/deployment modes of one intended site product. They may share UI/application code, but local mode uses the CLI-managed local runtime and cloud mode connects directly to the hosted API. Mobile framework selection is deferred. TUI is an accepted future application boundary for an interactive terminal experience; it is not scaffolded yet.
 
 Shared packages must emerge from stable contracts and real reuse. Do not create one package per domain noun, API module, or planned feature. Start with cohesive code inside the application that owns the workflow, then extract a package when multiple consumers, independent versioning, or a clear architectural boundary justify it. The API starts as a modular monolith; its domain modules are internal modules, not microservices or separate packages.
 
@@ -308,4 +308,4 @@ These decisions must be resolved in their own design records before implementati
 
 ## Source implementation status
 
-Only the CLI is currently scaffolded as an application. The local dashboard, hosted web, hosted API, and mobile clients remain architectural targets, not implemented code. The API module map is conceptual and will be materialized inside one modular monolith as each module is designed. No shared package boundaries have been established yet. See [source layout and implementation boundaries](source-layout.md).
+Only the CLI is currently scaffolded as an application. The standalone NestJS API, site (local dashboard and hosted website modes), mobile app, and TUI remain architectural targets, not implemented code. The API module map is conceptual and will be materialized inside one modular monolith as each module is designed. No shared package boundaries have been established yet. See [source layout and implementation boundaries](source-layout.md).
