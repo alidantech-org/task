@@ -6,11 +6,12 @@ Task is a hybrid task and project work platform for **individuals and organizati
 
 The product has one domain model and multiple clients:
 
-- CLI for developers and AI agents.
-- Local dashboard for repository-backed work.
-- Hosted web application for personal and organizational work.
+- CLI for people and AI agents, including validation and cloud connection/sync commands.
+- Local dashboard for repository-backed work, served locally through a CLI-managed runtime.
+- TUI for people who prefer an interactive keyboard-driven terminal experience.
+- Hosted website for personal and organizational work, with local and cloud runtime modes.
 - Mobile application for cross-project access and mobile workflows.
-- Hosted API as the service boundary for cloud-native and connected workspaces.
+- Standalone hosted NestJS API at `source/api/` as the service boundary for cloud-native and connected workspaces.
 
 The accepted product decision is recorded in [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
 
@@ -74,32 +75,35 @@ A workspace is created in Task Cloud without a local repository. The hosted API 
 
 ~~~text
                     Task clients
-    +-----------+-----------+------------+-----------+
-    | CLI / TUI | Local web | Hosted web | Mobile app|
-    +-----------+-----------+------------+-----------+
-          |          |           |             |
-          | local domain         | API client  |
-          v          v           v             v
-    +--------------------+   +-------------------------+
-    | Shared domain and  |   | Hosted Task API         |
-    | workspace runtime  |   |                         |
-    |                    |   | Identity and accounts   |
-    | Schemas            |   | Organizations/members   |
-    | Documents          |   | Workspaces/projects     |
-    | Tasks/projects     |   | Tasks/documents         |
-    | Validation         |   | Authorization           |
-    | Local persistence  |   | Synchronization         |
-    +--------------------+   | Search/activity/notify  |
-             |               +------------+------------+
-             v                            |
-       Repository files                   v
-       and Git history             Cloud persistence
-                                      and object storage
+    +-----------+-----------+----------------+-----------+
+    | CLI / TUI | Local site| Hosted website | Mobile app|
+    +-----------+-----------+----------------+-----------+
+          |          |              |              |
+          +----------+              +--------------+
+                |                          |
+                v                          v
+       +-------------------+       +---------------------+
+       | CLI-managed local |       | Standalone NestJS   |
+       | runtime           |       | API: source/api/    |
+       |                   |       |                     |
+       | Local HTTP + WS   |       | Identity / tenancy  |
+       | Workspace access |       | Workspaces/projects |
+       | File watching    |       | Tasks/documents     |
+       | Local operations  |       | Authorization       |
+       +---------+---------+       | Synchronization     |
+                 |                 | Search/activity/etc |
+                 v                 +----------+----------+
+          Repository files                    |
+          and Git history                     v
+                                    Cloud persistence
 
-          Connected repository <--> Sync subsystem
+          Connected repository <--> Sync subsystem <--> Hosted API
+
+       Local site uses local runtime only in local mode.
+       Hosted site and mobile use hosted API directly.
 ~~~
 
-The shared domain is not a requirement that every client run the same runtime. It means domain schemas, invariants, and API contracts have one authoritative definition and are consistently enforced.
+The shared domain is not a requirement that every client run the same runtime. It means domain schemas, invariants, and API contracts have one authoritative definition and are consistently enforced. The CLI-managed local runtime mediates local workspace access and exposes HTTP/WebSocket interfaces to local clients. The hosted API is a separate NestJS project and deployment. Local live-update events and cloud synchronization changes are separate protocols.
 
 ## 6. Hosted API domain modules
 
@@ -232,21 +236,53 @@ Do not expose the local dashboard to a network by default. Local-only mode shoul
 
 Keep all application and package source under `source/`, but do not scaffold every conceptual product surface as an empty workspace. The current implementation tree contains only the CLI. The local dashboard, hosted web client, hosted modular API, and mobile client are future implementation boundaries; their responsibilities are described in [source layout and implementation boundaries](source-layout.md).
 
-The local dashboard and hosted web are distinct runtime responsibilities. Whether they share one web application/UI package or use separate application shells over shared client code remains open until the local runtime and hosted API contracts are designed. Mobile framework selection is deferred. TUI is an optional future interface, not a required product surface or current application boundary.
+The local dashboard and hosted web are distinct runtime responsibilities. Whether they share one web application/UI package or use separate application shells over shared client code remains open until the local runtime and hosted API contracts are designed. Mobile framework selection is deferred. TUI is an accepted future application boundary for an interactive terminal experience; it is not scaffolded yet.
 
 Shared packages must emerge from stable contracts and real reuse. Do not create one package per domain noun, API module, or planned feature. Start with cohesive code inside the application that owns the workflow, then extract a package when multiple consumers, independent versioning, or a clear architectural boundary justify it. The API starts as a modular monolith; its domain modules are internal modules, not microservices or separate packages.
 
 
-## 13. Recommended implementation sequence
+## 13. Local runtime, site modes, and TUI
 
-1. **Domain foundations:** finalize identity, workspace, project, task, document, ownership, and relationship models. Preserve local workspace behavior.
-2. **Local product:** implement workspace discovery, schema validation, CLI workflows, and local dashboard on shared domain rules.
-3. **Cloud foundations:** define API contracts, identity, personal workspaces, organizations, membership, authorization, and cloud persistence.
-4. **Cloud-native workflow:** create and manage projects/tasks/documents through the API and hosted web application.
-5. **Connected workspace protocol:** specify and implement registration, revisions, change exchange, idempotency, conflict handling, deletion, and recovery.
-6. **Hosted web collaboration:** cross-project My Work, team workflows, search, activity, and notifications.
-7. **Mobile client:** authentication, My Work, project/task workflows, cache, offline queue, and notifications.
-8. **Integrations and scale:** Git provider integration, automation, advanced analytics, and operational decomposition only when justified.
+### CLI and local runtime
+
+The CLI is the primary scriptable interface for people and agents. It manages tasks and documents, validates the configured workspace, and provides optional login, cloud workspace linking, and synchronization commands. Local commands remain usable without an account or network.
+
+The CLI starts or manages a local runtime for the dashboard. Initially, the runtime belongs to the CLI application; it should not become a separate package or service until implementation demonstrates a clear independent lifecycle. It mediates access to the selected Task-managed workspace, watches/reconciles file changes, and exposes a restricted local HTTP interface plus WebSocket live-update channel.
+
+Bind the local runtime to loopback by default. Protect it against cross-origin browser requests, use a local authorization/capability mechanism for sensitive operations, restrict access to the selected workspace, and never expose arbitrary filesystem access or shell execution. WebSocket clients must be able to reconnect and request a fresh snapshot or catch up from a cursor. Filesystem watcher events are hints, not authoritative change records.
+
+### Site: local and cloud modes
+
+The intended site is one product with two runtime/deployment modes:
+
+- **Local mode:** served locally by the CLI-managed runtime; uses local HTTP/WebSocket to manage repository-backed work. It must not depend on Task Cloud.
+- **Cloud mode:** deployed as the public website; connects directly to the hosted NestJS API for authenticated cloud data. It must not depend on a user's local runtime.
+
+Share UI/application code where practical while keeping local and cloud runtime adapters separate. Do not create two independent website implementations unless concrete workflows or deployment constraints justify it.
+
+### Mobile
+
+The mobile application connects directly to the hosted API. It does not route cloud operations through a user's local runtime. Its framework, caching, push delivery, and supported offline operations remain open decisions.
+
+### TUI
+
+The TUI is a separate interactive, keyboard-driven terminal interface for people. It complements the scriptable CLI and is not the primary agent/automation interface. It must reuse the same domain/workspace operations and validation rules as the CLI and local dashboard; it must not create a competing task model or bypass workspace access controls. Begin with local workspace workflows. Add authenticated cloud workflows only through the established API and synchronization contracts. Framework and keybinding decisions are deferred.
+
+### Local live updates vs cloud synchronization
+
+The local runtime's WebSocket broadcasts changes to local clients. Cloud synchronization is a separate subsystem that exchanges authorized, revision-aware changes with the hosted API. WebSocket delivery does not provide durable synchronization, conflict resolution, or authorization. Reconnection requires snapshot/cursor recovery; sync requires stable IDs, revisions, idempotency, deletion semantics, conflict detection, and recoverability.
+
+## 14. Recommended implementation sequence
+
+1. **Domain foundations:** finalize local document/workspace contracts and shared task/project semantics; implement CLI discovery and validation.
+2. **Local runtime:** design safe workspace access, HTTP/WebSocket interfaces, file watching, and reconnect/snapshot behavior inside the CLI application.
+3. **Local site:** implement the local dashboard against the local runtime.
+4. **Cloud foundations:** define API contracts, identity, personal workspaces, organizations, membership, authorization, and cloud persistence; build the standalone NestJS project under `source/api/`.
+5. **Cloud-native website:** implement hosted site mode against the API.
+6. **Connected workspace protocol:** specify and implement registration, revisions, change exchange, idempotency, conflict handling, deletion, and recovery; then connect CLI login/link/sync workflows.
+7. **TUI:** design and implement the interactive terminal interface against the same local workspace operations and validation contracts.
+8. **Mobile client:** authentication, My Work, project/task workflows, cache, offline queue, and notifications.
+9. **Integrations and scale:** Git provider integration, automation, advanced analytics, and operational decomposition only when justified.
 
 Do not build mobile screens or a large API surface before the shared domain, authorization, and sync contracts are stable.
 
