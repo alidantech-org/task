@@ -1,6 +1,12 @@
+---
+id: TASK-ARCH-REPOSITORY-SHELL
+name: Repository shell architecture
+type: architecture
+---
+
 # Repository shell plan
 
-This note records the initial implementation shell. It deliberately establishes the repository's tooling and boundaries without pretending that the task model, persistence format, or application features have already been designed.
+This note records the initial implementation shell. It deliberately establishes the repository's tooling and boundaries without pretending that the complete task model, persistence format, or application features have already been designed.
 
 ## Initial layout
 
@@ -30,17 +36,25 @@ Only create a package or application directory when it contains real code or an 
 - Core domain behavior, workspace/file persistence, and dashboard integration will be introduced as explicit packages when their contracts are designed.
 - No generated SDK, database, hosted service, framework, or test runner is introduced at this stage.
 
+## Markdown document architecture
+
+All Task-managed Markdown documents, including engineering documentation, use YAML frontmatter as their machine-readable metadata contract. The common required fields are `id`, `name`, and `type`; type-specific schemas define additional fields.
+
+The Markdown body holds human-readable content. The same schema definitions must drive CLI validation and document discovery/presentation in the local web UI. Missing or malformed frontmatter is a validation error for every in-scope Markdown file.
+
+The local UI is intended to run through `task run`, with a configurable port such as `task run -p 3004`. It should discover documents from the workspace and use their metadata to organize navigation, listings, filters, and document pages.
+
 ## Deliberately deferred
 
-- Task schema and Markdown/frontmatter contract.
+- Complete type-specific document schemas, field types, and allowed values.
 - Workspace configuration schema and initialization behavior.
-- Task lifecycle, statuses, dependencies, and validation rules.
+- Task lifecycle, statuses, dependencies, and semantic validation rules.
 - CLI command framework and command registration design.
 - Shared core/workspace package APIs.
 - Dashboard framework and local server/API design.
 - Automated test framework and CI workflows.
 
-These need focused design decisions before implementation. The shell should not lock them in accidentally.
+These need focused design decisions before implementation. The accepted universal frontmatter requirement is not deferred; only the complete type-specific schemas and implementation details remain open.
 
 ## Development workflow
 
