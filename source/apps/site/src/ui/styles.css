@@ -8,3 +8,10 @@ section { max-width: 760px; margin: 16vh auto; padding: 0 28px; }
 .eyebrow { color: #737b89; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 h1 { margin: 14px 0; font-size: clamp(40px, 7vw, 64px); letter-spacing: -.06em; }
 section p:last-child { max-width: 560px; line-height: 1.7; }
+.runtime-status,
+.api-status {
+  margin-top: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
