@@ -22,3 +22,15 @@ coverage/
 
 # Local Task workspace state
 .tasks-cache/
+
+# Next.js and frontend tooling
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Flutter / Dart generated state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
