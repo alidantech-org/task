@@ -1,3 +1,9 @@
+---
+id: TASK-README
+name: Task project overview
+type: overview
+---
+
 # Task
 
 Task is a repository-native task and project management system built with Bun and TypeScript.
@@ -15,6 +21,7 @@ All interfaces will operate on one shared workspace and domain model. Markdown a
 - `source/` contains application and package source code.
 - `.docs/` contains engineering documentation about the Task software project.
 - `tasks/` is the Task-managed workspace for task records, product context, research, decisions, and handoffs.
+- Every managed Markdown file, including documentation, must begin with YAML frontmatter containing structured metadata.
 - Root `TODO.md`, when introduced, is an overview/index rather than a second source of truth.
 - No generated SDK directory is planned.
 
@@ -56,4 +63,4 @@ See [development setup](.docs/development/setup.md) for details.
 
 ## Project status
 
-The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The task schema, workspace persistence contract, lifecycle, command architecture, shared core, and dashboard remain to be designed.
+The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The common Markdown frontmatter requirement is accepted; complete type-specific schemas, workspace persistence, lifecycle, command architecture, shared core, and dashboard remain to be designed.
