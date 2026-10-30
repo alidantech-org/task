@@ -53,4 +53,4 @@ The local workspace is file-based and must remain usable offline. The CLI must n
 - Filesystem watcher implementation, reconciliation granularity, and debounce strategy.
 - Exact runtime process supervision and browser launch behavior.
 
-These contracts must be defined before the corresponding integration depends on them. See .docs/architecture/local-workspace-engine.md.
+These contracts must be defined before the corresponding integration depends on them. See [the detailed architecture](../../.docs/architecture/local-workspace-engine.md).
