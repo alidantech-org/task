@@ -48,11 +48,9 @@ async function main(): Promise<void> {
 
   if (command === "doctor") {
     intro(pc.bold("Task environment check"));
-    const bunVersion = Bun.version;
-    const bunMajor = Number(bunVersion.split(".")[0]);
-    const bunMinor = Number(bunVersion.split(".")[1]);
-    const compatible = bunMajor > 1 || (bunMajor === 1 && bunMinor >= 3);
-    console.log(compatible ? pc.green("✓") : pc.red("✗"), `Bun ${bunVersion}`);
+    const [major = 0, minor = 0, patch = 0] = Bun.version.split(".").map(Number);
+    const compatible = major > 1 || (major === 1 && (minor > 3 || (minor === 3 && patch >= 14)));
+    console.log(compatible ? pc.green("✓") : pc.red("✗"), `Bun ${Bun.version}`);
     console.log(pc.green("✓"), "CLI entry point is running");
     outro(compatible ? "Environment checks passed." : "Upgrade Bun to 1.3.14 or later.");
     if (!compatible) process.exitCode = 1;
