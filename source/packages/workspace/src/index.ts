@@ -32,20 +32,27 @@ export async function resolveSafeWorkspacePath(root: string, candidate: string):
   while (true) {
     try {
       await lstat(ancestor);
-      const realAncestor = await realpath(ancestor);
-      if (!isWithin(realRoot, realAncestor)) {
-        throw new Error("Path is outside the selected workspace");
-      }
-      return target;
     } catch (error) {
-      if (error instanceof Error && error.message === "Path is outside the selected workspace") {
-        throw error;
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+        throw new Error("Unable to inspect workspace path safely");
       }
       const parent = resolve(ancestor, "..");
       if (parent === ancestor) {
         throw new Error("Unable to verify workspace path safely");
       }
       ancestor = parent;
+      continue;
     }
+
+    let realAncestor: string;
+    try {
+      realAncestor = await realpath(ancestor);
+    } catch {
+      throw new Error("Unable to resolve workspace path safely");
+    }
+    if (!isWithin(realRoot, realAncestor)) {
+      throw new Error("Path is outside the selected workspace");
+    }
+    return target;
   }
 }
