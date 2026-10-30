@@ -1,3 +1,9 @@
+---
+id: TASK-AGENTS
+name: Repository and agent guidance
+type: agent-guidance
+---
+
 # Repository guidance
 
 ## Source of truth and layout
@@ -19,8 +25,15 @@
 - Do not run builds or tests unless requested. A focused typecheck may be used when necessary and should be reported.
 - Do not modify `.github/**` or GitHub automation unless explicitly approved with the phrase `APPROVED: MODIFY GITHUB AUTOMATION`.
 
-## Documentation
+## Documentation and Markdown contract
 
+- Every Markdown file managed by Task, including documentation in `.docs/` and `tasks/`, must begin with YAML frontmatter delimited by `---`.
+- Frontmatter must include the common required fields `id`, `name`, and `type`; apply the appropriate type-specific schema when one has been defined.
+- The YAML frontmatter is machine-readable metadata; the Markdown body is human-readable content.
+- Create new Markdown files with frontmatter from the outset. Do not introduce frontmatter-free Markdown.
+- `task validate` / `tk validate` must validate all in-scope Markdown, including documentation. Missing or malformed frontmatter is an error.
+- The local application started by `task run` must discover and present documents using their metadata, not a separate manually maintained registry.
+- The validator and UI must share the same schema definitions and document interpretation.
 - Update `.docs/` when engineering setup, architecture, or implementation behavior changes.
 - Use `tasks/decisions/` for meaningful product and project decisions, and `tasks/handoffs/` for agent handoffs.
 - Keep root `README.md` concise and aligned with the actual repository state.
