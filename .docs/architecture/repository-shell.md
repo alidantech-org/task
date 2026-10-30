@@ -36,17 +36,22 @@ Task frontmatter applies only within the configured Task-managed workspace, not 
 
 - The default workspace directory is `tasks/`.
 - A repository may configure a different workspace directory in `task.yaml`, for example `.docs/` or `.tasks/`.
-- Every Markdown file inside the selected workspace uses YAML frontmatter as its machine-readable metadata contract. Common required fields begin with `id`, `name`, and `type`; type-specific schemas define additional fields.
+- Every Markdown file inside the selected workspace uses YAML frontmatter as its machine-readable metadata contract. Common required fields are `id`, `name`, and `type`; type-specific schemas define additional fields.
+- The frontmatter schema is intended to be strict and extensible: it supports structured `tags`, an explicit `extra` mapping for supplemental data, and type-specific fields. Unknown top-level fields are invalid unless declared by the active schema or a supported workspace extension.
+- Repository-level `task.yaml` configures Task and selects the managed workspace; it is not the per-document frontmatter.
 - Ordinary repository Markdown outside the selected workspace (such as root `README.md`, `AGENTS.md`, and unconfigured `.docs/`) remains ordinary Markdown and does not require Task frontmatter.
 - The Markdown body holds human-readable content. The same schema definitions drive CLI validation and document discovery/presentation in the local web UI.
 - Missing or malformed frontmatter inside the managed workspace is a validation error.
+
+See [Markdown metadata and schema architecture](markdown-metadata-schema.md) and the accepted decisions in `tasks/decisions/`.
 
 The local UI is intended to run through `task run`, with a configurable port such as `task run -p 3004`. It should discover documents from the configured workspace and use their metadata to organize navigation, listings, filters, and document pages.
 
 ## Deliberately deferred
 
 - Exact `task.yaml` configuration schema and workspace-setting key.
-- Complete type-specific document schemas, field types, and allowed values.
+- Complete common and type-specific document schemas, field types, and allowed values.
+- Schema registry format, custom fields/types, and schema versioning/migration policy.
 - Workspace initialization and discovery behavior.
 - Task lifecycle, statuses, dependencies, and semantic validation rules.
 - CLI command framework and command registration design.
@@ -54,7 +59,7 @@ The local UI is intended to run through `task run`, with a configurable port suc
 - Dashboard framework and local server/API design.
 - Automated test framework and CI workflows.
 
-The workspace boundary and frontmatter requirement are accepted; the precise configuration key and complete type-specific schemas remain to be designed.
+The workspace boundary and the direction for a strict, extensible frontmatter schema are accepted; detailed schemas and configuration contracts remain to be designed.
 
 ## Development workflow
 
