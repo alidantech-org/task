@@ -20,7 +20,7 @@
     "dev:site": "bun run --filter @task/site dev",
     "dev:api": "bun run --filter @task/api dev",
     "dev:tui": "bun run --filter @task/tui dev",
-    "typecheck": "bun run --filter '@task/*' typecheck",
+    "typecheck": "bun run --filter '@task/*' typecheck && tsc --noEmit -p scripts/tsconfig.json",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
