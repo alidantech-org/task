@@ -2,47 +2,68 @@
 
 ## Requirements
 
-- [Bun](https://bun.sh) with support for workspaces and TypeScript execution.
+- Bun 1.3.14 or later for the TypeScript workspace and OpenTUI runtime.
 - Git.
-
-The repository does not pin a Bun version yet. We can set a minimum version after validating the toolchain in supported development environments.
+- Flutter SDK for work on the mobile application.
 
 ## Install
 
 From the repository root:
 
-```sh
-bun install
-```
+    bun install
 
-This installs the root development tools and links the CLI workspace.
+The root Bun workspace installs and links the CLI, local runtime/dashboard, hosted site, API, TUI, and shared TypeScript packages. Flutter remains outside Bun workspaces and is managed with Flutter tooling.
 
-## Run the CLI
+## Run the applications
 
-```sh
-bun run dev
-```
+Scriptable CLI:
 
-The initial CLI entry point supports `--help` and `--version`. Both `task` and `tk` package binaries point to the same source entry point; local executable linking will be refined with the CLI packaging workflow.
+    bun run dev:cli
 
-The planned local web application will be started with `task run`; for example, `task run -p 3004` selects port 3004. That command is a product direction, not implemented by the current CLI shell.
+Local runtime and Next.js dashboard together:
+
+    bun run dev:local
+
+The processes can also be started separately:
+
+    bun run dev:local:runtime
+    bun run dev:local:web
+
+Hosted Next.js website:
+
+    bun run dev:site
+
+Advanced OpenTUI terminal interface:
+
+    bun run dev:tui
+
+Hosted NestJS API:
+
+    bun run dev:api
+
+Both task and tk are CLI aliases. The CLI currently provides a polished help/version surface and JSON metadata mode; full workspace commands are still being implemented. The TUI currently provides an interactive navigation shell and is not yet connected to workspace files.
 
 ## Typecheck
 
-```sh
-bun run typecheck
-```
+    bun run typecheck
+
+Do not treat a successful typecheck as proof that the runtime, native OpenTUI renderer, local security boundary, or product workflows are complete.
+
+## Flutter mobile app
+
+From source/apps/mobile:
+
+    flutter pub get
+    flutter run
+
+The Flutter application is not part of the Bun workspace and does not import TypeScript package source.
 
 ## Task-managed Markdown files
 
-YAML frontmatter is required only for Markdown files inside the configured Task-managed workspace. The workspace defaults to `tasks/`; a repository can select another directory in `task.yaml`. Ordinary repository Markdown outside that directory, including this engineering documentation, does not need Task frontmatter.
+YAML frontmatter is required only for Markdown files inside the configured Task-managed workspace. The workspace defaults to tasks/; a repository can select another directory in task.yaml. Ordinary repository Markdown outside that directory, including this engineering documentation, does not need Task frontmatter.
 
-The common metadata fields are `id`, `name`, and `type`. Add frontmatter when creating Markdown files inside the managed workspace; the future `task validate` command will treat missing or invalid metadata there as an error.
+The common metadata fields are id, name, and type. Add frontmatter when creating Markdown files inside the managed workspace; the future task validate command will treat missing or invalid metadata there as an error.
 
 ## Current scope
 
-This setup is intentionally small. There is not yet a dashboard, `task run` command, validator, test runner, formatter/linter, shared core package, or persistence implementation. Add tooling when the corresponding architecture and workflow are agreed.
-
-## Workspace status
-
-The only Bun workspace is the CLI under `source/apps/cli`. The root `typecheck` script checks the current workspace. Other product surfaces and shared packages are intentionally not scaffolded until their contracts and implementation boundaries are ready.
+This setup describes the project foundations, not completed product capabilities. The local runtime currently exposes only a health endpoint. Workspace discovery, safe file operations, runtime security, WebSocket reconciliation, API persistence/authentication, cloud sync, and end-user workflows remain future implementation work.
