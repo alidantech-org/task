@@ -2,86 +2,58 @@
 
 Task is a repository-native task and project management system built with Bun and TypeScript.
 
-The project is intended to provide three complementary interfaces over one shared task-management core:
+The intended interfaces are:
 
 - **CLI** for developers and AI agents.
 - **Local dashboard** for visual project and Kanban management.
 - **Terminal interface** for interactive terminal workflows.
 
-The repository and each initialized project should keep task records and project knowledge versioned alongside the code. Markdown files and Git are the foundation; a hosted service or external database should not be required.
+All interfaces will operate on one shared workspace and domain model. Markdown and Git are the foundation; a hosted service or external database should not be required.
 
 ## Repository conventions
 
-### Source code
+- `source/` contains application and package source code.
+- `.docs/` contains engineering documentation about the Task software project.
+- `tasks/` is the Task-managed workspace for task records, product context, research, decisions, and handoffs.
+- Root `TODO.md`, when introduced, is an overview/index rather than a second source of truth.
+- No generated SDK directory is planned.
 
-Application and package source code lives under `source/`:
+See [Repository documentation](.docs/README.md) and [Task workspace conventions](tasks/README.md).
 
-```text
-source/
-├── apps/
-│   ├── cli/
-│   └── dashboard/
-└── packages/
-    ├── core/
-    └── workspace/
+## CLI
+
+The CLI is being developed under `source/apps/cli`. Both `task` and `tk` are intended to invoke the same executable.
+
+The initial shell currently supports:
+
+```sh
+task --help
+task --version
+tk --help
 ```
 
-This is the intended starting organization, not a claim that all directories already exist. Add packages when there is a concrete need; avoid empty or speculative packages. The core owns domain rules and task lifecycle behavior. Workspace concerns include reading and writing project files, Markdown/frontmatter, configuration, indexing, and Git integration. The CLI, dashboard, and terminal interface should use the same core rather than implementing separate business logic.
+## Development setup
 
-There is no generated SDK directory in this repository. Internal schemas and contracts may live with the code that owns them.
+Install [Bun](https://bun.sh), then from the repository root run:
 
-### Documentation and Task workspace
-
-We use two distinct locations with different responsibilities:
-
-- **`.docs/`** contains documentation about the Task software project: architecture, development setup, contributor guidance, implementation guides, and operational/reference material.
-- **`tasks/`** is the Task-managed workspace. It holds the repository's own task records and evolving project context, including product requirements, research, decisions, handoffs, and workspace state. This is also the visible workspace convention that `task init` should create in other projects.
-
-Do not duplicate the same document in both locations. Use `.docs/` to explain how the software is built and maintained; use `tasks/` for the work and project knowledge managed through Task.
-
-The intended starting shapes are:
-
-```text
-.docs/
-├── README.md
-├── architecture/
-├── development/
-├── guides/
-└── reference/
-
-tasks/
-├── README.md
-├── config.yaml
-├── TASK-0001.md
-├── docs/
-│   ├── product/
-│   ├── research/
-│   └── benchmarks/
-├── decisions/
-├── handoffs/
-├── state/
-└── archive/
+```sh
+bun install
+bun run dev
 ```
 
-These are conventions, not a requirement to create empty directories. Add subdirectories and workspace records as real needs emerge.
+Run the current CLI typecheck with:
 
-- Individual task and knowledge records in `tasks/` are authoritative.
-- Root-level `TODO.md` is a convenient overview/index, not a second source of truth.
-- Prefer stable task identifiers so records can link to one another.
+```sh
+bun run typecheck
+```
 
-### CLI names
+See [development setup](.docs/development/setup.md) for details.
 
-The product is named **Task**. The CLI should be available through both `task` and `tk`; both names invoke the same implementation and support the same commands.
+## Branch workflow
 
-## Development workflow
+- `develop` is the integration branch. Day-to-day work happens here.
+- `main` is the stable branch. Promote reviewed changes from `develop` when ready.
 
-- `main` is the stable branch.
-- `develop` is the active integration branch.
-- Day-to-day implementation and feature work should happen on `develop`.
-- Promote reviewed, working changes from `develop` to `main` when ready for a stable milestone.
+## Project status
 
-Keep changes focused. Record meaningful product/work decisions in `tasks/decisions/` and keep repository engineering documentation in `.docs/`.
-
-## Current status
-
-This README records the initial project direction and repository conventions. The directory trees above are proposed structures; they do not imply that the applications, packages, or workspace tooling have been implemented yet.
+The repository currently contains the initial documentation, development guidance, Bun workspace configuration, and a minimal CLI entry point. The task schema, workspace persistence contract, lifecycle, command architecture, shared core, and dashboard remain to be designed.
