@@ -1,5 +1,10 @@
 {
   "extends": "../../../tsconfig.json",
-  "compilerOptions": { "types": ["bun"] },
-  "include": ["src/**/*.ts"]
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
