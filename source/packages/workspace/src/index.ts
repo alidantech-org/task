@@ -3,7 +3,10 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 
 function isWithin(root: string, candidate: string): boolean {
   const pathFromRoot = relative(root, candidate);
-  return pathFromRoot === "" || (!isAbsolute(pathFromRoot) && pathFromRoot !== ".." && !pathFromRoot.startsWith(`..${sep}`));
+  return (
+    pathFromRoot === "" ||
+    (!isAbsolute(pathFromRoot) && pathFromRoot !== ".." && !pathFromRoot.startsWith(`..${sep}`))
+  );
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getCliMetadata, resolveCommand } from "./command.js";
+import { getCliMetadata, resolveCommand } from "#/command";
 
 describe("CLI command metadata", () => {
   test("supports task and tk aliases", () => {

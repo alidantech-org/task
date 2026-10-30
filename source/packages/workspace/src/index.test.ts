@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { basename, join } from "node:path";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolveSafeWorkspacePath, resolveWorkspacePath } from "./index.js";
+import { basename, join } from "node:path";
+import { resolveSafeWorkspacePath, resolveWorkspacePath } from "#/index";
 
 let root = "";
 let outside = "";
@@ -47,7 +47,10 @@ describe("workspace path safety", () => {
 
   test("rejects dangling symlinks rather than allowing writes through them", async () => {
     const workspace = await makeWorkspace();
-    await symlink(join(workspace, "..", "missing-outside-target"), join(workspace, "tasks", "dangling"));
+    await symlink(
+      join(workspace, "..", "missing-outside-target"),
+      join(workspace, "tasks", "dangling"),
+    );
 
     await expect(resolveSafeWorkspacePath(workspace, "tasks/dangling/new-file.md")).rejects.toThrow(
       "Unable to resolve workspace path safely",

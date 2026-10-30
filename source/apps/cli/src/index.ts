@@ -2,7 +2,7 @@
 
 import { intro, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { getCliMetadata, resolveCommand } from "./command.js";
+import { getCliMetadata, resolveCommand } from "#/command";
 
 const metadata = getCliMetadata("0.1.0");
 const args = process.argv.slice(2);
@@ -13,20 +13,21 @@ function printHelp(): void {
   console.log();
   console.log(pc.bold(pc.cyan("  TASK")) + pc.dim("  Your work, organised."));
   console.log(pc.dim("  A local-first workspace for people and agents."));
+  console.log(pc.dim("  Use task doctor to check your Bun runtime."));
   console.log();
   console.log(pc.bold("  USAGE"));
-  console.log("  " + pc.cyan("task") + " " + pc.dim("<command> [options]"));
-  console.log("  " + pc.cyan("tk") + "   " + pc.dim("<command> [options]"));
+  console.log(`  ${pc.cyan("task")} ${pc.dim("<command> [options]")}`);
+  console.log(`  ${pc.cyan("tk")}   ${pc.dim("<command> [options]")}`);
   console.log();
   console.log(pc.bold("  COMMANDS"));
-  console.log("  " + pc.green("doctor") + "      Check the local development environment");
-  console.log("  " + pc.green("help") + "        Show command help");
-  console.log("  " + pc.green("version") + "     Show the installed version");
+  console.log(`  ${pc.green("doctor")}      Check the local development environment`);
+  console.log(`  ${pc.green("help")}        Show command help`);
+  console.log(`  ${pc.green("version")}     Show the installed version`);
   console.log();
   console.log(pc.bold("  OPTIONS"));
-  console.log("  " + pc.green("-h, --help") + "       Show help");
-  console.log("  " + pc.green("-v, --version") + "    Show version");
-  console.log("  " + pc.green("--json") + "           Print machine-readable metadata");
+  console.log(`  ${pc.green("-h, --help")}       Show help`);
+  console.log(`  ${pc.green("-v, --version")}    Show version`);
+  console.log(`  ${pc.green("--json")}           Print machine-readable metadata`);
   console.log();
 }
 
@@ -41,7 +42,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === undefined || args.includes("--help") || args.includes("-h") || command === "help") {
+  if (
+    command === undefined ||
+    args.includes("--help") ||
+    args.includes("-h") ||
+    command === "help"
+  ) {
     printHelp();
     return;
   }
@@ -52,6 +58,7 @@ async function main(): Promise<void> {
     const compatible = major > 1 || (major === 1 && (minor > 3 || (minor === 3 && patch >= 14)));
     console.log(compatible ? pc.green("✓") : pc.red("✗"), `Bun ${Bun.version}`);
     console.log(pc.green("✓"), "CLI entry point is running");
+    console.log(pc.green("✓"), `Platform ${process.platform} · ${process.arch}`);
     outro(compatible ? "Environment checks passed." : "Upgrade Bun to 1.3.14 or later.");
     if (!compatible) process.exitCode = 1;
     return;

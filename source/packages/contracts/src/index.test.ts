@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isHealthStatus } from "./index.js";
+import { isHealthStatus } from "#/index";
 
 describe("shared contracts", () => {
   test("validates health payloads at runtime", () => {

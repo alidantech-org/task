@@ -9,5 +9,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
-  }
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }

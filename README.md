@@ -7,14 +7,14 @@ The product includes a scriptable CLI, local Next.js dashboard, hosted Next.js w
 ## Repository conventions
 
 - source/ contains application and package source code.
-- .docs/ contains engineering documentation about the Task software project by convention.
-- The Task-managed workspace defaults to tasks/, but can be configured to use another directory such as .docs/ or .tasks/.
+- tasks/docs/ contains engineering documentation about the Task software project by convention.
+- The Task-managed workspace defaults to tasks/. Engineering docs in tasks/docs/ carry frontmatter so the local application can discover them; root README.md and AGENTS.md remain ordinary Markdown.
 - Only Markdown files inside the configured Task-managed workspace require Task YAML frontmatter.
 - Root/common Markdown files outside that workspace, such as this README, do not require Task frontmatter.
 - Root TODO.md, when introduced, is an overview/index rather than a second source of truth.
 - No generated SDK directory is planned.
 
-See [Repository documentation](.docs/README.md), [Task workspace conventions](tasks/README.md), the [install-once, use-in-any-project guide](.docs/guides/install-once-use-anywhere.md), [platform architecture](.docs/architecture/platform-architecture.md), and [Decision 0011](tasks/decisions/0011-application-experience-tooling.md).
+See [Repository documentation](tasks/docs/README.md), [Task workspace conventions](tasks/README.md), the [install-once, use-in-any-project guide](tasks/docs/guides/install-once-use-anywhere.md), [platform architecture](tasks/docs/architecture/platform-architecture.md), and [Decision 0011](tasks/decisions/0011-application-experience-tooling.md).
 
 ## Application experience
 
@@ -73,7 +73,7 @@ Run flutter pub get through the root bridge before the first mobile validation:
 
 bun run validate is the single root quality gate. It requires installed Bun dependencies, a current Bun lockfile, Flutter SDK/dependencies, and network access for the dependency advisory audit.
 
-See [development setup](.docs/development/setup.md) and [source layout](.docs/architecture/source-layout.md).
+See [development setup](tasks/docs/development/setup.md) and [source layout](tasks/docs/architecture/source-layout.md).
 
 ## Branch workflow
 
@@ -82,4 +82,4 @@ See [development setup](.docs/development/setup.md) and [source layout](.docs/ar
 
 ## Project status
 
-The repository contains working starter entry points and root-managed quality commands, not completed product capabilities. The API and local runtime expose health endpoints; the browser apps render starter screens; the CLI supports help, version, JSON metadata and environment checks; the TUI has keyboard navigation; and the workspace package includes path-containment checks. Full workspace discovery/CRUD, authentication, persistence, local API security, collaboration, synchronization, and production distribution remain future implementation work.
+The repository contains working starter entry points and root-managed quality commands, not completed product capabilities. The API and local runtime expose liveness/readiness endpoints; the browser apps render starter screens; the CLI supports help, version, JSON metadata and environment checks; the TUI has keyboard navigation; and the workspace package includes lexical and symlink-aware path preflight checks. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries. Full workspace discovery/CRUD, authentication, persistence, local API security, collaboration, synchronization, and production distribution remain future implementation work.

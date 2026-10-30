@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createLocalServer } from "./server.js";
+import { createLocalServer } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
 
@@ -21,15 +21,19 @@ describe("local runtime HTTP boundary", () => {
     if (!address || typeof address === "string") throw new Error("Expected TCP address");
 
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const health = await fetch(`${baseUrl}/health`);
+    const health = await fetch(`${baseUrl}/health/live`);
     expect(health.status).toBe(200);
+    expect(health.headers.get("x-request-id")).toBeTruthy();
     expect(health.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(await health.json()).toEqual({ status: "ok", service: "task-local" });
+    expect(await health.json()).toEqual(
+      expect.objectContaining({ status: "ok", service: "task-local" }),
+    );
 
     const missing = await fetch(`${baseUrl}/arbitrary-file`);
     expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "not_found" } });
 
-    const wrongMethod = await fetch(`${baseUrl}/health`, { method: "POST" });
-    expect(wrongMethod.status).toBe(404);
+    const wrongMethod = await fetch(`${baseUrl}/health/live`, { method: "POST" });
+    expect(wrongMethod.status).toBe(405);
   });
 });

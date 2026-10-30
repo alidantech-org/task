@@ -1,8 +1,5 @@
 # Task CLI
 
-Scriptable local interface for people and AI agents. Both `task` and `tk` resolve
-to the same entry point. The CLI remains usable without the local dashboard/runtime.
+Scriptable local interface for people and agents. `task` and `tk` share one entry point. Run with `bun run dev:cli`. The CLI provides help, version, JSON metadata and an environment diagnostic; workspace commands are not implemented yet.
 
-The CLI is part of the root Bun workspace. Run it from the repository root with
-`bun run dev:cli`. Workspace commands will be connected to shared workspace
-operations as those contracts are implemented.
+Internal imports use `#/…`; imports from other projects use their package names. Human output is terminal-aware, while `--json` remains suitable for scripts.

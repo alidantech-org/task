@@ -4,7 +4,7 @@
 
 - Work on the develop branch; keep main stable.
 - Put application and package source under source/.
-- Use .docs/ for engineering documentation about this software project by convention.
+- Use tasks/docs/ for engineering documentation about this software project; it is part of the Task-managed workspace so the UI can discover it.
 - Use the configured Task-managed workspace for work records and evolving project context; it defaults to tasks/.
 - Do not create a second task database or duplicate authoritative records in root TODO.md.
 - Do not add a generated sdk/ directory.
@@ -40,22 +40,24 @@
 - Local filesystem operations must enforce managed-workspace containment and symlink-aware checks. Lexical path checks alone are not sufficient; account for symlink races when implementing actual writes.
 - Local runtime binds to loopback by default. Do not add arbitrary file, shell, or credential endpoints. Add origin/capability protection before exposing workspace data or mutations.
 
-See Decision 0011 and .docs/architecture/source-layout.md for the accepted application boundaries.
+Internal TypeScript imports must use `#/…` in Bun projects and `@/…` in Next.js apps; import across project boundaries by package name. Relative TypeScript imports are prohibited.
+
+See Decision 0011 and tasks/docs/architecture/source-layout.md for the accepted application boundaries.
 
 ## Task workspace and Markdown contract
 
 - The Task-managed workspace is selected by repository configuration in task.yaml; when no configuration file or workspace setting exists, the default workspace directory is tasks/.
-- The workspace may be configured to another directory, for example .docs/ or .tasks/. The configured directory is the boundary for Task-managed content.
+- The workspace may be configured to another directory, for example tasks/docs/ or .tasks/. The configured directory is the boundary for Task-managed content.
 - Every Markdown file inside the configured Task-managed workspace must begin with YAML frontmatter delimited by ---.
 - Frontmatter must include the common required fields id, name, and type; apply the appropriate type-specific schema.
 - Frontmatter is a strict, extensible metadata contract: use structured tags for categorisation and an explicit extra mapping for supplemental data. Unknown top-level fields are invalid unless the applicable schema or supported workspace extension declares them. Do not treat extra as a way to bypass validation.
 - Repository-level task.yaml configures Task and the workspace; it is not the YAML frontmatter placed in individual Markdown files.
-- Markdown files outside the configured workspace, including ordinary root README.md, AGENTS.md, and engineering documentation under .docs/ when it is not the configured workspace, do not need Task frontmatter.
+- Markdown files outside the configured workspace, including ordinary root README.md and AGENTS.md, do not need Task frontmatter. Engineering documentation under tasks/docs/ is inside the default managed workspace and must have valid metadata.
 - The YAML frontmatter is machine-readable metadata; the Markdown body is human-readable content.
 - Create new Markdown files inside the managed workspace with frontmatter from the outset.
 - task validate / tk validate must validate all in-scope Markdown inside the configured workspace. Missing or malformed frontmatter is an error. It must not impose this rule on unrelated repository Markdown outside the workspace.
 - The local application started by task run must discover and present documents from the configured workspace using their metadata.
 - The validator and UI must share the same schema definitions and document interpretation.
-- Update .docs/ when engineering setup, architecture, or implementation behavior changes.
+- Update tasks/docs/ when engineering setup, architecture, or implementation behavior changes.
 - Use the managed workspace's decisions/ and handoffs/ areas for meaningful decisions and agent handoffs.
 - Keep root README.md concise and aligned with the actual repository state.

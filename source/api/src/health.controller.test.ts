@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HealthController } from "./health.controller.js";
+import { HealthController } from "#/health.controller";
 
 describe("API health controller", () => {
   test("returns the service health contract", () => {

@@ -1,5 +1,5 @@
 # Task Site
 
-Hosted React + Vite website foundation for `task.alidantech.org`. It is a distinct cloud client and communicates directly with the hosted NestJS API. It does not depend on the local runtime.
+Hosted Next.js App Router client foundation. Routes and layouts live in `src/app`; application components and shadcn primitives live in `src/components`. Tailwind CSS v4 and the shadcn/ui Radix Nova preset are configured in this app independently from the local dashboard.
 
-Run from the repository root with `bun run dev:site`. Authentication and API-backed workflows are intentionally not mocked before their contracts are defined.
+Run with `bun run dev:site`. The page checks the Task API health endpoint server-side; set `TASK_API_HEALTH_URL` to override its default. Authentication and hosted workspace workflows are not implemented.

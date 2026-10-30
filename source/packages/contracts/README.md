@@ -1,5 +1,3 @@
 # @task/contracts
 
-Small, transport-neutral TypeScript contracts shared by Bun-managed applications.
-Flutter/Dart must consume generated or separately maintained Dart contracts; it cannot
-import TypeScript source directly. Add contracts only when consumers and semantics are agreed.
+Transport-neutral TypeScript contracts and runtime guards shared by Bun applications. Internal imports use `#/…`; consumers across projects import this package by name. Flutter/Dart needs separately maintained or generated Dart contracts.

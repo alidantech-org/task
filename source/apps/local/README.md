@@ -1,12 +1,10 @@
 # Task Local
 
-Local runtime and browser dashboard. The runtime binds to loopback and currently exposes
-only a health endpoint; workspace-scoped operations, origin/capability protection,
-filesystem reconciliation, and WebSocket updates must be implemented before exposing
-workspace data or mutations.
+The local product consists of a Next.js App Router dashboard and a separate Bun runtime. App Router routes, layouts, design tokens, and UI code live in `src/app` and `src/components`; shadcn-generated primitives live in `src/components/ui`.
 
-- Runtime: `bun run dev:local` (port 4317, loopback only)
-- Dashboard: `bun run dev:local:web` (Vite on 127.0.0.1:5173)
+- Both processes: `bun run dev:local`
+- Runtime: `bun run dev:local:runtime` (loopback port 4317)
+- Dashboard: `bun run dev:local:web` (port 5173)
+- `TASK_LOCAL_PORT` selects the runtime port.
 
-The dashboard and runtime are separate processes in this foundation. The CLI integration
-and coordinated lifecycle are a later step.
+Tailwind CSS v4 and the shadcn/ui Radix Nova preset use the app's `components.json` and `src/app/globals.css`. The dashboard checks runtime health server-side and does not access workspace files. Workspace discovery and document views are not implemented.

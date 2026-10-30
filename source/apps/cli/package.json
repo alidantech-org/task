@@ -16,5 +16,9 @@
     "@clack/prompts": "^1.8.1",
     "@task/workspace": "workspace:*",
     "picocolors": "^1.1.1"
-  }
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "devDependencies": {}
 }

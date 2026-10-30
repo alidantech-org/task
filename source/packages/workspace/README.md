@@ -1,7 +1,3 @@
 # @task/workspace
 
-Shared local workspace primitives for the CLI and local runtime. The first primitive
-provides lexical path containment only; filesystem operations must additionally defend
-against symlink escapes and validate the configured managed boundary.
-
-This package must not depend on the local server, browser UI, or hosted API.
+Shared local workspace primitives for the CLI, TUI and local runtime. It currently offers lexical and symlink-aware path preflight checks, not filesystem operations or race-free mutation. Internal imports use `#/…`; the package has no UI or transport dependencies.

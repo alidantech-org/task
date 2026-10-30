@@ -35,12 +35,12 @@ Flutter dependencies must be resolved once before validation:
 
     bun run mobile:pub:get
 
-Useful individual commands include format:check, lint, typecheck, test, audit, security, build, mobile:analyze and mobile:test. See [development setup](../.docs/development/setup.md).
+Useful individual commands include format:check, lint, typecheck, test, audit, security, build, mobile:analyze and mobile:test. See [development setup](../tasks/docs/development/setup.md).
 
 ## Application boundaries
 
 - The CLI performs local workspace operations directly and remains usable without the local server.
-- The local application owns its local runtime, Next.js dashboard, restricted HTTP API, WebSocket updates and filesystem reconciliation. The current runtime exposes only GET /health.
+- The local application owns its local runtime, Next.js dashboard, restricted HTTP API, WebSocket updates and filesystem reconciliation. The current runtime exposes GET /health/live and GET /health/ready.
 - The hosted website at task.alidantech.org is a separate Next.js cloud client and connects to task-api.alidantech.org.
 - The hosted API is a standalone NestJS modular monolith.
 - The Flutter mobile app connects directly to the hosted API.
@@ -52,7 +52,7 @@ source/packages is the home for real reusable code shared across applications. A
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
-- @task/workspace: local workspace path primitives shared by local consumers. Symlink-aware path preflight is not a substitute for race-safe file operations.
+- @task/workspace: local workspace path primitives shared by local consumers. Lexical and symlink-aware path preflight is not a substitute for race-safe file operations.
 
 Flutter/Dart cannot import TypeScript packages. Equivalent contracts must be generated from a language-neutral source or maintained/generated for Dart.
 
@@ -65,4 +65,4 @@ Flutter/Dart cannot import TypeScript packages. Equivalent contracts must be gen
 - Derived indexes/caches may be used when justified but cannot become a competing source of truth.
 - Local-only workflows do not require an account, network, database server, or hosted API.
 
-See [source layout and implementation boundaries](../.docs/architecture/source-layout.md), [platform architecture](../.docs/architecture/platform-architecture.md), and decisions 0006–0011.
+See [source layout and implementation boundaries](../tasks/docs/architecture/source-layout.md), [platform architecture](../tasks/docs/architecture/platform-architecture.md), and decisions 0006–0011.

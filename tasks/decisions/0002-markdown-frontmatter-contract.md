@@ -23,7 +23,7 @@ Requiring Task metadata in every Markdown file across the repository would impos
 1. YAML frontmatter is mandatory for every Markdown file **inside the configured Task-managed workspace**.
 2. Markdown files outside that workspace are ordinary repository Markdown and do not require Task frontmatter.
 3. The Task-managed workspace defaults to the `tasks/` directory when no `task.yaml` configuration file or workspace setting is present.
-4. A repository may configure a different workspace directory in `task.yaml`, such as `.docs/` or `.tasks/`. When selected, that directory becomes the managed boundary and all Markdown files inside it require frontmatter.
+4. A repository may configure a different workspace directory in `task.yaml`, such as `tasks/docs/` or `.tasks/`. When selected, that directory becomes the managed boundary and all Markdown files inside it require frontmatter.
 5. The common metadata contract begins with required `id`, `name`, and `type` fields. Type-specific schemas may require additional fields.
 6. The YAML frontmatter is the machine-readable document contract. The Markdown body is the human-readable content.
 7. `task validate` and `tk validate` must discover and validate every in-scope Markdown file inside the configured workspace. Missing or malformed frontmatter and schema violations are errors. They must not impose this rule on unrelated Markdown outside the workspace.
@@ -54,4 +54,4 @@ repository/
         └── DEC-0001.md   # Task frontmatter required
 ```
 
-A repository may instead configure `.docs/` or `.tasks/` as its managed workspace. In that case, Markdown inside the selected directory follows the frontmatter contract.
+A repository may instead configure `tasks/docs/` or `.tasks/` as its managed workspace. In that case, Markdown inside the selected directory follows the frontmatter contract.

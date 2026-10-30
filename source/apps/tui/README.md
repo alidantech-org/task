@@ -1,4 +1,3 @@
 # Task TUI
 
-Foundation for a keyboard-driven terminal interface. It will reuse the same workspace
-operations and validation as the CLI and local dashboard; no parallel task model is introduced.
+Keyboard-driven OpenTUI and React navigation shell. Run with `bun run dev:tui`. Arrow keys or `j`/`k` move through sections; `q` or Escape exits. Workspace operations are not connected yet; future actions must reuse `@task/workspace`. Internal imports use `#/…`.

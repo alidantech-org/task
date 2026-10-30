@@ -11,7 +11,7 @@ This directory is the repository's own Task-managed workspace (dogfooding). It d
 Use it for work and project context that the Task tool manages:
 
 - Task records as individual Markdown files with stable IDs.
-- Product requirements, research, and project notes under `docs/`.
+- Engineering documentation under `docs/`, product requirements, research, and project notes under `docs/`.
 - Architecture and product decisions under `decisions/`.
 - Agent and contributor handoffs under `handoffs/`.
 - Small, explicitly managed workspace state under `state/`.
@@ -38,7 +38,7 @@ Do not create empty folders just to match this illustration. Add structure as th
 
 ## Markdown frontmatter
 
-Every Markdown file in the managed workspace must start with YAML frontmatter delimited by `---`, including documentation, research, handoffs, decisions, and task records.
+Every Markdown file in the managed workspace, including engineering documentation in `docs/`, must start with YAML frontmatter delimited by `---`, including documentation, research, handoffs, decisions, and task records.
 
 The metadata contract is strict and extensible:
 
@@ -50,11 +50,11 @@ The metadata contract is strict and extensible:
 
 The repository-level `task.yaml` configures Task and selects the managed workspace. It is not the frontmatter block inside each Markdown file.
 
-The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document. See [Markdown metadata and schema architecture](../.docs/architecture/markdown-metadata-schema.md) and [Decision 0003](decisions/0003-structured-frontmatter-schema.md).
+The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document. See [Markdown metadata and schema architecture](../docs/architecture/markdown-metadata-schema.md) and [Decision 0003](decisions/0003-structured-frontmatter-schema.md).
 
 ## Source of truth
 
 - Individual records in this workspace are authoritative.
 - Root `TODO.md` is a convenient overview/index and should not become a competing task database.
 - Keep links between related tasks, documents, and decisions explicit.
-- The eventual CLI, dashboard, and terminal interface must operate on this same workspace and shared domain rules.
+- The eventual CLI, dashboard, and terminal interface must operate on this same workspace and shared domain rules. Engineering docs in `docs/` are discoverable workspace documents; root repository Markdown remains outside this contract.
