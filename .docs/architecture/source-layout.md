@@ -2,9 +2,13 @@
 
 ## Purpose
 
-This document defines when code belongs under `source/`. It maps the accepted hybrid product architecture to an implementation tree without turning every conceptual capability into an empty package. Engineering documentation remains under `.docs/`; Task-managed records remain in the configured workspace (default `tasks/`). Do not add a generated `sdk/` directory.
+This document maps the accepted Task product architecture to source-code ownership. It deliberately distinguishes the current implementation from intended future applications. Do not create empty application directories or speculative shared packages. Engineering documentation belongs in `.docs/`; Task-managed records belong in the configured workspace (default `tasks/`). Do not add a generated root `sdk/` directory.
 
-The accepted client/runtime architecture is recorded in [Decision 0005](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md).
+Architecture decisions:
+- [0005 — Client, local runtime, and hosted API](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md)
+- [0006 — Separate local and hosted application boundaries](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md)
+- [0007 — File-based local workspaces and optional Git](../../tasks/decisions/0007-file-based-local-workspaces.md)
+- [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
 
 ## Current source tree
 
@@ -12,137 +16,133 @@ The accepted client/runtime architecture is recorded in [Decision 0005](../../ta
 source/
 ├── README.md
 └── apps/
-    └── cli/             # The only implemented application
+    └── cli/                 # Only implemented application
         ├── package.json
         ├── tsconfig.json
         └── src/
             └── index.ts
 ```
 
-The CLI exposes the `task` and `tk` command names from one entry point. It currently provides the minimal help/version behavior documented in the repository setup guide.
+The CLI exposes `task` and `tk` from one entry point. Its current capability is limited to the minimal help/version behavior. The local runtime, dashboard, hosted API, hosted website, mobile app, and TUI are not implemented yet.
 
 ## Intended product source layout
 
 ```text
 source/
-├── api/                 # Standalone NestJS hosted API
-│   ├── src/
-│   │   ├── modules/     # Internal modular-monolith modules
-│   │   └── main.ts
-│   └── package.json
+├── api/                     # Future standalone NestJS hosted API
 └── apps/
-    ├── cli/             # Scriptable CLI for people and AI agents
-    ├── site/            # Local dashboard + hosted website
-    ├── mobile/          # Hosted mobile client
-    └── tui/             # Interactive terminal interface
+    ├── cli/                 # Scriptable CLI for people and agents
+    ├── local/               # Local runtime, HTTP/WS API and browser dashboard
+    ├── site/                # Hosted website: task.alidantech.org
+    ├── mobile/              # Flutter cloud client
+    └── tui/                 # Future interactive terminal interface
 ```
 
-This is the intended architecture, not a mandate to create empty directories. Only the CLI is scaffolded today. Add each project when its contracts and implementation are ready.
+This is the intended architecture, not a mandate to create empty directories. Build the CLI and local application first. Add the hosted API, hosted website, mobile, and TUI when their implementation stages begin.
 
 ## Application responsibilities
 
 | Application | Responsibility | Runtime/deployment |
 | --- | --- | --- |
-| `api/` | Hosted identity, organizations, workspaces, projects, tasks, documents, authorization, sync, search, activity, notifications, integrations | Standalone NestJS service deployed on Task servers |
-| `apps/cli/` | Commands for workspace discovery, task/document management, validation, agent workflows, login, linking, and sync | Local executable; local-only use requires no account |
-| `apps/site/` | Visual workspace management, cloud collaboration, account and organization workflows | Local mode served on the user's machine; cloud mode deployed as the public website |
-| `apps/mobile/` | Focused cross-device access to authorized cloud work | Mobile client connecting directly to hosted API |
-| `apps/tui/` | Interactive keyboard-driven terminal workflow for people | Local terminal application; may support authenticated cloud workflows through shared API/sync contracts |
+| `api/` | Hosted identity, organisations, workspaces, projects, records, authorization, cloud persistence and sync endpoints | Standalone NestJS modular monolith at `task-api.alidantech.org` |
+| `apps/cli/` | Workspace discovery, task/document commands, validation, agent workflows, and later login/link/sync commands | Local executable; ordinary local commands need no server, account, or network |
+| `apps/local/` | Local dashboard, local HTTP API, WebSocket live updates, filesystem watching/reconciliation, and controlled workspace access | Started or managed by the CLI; loopback-only by default |
+| `apps/site/` | Hosted account, personal workspace, organisation, project and collaboration experience | Hosted at `task.alidantech.org`; connects directly to hosted API |
+| `apps/mobile/` | Focused mobile workflows for authorised cloud workspaces | Flutter application connecting directly to hosted API |
+| `apps/tui/` | Keyboard-driven terminal interface for people | Future local interface reusing the same workspace operations |
 
-### CLI
+The local and hosted applications are separate products/runtime boundaries. They may share design tokens, components, schemas, or domain code when that reuse is real and useful. They do not need identical screens, routing, application state, or deployment arrangements.
 
-The CLI is the primary scriptable interface for both people and agents. It owns command parsing and orchestration. Its local runtime responsibilities initially live inside the CLI application unless implementation demonstrates a real boundary that merits extraction.
+## CLI and shared workspace operations
 
-The CLI must continue to support local workspace operations without authentication or network access. Cloud commands such as login, workspace linking, and synchronization are optional capabilities.
+The CLI is the primary scriptable interface for people and AI agents. It must work without the local application running. Commands invoke workspace operations directly rather than routing every command through an HTTP server.
 
-### Local runtime
+The local application exposes the same workspace capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. Extract shared code only when both applications have real reuse and the package boundary is clear; do not pre-create an empty package solely to express an architectural intention.
 
-The local runtime is started or managed by the CLI. It safely exposes the selected local workspace to local interfaces through HTTP and WebSocket.
+Local CLI commands remain independent of authentication and connectivity. Cloud login, workspace linking, and synchronisation are later optional capabilities.
 
-It is responsible for:
-- discovering and opening the configured Task-managed workspace;
-- mediating reads and writes rather than allowing browser code direct filesystem access;
-- validating operations against shared document/workspace rules;
-- observing changes from CLI commands, TUI, dashboard, agents, and external editors;
-- publishing live change notifications to connected local clients;
-- exposing a way to obtain a fresh snapshot or catch up after a disconnected client reconnects.
+## Local application and runtime
 
-Bind to loopback by default. Do not expose arbitrary filesystem paths, shell execution, credentials, or unrestricted file operations. LAN access, if ever supported, must be an explicit and separately secured mode.
+The CLI starts or manages the local application, for example through `task run` or `tk run`.
 
-WebSocket is a local live-update channel. It is not the cloud synchronization protocol and does not replace revisions, authorization, idempotency, or conflict handling.
+The local application owns:
+- the local browser dashboard;
+- a restricted local HTTP API for dashboard operations;
+- a WebSocket channel for live local updates;
+- workspace file watching and reconciliation;
+- controlled access to the selected workspace;
+- reconnect and snapshot/cursor recovery for dashboard clients.
 
-### Site: local and cloud modes
+The browser never receives arbitrary filesystem access. Bind to loopback by default, validate browser origins, protect sensitive operations with a per-runtime capability/token or equivalent, and restrict operations to the selected workspace. Do not expose arbitrary file paths, shell execution, credentials, or unrestricted filesystem operations.
 
-There is one intended site product with two runtime/deployment modes:
+CLI commands should continue to work if the local server stops. Stopping the server must not alter or remove workspace files. A foreground process is sufficient for the first implementation; background service management can be considered later.
 
-- **Local mode:** served locally by the CLI-managed runtime and connected to that runtime's HTTP/WebSocket interface. It manages repository-backed work and remains useful without Task Cloud.
-- **Cloud mode:** deployed as the public website and connected directly to the hosted NestJS API for authenticated cloud work.
+WebSocket is for local dashboard live updates. It is not the cloud synchronization protocol. Filesystem watcher events are hints and must be reconciled against actual workspace state. Reconnecting clients must be able to obtain a fresh snapshot or catch up from a cursor.
 
-Share UI and application code where that creates a clean boundary. Keep runtime adapters separate: local mode must not depend on the hosted API, and cloud mode must not depend on a user's local runtime. Do not create two independent web products unless real workflows or deployment requirements later justify that split.
+## Hosted API and website
 
-### Mobile
+The hosted API is a standalone NestJS project at `source/api/`, initially a modular monolith. Its public base domain is `https://task-api.alidantech.org`.
 
-The mobile app connects directly to the hosted API. It must not depend on a local machine being online. Its framework, cache, push notifications, and exact offline capabilities remain open decisions.
+The hosted website at `https://task.alidantech.org` communicates directly with the hosted API. It does not depend on a user's local runtime. OAuth and account/session details are deferred to the cloud implementation phase; local-only use must never require signing in.
 
-### TUI
+The API's conceptual modules (identity, organisations, workspaces, projects, tasks, documents, authorization, synchronization, search, activity, notifications, and integrations) remain internal modules of the NestJS application, not separate services by default.
 
-The TUI is an interactive, keyboard-driven terminal application for people who want a navigable interface rather than issuing individual commands. It complements the CLI; it does not replace the CLI's stable scriptable interface for agents and automation.
+## Mobile and TUI
 
-The TUI must use the same workspace/domain operations and validation rules as the CLI and local dashboard. It must not create a separate task model, parse/write files through a competing implementation, or bypass the local runtime's workspace boundaries. It can begin as a local workspace interface. Authenticated cloud workflows may be added through the same API and synchronization contracts when those are stable.
+The mobile application is planned in Flutter and connects directly to the hosted API. It does not require a local computer or local runtime to be online.
 
-Do not introduce a TUI framework or scaffold its app until interaction requirements and the local runtime contract are understood.
+The TUI is a future interactive terminal interface for people. It complements the scriptable CLI and must reuse the same workspace operations and validation rather than creating a second task model.
 
-## Hosted API module boundaries
+## Local files and Git
 
-The hosted API is a standalone NestJS project under `source/api/`. It starts as one modular monolith, not microservices.
+Local workspace records are stored in files using the Task Markdown/YAML metadata contract. Files are authoritative for local workspace content.
 
-Its conceptual internal modules are identity, organizations, workspaces, projects, tasks, documents, relationships, authorization, synchronization, search, activity, notifications, and integrations.
+Git is optional. A Task workspace may live inside a Git repository, but it may also be a normal directory. When Git is present, Task should work naturally with it without taking ownership of the user's Git history or requiring Git for ordinary operations.
 
-These are domain/module boundaries inside the API. They are not separate packages or separately deployable services. Create module directories when implementing the corresponding module and its real contracts.
+The root `task.yaml` configures the workspace and identifies the Task-managed content boundary. The default managed folder is `tasks/`; a workspace may configure another folder such as `.tasks/` or `.docs/`. Task frontmatter rules apply only inside that configured boundary. Ordinary Markdown elsewhere remains ordinary Markdown, and unrelated project files must not be rewritten.
 
-## Shared code and package boundaries
+Derived local indexes or caches may be introduced when justified, but they must not become a competing authoritative store for workspace records.
 
-There are no shared package workspaces yet. Do not create one package per noun or product capability.
+## Future two-way, multi-device synchronization
 
-Introduce a shared package only when:
-- a real implementation needs to be reused by at least two consumers, or a stable boundary must be independently versioned;
+Task Cloud must eventually support two-way synchronisation between one cloud workspace and multiple local replicas on different computers. Each replica has its own device/client identity and sync progress. Each local copy remains usable offline.
+
+The sync protocol must provide:
+- stable workspace and record identifiers independent of paths;
+- device/replica registration and per-replica progress;
+- revisions and incremental change cursors;
+- idempotent, retryable change exchange;
+- explicit deletion/tombstone semantics;
+- conflict detection and preservation of both versions;
+- initial reconciliation and explicit confirmation;
+- permission revocation and unlinking behavior;
+- recovery after network or process interruption.
+
+Git history, local WebSocket updates, and Task cloud sync are separate mechanisms. Sync must not assume a universal last-write-wins winner or silently overwrite local files. The full protocol is a later design/implementation phase; the initial local product must establish safe file operations and stable identity foundations without implementing the sync engine.
+
+## Hosted API internal boundaries and shared packages
+
+The hosted API starts as a modular monolith. Its domain modules are internal modules, not separate deployable services.
+
+There are no pre-approved shared package names or empty package placeholders. Extract a package only when:
+- at least two real consumers need the same implementation, or a stable contract merits an independent boundary;
 - its responsibility and public API can be stated precisely;
-- its dependency direction is clear; and
-- the package contains real code and tests or another concrete verification path, not only a placeholder `index.ts`.
+- dependency direction is clear; and
+- it contains real implementation and a concrete verification path.
 
-Likely candidates to evaluate when implementation reaches them include domain rules/schemas, document parsing and validation, local workspace operations, synchronization contracts, and hosted API client contracts. These are candidates, not pre-approved package names or a required final package count.
-
-Applications are composition roots. Domain rules must not depend on UI frameworks, databases, Git providers, or network transports. Local repository persistence and cloud persistence are different adapters. Synchronization is an explicit subsystem, not hidden inside document CRUD.
-
-## Local live updates vs cloud synchronization
-
-Keep these responsibilities separate:
-
-- **Local runtime and WebSocket:** observe local workspace changes and notify local dashboard/TUI clients. Support reconnect and snapshot/cursor recovery.
-- **Cloud synchronization:** exchange authorized, revision-aware changes between a connected local workspace and Task Cloud. Handle idempotency, deletions, conflicts, retries, and recovery.
-
-A WebSocket event is not automatically a sync operation. Filesystem watcher events are hints and must be reconciled against actual workspace state.
-
-## Dependency and ownership rules
-
-- Applications are composition roots; they wire domain behavior to runtime adapters.
-- The NestJS API owns server-side authentication, authorization, and tenant isolation for cloud operations.
-- Local-only workflows must not require cloud credentials.
-- Hosted website and mobile clients access cloud data directly through the hosted API.
-- The local dashboard accesses local files only through the local runtime.
-- The CLI can use both the local runtime/domain operations and the hosted API/sync contracts.
-- TUI and CLI must share domain operations and validation rather than duplicate them.
-- Generated client artifacts must not be committed into a root `sdk/` directory. Client generation/distribution remains a separate decision.
+Potential future candidates include document parsing/validation, workspace operations, domain schemas, sync contracts, and API client contracts. These are candidates, not a required package list.
 
 ## Implementation sequence
 
-1. Define local document/workspace contracts and implement CLI workspace discovery and validation.
-2. Design and implement the CLI-managed local runtime boundary, including safe HTTP/WebSocket access and reconnect behavior.
-3. Implement the site in local mode against the local runtime; add hosted mode against stable API contracts.
-4. Define cloud identity, ownership, authorization, persistence, and API contracts; implement the standalone NestJS modular monolith under `source/api/`.
-5. Design synchronization as its own protocol before connecting repository workspaces to cloud workspaces.
-6. Add hosted web workflows and mobile against stable API contracts.
-7. Design and add the TUI against the same local workspace/domain operations.
-8. Extract shared packages only when real reuse and stable ownership justify them.
+1. Define workspace configuration, file/document contracts, stable local IDs, discovery, and validation; implement useful CLI operations.
+2. Implement the local application runtime and secure local HTTP/WebSocket boundary.
+3. Build the local dashboard against the local application and shared workspace operations.
+4. Integrate CLI and dashboard; verify updates in both directions, including external file edits.
+5. Harden local file integrity, workspace boundaries, recovery, and offline behavior.
+6. Specify cloud identity, API contracts, ownership, and authorization.
+7. Implement the standalone NestJS API and hosted website.
+8. Design and implement two-way multi-device synchronisation, then add CLI login/link/sync workflows.
+9. Build the Flutter mobile client against the hosted API.
+10. Add the TUI using the same workspace operations.
 
 A directory's existence is not evidence that a capability is implemented.
