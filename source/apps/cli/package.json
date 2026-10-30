@@ -1,0 +1,14 @@
+{
+  "name": "@task/cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "task": "./src/index.ts",
+    "tk": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
