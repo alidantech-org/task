@@ -21,6 +21,8 @@ The platform has separate product surfaces:
 - [0007 — File-based local workspaces and optional Git](../../tasks/decisions/0007-file-based-local-workspaces.md)
 - [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
 - [0009 — Bun monorepo, application scaffolds, and shared packages](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md)
+- [0010 — Shared local workspace engine for CLI and dashboard](../../tasks/decisions/0010-shared-local-workspace-engine.md)
+- [Shared local workspace engine and CLI/dashboard collaboration](local-workspace-engine.md)
 
 ## Product and runtime boundaries
 
