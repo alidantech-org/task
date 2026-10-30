@@ -8,6 +8,8 @@ created_at: 2026-10-31
 
 # Decision 0005: Client, local runtime, and hosted API architecture
 
+> **Supersession note (2026-10-31):** Decision 0006 supersedes decisions 8 and 14 and the intended source layout below only where they prescribe a single `apps/site` application for both local and hosted modes. The current direction is a separate `apps/local` application and `apps/site` hosted website. The remaining decisions in this record continue to apply unless a later decision explicitly supersedes them. See Decisions 0006, 0007, and 0008.
+
 - **Status:** Accepted
 - **Date:** 2026-10-31
 - **Scope:** CLI, local dashboard, local runtime, TUI, hosted API, website, mobile app, and synchronization

@@ -18,7 +18,7 @@ task/
 └── .gitignore
 ```
 
-Only create a package or application directory when it contains real code or an intentional package boundary. The dashboard and shared packages are part of the intended architecture, but are not scaffolded as empty placeholders in this first shell.
+Only create a package or application directory when it contains real code or an intentional package boundary. The local application and shared packages are part of the intended architecture, but are not scaffolded as empty placeholders in this first shell.
 
 ## Initial technology decisions
 
@@ -27,7 +27,7 @@ Only create a package or application directory when it contains real code or an 
 - The repository is a private Bun workspace, even though the GitHub repository is public.
 - The first executable is the CLI app under `source/apps/cli`.
 - The CLI package exposes both `task` and `tk` binaries from one entry point.
-- Core domain behavior, workspace/file persistence, hosted API capabilities, synchronization, and dashboard integration will be introduced as explicit packages when their contracts are designed. The accepted product direction is hybrid: local-first, connected repository, and cloud-native workspaces.
+- Workspace operations and domain behavior will be implemented with clear ownership and extracted into shared packages only when real reuse and stable contracts justify it. The hosted API and synchronization are later phases. The accepted product direction is hybrid: local-first, connected repository, and cloud-native workspaces.
 - No generated SDK, database, hosted service, framework, or test runner is introduced at this stage.
 
 ## Task-managed Markdown architecture
@@ -45,7 +45,7 @@ Task frontmatter applies only within the configured Task-managed workspace, not 
 
 See [Markdown metadata and schema architecture](markdown-metadata-schema.md) and the accepted decisions in `tasks/decisions/`.
 
-The local site dashboard is intended to run through `task run`, with a configurable port such as `task run -p 3004`. The CLI starts or manages a local runtime that mediates workspace access and exposes local HTTP and WebSocket interfaces. The site discovers documents from the configured workspace and uses their metadata to organize navigation, listings, filters, and document pages. It remains useful without an account or network connection. The same site product has a hosted mode deployed publicly and connected directly to the hosted API. Mobile also connects directly to the hosted API. Connected repositories synchronize through a separately designed sync subsystem. See [Decision 0005](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md). See [platform architecture](platform-architecture.md) and [Decision 0004](../../tasks/decisions/0004-hybrid-cloud-platform.md).
+The local application is intended to run through `task run`. The CLI starts or manages the local runtime, which serves the local dashboard and exposes restricted HTTP and WebSocket interfaces. CLI commands use workspace operations directly; dashboard actions use the same operations through the local HTTP API. The local application is independent of the hosted API and remains useful without an account or network. The hosted website is a separate application deployed at `task.alidantech.org` and connects directly to `task-api.alidantech.org`. The planned Flutter mobile app also connects directly to the hosted API. Git is optional for local workspaces. Future two-way sync must support multiple local device replicas. See [platform architecture](platform-architecture.md) and Decisions [0004](../../tasks/decisions/0004-hybrid-cloud-platform.md), [0006](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md), [0007](../../tasks/decisions/0007-file-based-local-workspaces.md), and [0008](../../tasks/decisions/0008-multi-device-two-way-sync.md).
 
 ## Deliberately deferred
 
@@ -56,7 +56,7 @@ The local site dashboard is intended to run through `task run`, with a configura
 - Task lifecycle, statuses, dependencies, and semantic validation rules.
 - CLI command framework and command registration design.
 - Shared core/workspace package APIs.
-- Site framework and shared-code boundary between local and hosted modes.
+- Local and hosted application frameworks and any justified component/design-system sharing.
 - Local runtime HTTP/WebSocket API, process lifecycle, origin protection, and reconnect/snapshot design.
 - TUI framework, interaction model, and keybindings.
 - Hosted API module contracts, identity/organization ownership model, and cloud persistence.
@@ -74,4 +74,4 @@ The workspace boundary and the direction for a strict, extensible frontmatter sc
 
 ## Source implementation status
 
-Only `source/apps/cli` is scaffolded. The intended source layout is a standalone NestJS project at `source/api/` plus `source/apps/site/`, `source/apps/mobile/`, and `source/apps/tui/`. The site has local-dashboard and hosted-website modes. The CLI-managed local runtime mediates local workspace access and live updates over HTTP/WebSocket; hosted site and mobile clients connect directly to the hosted API. These applications will be added when their contracts and implementation are ready. Shared packages and API module directories are not pre-created; see [source layout](source-layout.md) and [Decision 0005](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md).
+Only `source/apps/cli` is scaffolded. The intended source layout is a standalone NestJS project at `source/api/` plus `source/apps/local/`, `source/apps/site/`, `source/apps/mobile/`, and `source/apps/tui/`. The local application owns the local dashboard and runtime; the hosted website is a separate cloud client. The CLI starts/manages the local application while ordinary CLI commands remain usable without it. The hosted website and Flutter mobile client connect directly to the hosted API. Local workspaces are file-based and Git-optional; future two-way sync supports multiple local replicas. These applications will be added when their contracts and implementation are ready. Shared packages and API module directories are not pre-created; see [source layout](source-layout.md) and Decisions [0006](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md), [0007](../../tasks/decisions/0007-file-based-local-workspaces.md), and [0008](../../tasks/decisions/0008-multi-device-two-way-sync.md).
