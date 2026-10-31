@@ -61,5 +61,5 @@ See Decision 0011 and tasks/docs/architecture/source-layout.md for the accepted 
 - Update tasks/docs/ when engineering setup, architecture, or implementation behavior changes.
 - Use the managed workspace's decisions/ and handoffs/ areas for meaningful decisions and agent handoffs.
 - Project guidance setup is static and review-driven: do not execute scanned project code, silently select policy, modify Git configuration, or launch agents.
-- The current workspace archive layout is todo/_archive/YYYY/MM/YYYY-MM-DD-<slug>/; it is intentionally new-only and has no workspace-root archive compatibility or migration path.
+- Completed groups use todo/_completed/YYYY/MM/YYYY-MM-DD-<slug>/ and archived tasks or groups use todo/_archived/YYYY/MM/YYYY-MM-DD-<slug>/. Preserve date grouping and stable IDs. During setup, ask whether these folders should be committed or added to .gitignore; never change ignore rules without explicit user choice.
 - Keep root README.md concise and aligned with the actual repository state.

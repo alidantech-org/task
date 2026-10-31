@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  archiveTask,
+  archiveTaskGroup,
   buildWorkspaceIndex,
   createDocument,
   createTask,
@@ -13,6 +15,7 @@ import {
   readWorkspaceDocument,
   resolveWorkspace,
   restoreTaskGroup,
+  restoreTask,
   searchWorkspace,
   updateTask,
   validateWorkspace,
@@ -206,27 +209,45 @@ describe("task operations", () => {
     ).rejects.toMatchObject({ code: "conflict" });
   });
 
-  test("archives a completed group and restores it by group ID", async () => {
+  test("moves a completed group to completed storage and archives/restores by group ID", async () => {
     const { workspace } = await project();
     const context = { root: workspace };
     const group = await createTaskGroup(context, "Release prep");
     const task = await createTask(context, { group: group.id, title: "Ship it" });
     const updated = await updateTask(context, task.metadata.id, { status: "completed" });
-    expect(updated.archivedGroup?.path).toMatch(
-      /^todo\/_archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
+    expect(updated.completedGroup?.path).toMatch(
+      /^todo\/_completed\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
     );
-    expect(updated.task.path).toBe(`${updated.archivedGroup?.path}/001-ship-it.md`);
+    expect(updated.task.path).toBe(`${updated.completedGroup?.path}/001-ship-it.md`);
     expect(updated.task.metadata.created_at).toBeTruthy();
-    expect(updated.task.metadata.archived_at).toBeTruthy();
+    expect(updated.task.metadata.archived_at).toBeUndefined();
+    const archived = await archiveTaskGroup(context, group.id);
+    expect(archived.path).toMatch(/^todo\/_archived\//);
     const restored = await restoreTaskGroup(context, group.id);
-    expect(restored.path).toBe("todo/release-prep");
+    expect(restored.path).toMatch(/^todo\/_completed\//);
+    expect(restored.finished).toBe(true);
     expect((await listTaskGroups(context))[0]?.archived).toBe(false);
     const restoredTask = (await buildWorkspaceIndex(context)).documents.get(
-      "todo/release-prep/001-ship-it.md",
+      `${restored.path}/001-ship-it.md`,
     );
     expect(restoredTask?.metadata.archived_at).toBeUndefined();
     expect(restoredTask?.metadata.created_at).toBe(updated.task.metadata.created_at);
     expect(restoredTask?.metadata.updated_at).toBe(updated.task.metadata.updated_at);
+  });
+
+  test("archives an incomplete task independently and restores its original path", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Partial work");
+    const task = await createTask(context, { group: group.id, title: "Pause this" });
+    const archived = await archiveTask(context, task.metadata.id, task.contentHash);
+    expect(archived.path).toMatch(/^todo\/_archived\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-task-/);
+    expect(archived.metadata.status).toBe("planned");
+    expect(archived.metadata.extra?.archived_from).toBe("todo/partial-work/001-pause-this.md");
+    const restored = await restoreTask(context, task.metadata.id, archived.contentHash);
+    expect(restored.path).toBe(task.path);
+    expect(restored.metadata.status).toBe("planned");
+    expect(restored.metadata.archived_at).toBeUndefined();
   });
 
   test("searches document bodies, detects references, and protects explicit reads", async () => {

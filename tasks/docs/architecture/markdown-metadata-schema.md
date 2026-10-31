@@ -41,6 +41,8 @@ The schema system has four layers:
 3. **Type-specific metadata:** the parser supports task records, decisions, general documentation, rules, and agent profiles. `documentation`, `rule`, and `agent-profile` documents currently use the common fields plus optional `tags` and `extra`. Task status is `planned`, `in-progress`, `blocked`, or `completed`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
 4. **Explicit extension metadata:** the `extra` mapping for supplemental information that is not part of the common or type-specific contract.
 
+Task operations use `extra.status_history` for validated status transitions, `extra.hidden_from_recent` to keep a completed task out of the recent-completion panel without changing its status, and `extra.archived_from` as an operation-managed restore path for individually archived tasks.
+
 The contract is strict at the top level: an unknown field is an error unless the active schema or a supported workspace extension explicitly declares it. The `extra` mapping is the intentional extension point; it is not permission to add arbitrary top-level keys or bypass validation.
 
 ## 4. Tags

@@ -6,7 +6,10 @@ export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed";
 export type TaskStatusChange = { from: TaskStatus; to: TaskStatus; at: string };
 export type TaskPriority = "low" | "medium" | "high";
 export type TaskExtra = Readonly<
-  Record<string, unknown> & { status_history?: readonly TaskStatusChange[] }
+  Record<string, unknown> & {
+    status_history?: readonly TaskStatusChange[];
+    hidden_from_recent?: boolean;
+  }
 >;
 export type DocumentMetadata = {
   id: string;
@@ -65,6 +68,7 @@ export type TaskGroup = {
   slug: string;
   path: string;
   archived: boolean;
+  finished?: boolean;
   total: number;
   completed: number;
 };
@@ -84,6 +88,7 @@ export type TaskCreateInput = {
 };
 export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "description">> & {
   title?: string;
+  hiddenFromRecent?: boolean;
 };
 export type DocumentCreateInput = {
   title: string;

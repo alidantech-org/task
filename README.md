@@ -34,6 +34,8 @@ Install and configure dependencies for all Bun workspace projects and the separa
 
 To also make `task` and `tk` available globally from this live checkout, run `bun run setup --link-cli`. This optional flag creates global Bun links; the default setup only installs project dependencies.
 
+For a new local project with the released CLI, install once with `bun add --global @task/cli`, enter the project, run `task init`, and start the local workspace dashboard with `task run`. The CLI runs the packaged production Next.js dashboard and a loopback-only Bun runtime; it binds the workspace chosen by `task.yaml`, `TASK_WORKSPACE_ROOT`, or `--workspace`. Press Ctrl+C in the terminal to stop both services. Use `task run --no-open` when the browser should not be opened automatically.
+
 Start the complete local development stack:
 
     bun dev
@@ -90,4 +92,4 @@ See [development setup](tasks/docs/development/setup.md) and [source layout](tas
 
 ## Project status
 
-The CLI provides local workspace discovery, task and document queries, validation, task/group updates, editor handoff, and group archive/restore through the shared `@task/workspace` engine. `task project inspect` statically reports repository facts, while `task setup` reviews and applies selected Task docs/rules and Codex, Claude, Copilot, Cursor, or portable Skill guidance adapters. It does not execute project code or launch agents. The TUI includes read-only Rules and Agent Profile views; agent orchestration, authentication, persistence, cloud sync, and production distribution remain future work. Completed groups use `todo/_archive/YYYY/MM/`; no workspace-root archive migration is supported. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries.
+The CLI provides local workspace discovery, task and document queries, validation, task/group updates, editor handoff, and group archive/restore through the shared `@task/workspace` engine. `task project inspect` statically reports repository facts, while `task setup` reviews and applies selected Task docs/rules and Codex, Claude, Copilot, Cursor, or portable Skill guidance adapters. It does not execute project code or launch agents. `task run` starts the packaged local dashboard and runtime. The TUI includes read-only Rules and Agent Profile views; agent orchestration, authentication, persistence, and cloud sync remain future work. CLI packages are configured for public publishing; registry publication still requires the repository owner’s registry access and release approval. Completed groups use `todo/_completed/YYYY/MM/`; explicitly archived tasks and groups use `todo/_archived/YYYY/MM/`. Setup guidance calls for an explicit choice before ignoring either folder. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries.

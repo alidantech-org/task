@@ -12,6 +12,7 @@ export type CalendarTask = {
   due_at?: string;
   start_at?: string;
   status?: string;
+  archived?: boolean;
 };
 
 function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): void }) {
@@ -100,10 +101,12 @@ function DateCell({
 
 export function CalendarView({
   tasks,
+  recentCompleted = [],
   onCreate,
   onSelect,
 }: {
   tasks: CalendarTask[];
+  recentCompleted?: CalendarTask[];
   onCreate(date: string): void;
   onSelect(task: CalendarTask): void;
 }) {
@@ -205,7 +208,7 @@ export function CalendarView({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-semibold">Planning</h3>
-            <p className="text-xs text-muted-foreground">Unscheduled tasks</p>
+            <p className="text-xs text-muted-foreground">Unscheduled and recent tasks</p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setShowPlanning((value) => !value)}>
             {showPlanning ? "Collapse" : "Expand"}
@@ -235,6 +238,33 @@ export function CalendarView({
               ))}
               {unscheduled.length === 0 && (
                 <p className="text-xs text-muted-foreground">All tasks have due dates.</p>
+              )}
+            </div>
+            <div className="my-4 border-t" />
+            <p className="mb-2 text-xs font-medium">
+              Recently completed{" "}
+              <span className="text-muted-foreground">{recentCompleted.length}</span>
+            </p>
+            <div className="divide-y divide-border/60">
+              {recentCompleted.map((task) => (
+                <button
+                  type="button"
+                  key={task.id}
+                  onClick={() => onSelect(task)}
+                  className="flex w-full items-start gap-2 py-2 text-left hover:bg-accent/40"
+                >
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary/70" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">{task.name}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {task.id}
+                      {task.archived ? " · Archived" : " · Completed"}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              {recentCompleted.length === 0 && (
+                <p className="py-2 text-xs text-muted-foreground">No completed tasks yet.</p>
               )}
             </div>
           </>

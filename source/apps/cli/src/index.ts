@@ -8,6 +8,7 @@ import { confirm, isCancel, multiselect, outro, select } from "@clack/prompts";
 import type { DocumentSummary, SetupSelection } from "@task/workspace";
 import {
   applyProjectSetupPlan,
+  archiveTask,
   archiveTaskGroup,
   createDocument,
   createProjectSetupPlan,
@@ -25,6 +26,7 @@ import {
   replaceDocumentBody,
   resolveWorkspace,
   restoreTaskGroup,
+  restoreTask,
   searchWorkspace,
   updateTask,
   validateWorkspace,
@@ -51,8 +53,12 @@ import { renderTaskTable } from "#/output/table";
 import { resolveTerminal } from "#/output/terminal";
 import { isInteractive, promptText as promptTextInput } from "#/prompts/input";
 import { workspaceMenu } from "#/prompts/menu";
+import { resolveTuiEntry, runLocalDashboard } from "#/run";
 
-const version = "0.1.0";
+const packageMetadata = (await Bun.file(join(import.meta.dir, "../package.json")).json()) as {
+  version: string;
+};
+const version = packageMetadata.version;
 let args: ParsedArgs;
 try {
   args = parseArgs(process.argv.slice(2));
@@ -99,6 +105,7 @@ function printHelp(): void {
     "  setup plan --json     Emit a reviewed setup plan without writing files",
     "  setup apply --path    Apply a saved JSON setup plan",
     "  tui | -f               Open the full-screen workspace interface",
+    "  run                    Start the local dashboard and open it in a browser",
     "  doctor                 Check Bun and workspace health",
     "  info | status | stats  Workspace information and counts",
     "  tree                   Show Markdown workspace paths",
@@ -109,14 +116,14 @@ function printHelp(): void {
     "  create                 Create a task in a group",
     "  update <id>            Update task metadata",
     "  edit <id>              Edit the Markdown body in $EDITOR",
-    "  archive <group>        Archive a completed group",
-    "  restore <group-id>     Restore an archived group",
+    "  archive <task-or-group> Archive a task or group",
+    "  restore <task-or-group> Restore an archived task or group",
     "  validate [scope]       Validate tasks, docs, links, and references",
     "  docs list|show|search|tree|open|create",
     "  index status|rebuild|verify",
     "",
     "Setup options: --docs project-overview,repository-map,development-setup,testing-guide --rules coding,testing,security,git --agents codex,claude,copilot,cursor,skill",
-    "Options: --workspace <path> --json --plain --no-color --quiet --verbose -f/--full-screen --help --version",
+    "Options: --workspace <path> --no-open --json --plain --no-color --quiet --verbose -f/--full-screen --help --version",
     "Task fields: --title --group --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
   ];
   for (const row of rows) line(row, "requested");
@@ -369,6 +376,26 @@ async function main(): Promise<void> {
   };
   const command = args.command;
 
+  if (command === "run") {
+    if (json)
+      throw new WorkspaceError(
+        "invalid_input",
+        "`task run` starts interactive services and cannot use --json",
+      );
+    if (args.positionals.length)
+      throw new WorkspaceError("invalid_input", "Use `task run [--no-open]`");
+    await runLocalDashboard(
+      {
+        projectRoot: context.projectRoot,
+        workspaceRoot: context.root,
+        openBrowser: !args.options.has("no-open"),
+        onMessage: (message) => line(message, "requested"),
+      },
+      import.meta.dir,
+    );
+    return;
+  }
+
   if (command === "setup") {
     const action = args.positionals[0];
     if (action === "apply") {
@@ -423,7 +450,7 @@ async function main(): Promise<void> {
         "invalid_input",
         "The full-screen TUI requires an interactive terminal",
       );
-    const tuiEntry = join(import.meta.dir, "../../tui/src/index.tsx");
+    const tuiEntry = resolveTuiEntry();
     await new Promise<void>((resolve, reject) => {
       const child = spawn(process.execPath, [tuiEntry], {
         cwd: selected.projectRoot,
@@ -495,18 +522,22 @@ async function main(): Promise<void> {
     if (!command && args.options.has("quiet") && !json) return;
     const index = await readWorkspaceIndex(context);
     const tasks = listTasks(index, { archived: false });
+    const completedTasks = listTasks(index, { archived: false, status: "completed" });
     const groups = await listTaskGroups(context);
     const documents = listDocuments(index);
     const overview = {
       workspace: selected.root,
       source: selected.source,
-      groups: groups.filter((group) => !group.archived).length,
+      groups: groups.filter((group) => !group.archived && !group.finished).length,
+      completedGroups: groups.filter((group) => group.finished).length,
       archivedGroups: groups.filter((group) => group.archived).length,
       tasks: tasks.length,
       statuses: Object.fromEntries(
         taskStatuses.map((status) => [
           status,
-          tasks.filter((task) => task.metadata.status === status).length,
+          (status === "completed" ? completedTasks : tasks).filter(
+            (task) => task.metadata.status === status,
+          ).length,
         ]),
       ),
       documents: documents.length,
@@ -535,7 +566,7 @@ async function main(): Promise<void> {
       else
         for (const group of groups)
           line(
-            `${stdoutSymbols.group} ${stdoutStyle.accent(group.id)}  ${group.archived ? "archived" : "active"}  ${group.completed}/${group.total} done  ${group.name}  ${stdoutStyle.muted(group.path)}`,
+            `${stdoutSymbols.group} ${stdoutStyle.accent(group.id)}  ${group.archived ? "archived" : group.finished ? "completed" : "active"}  ${group.completed}/${group.total} done  ${group.name}  ${stdoutStyle.muted(group.path)}`,
             "requested",
           );
       return;
@@ -665,7 +696,9 @@ async function main(): Promise<void> {
     let group = optionString(args, "group");
     if (!title && isInteractive()) title = await promptText("Task title", "title");
     if (!group && isInteractive()) {
-      const groups = (await listTaskGroups(context)).filter((candidate) => !candidate.archived);
+      const groups = (await listTaskGroups(context)).filter(
+        (candidate) => !candidate.archived && !candidate.finished,
+      );
       if (groups.length) {
         const chosen = await select({
           message: "Choose a task group",
@@ -761,7 +794,7 @@ async function main(): Promise<void> {
       dependsOn,
       extra,
     });
-    if (json) output({ ...record(result.task), archivedGroup: result.archivedGroup });
+    if (json) output({ ...record(result.task), completedGroup: result.completedGroup });
     else {
       line(
         renderMessage(
@@ -771,11 +804,11 @@ async function main(): Promise<void> {
           stdoutSymbols,
         ),
       );
-      if (result.archivedGroup)
+      if (result.completedGroup)
         line(
           renderMessage(
             "success",
-            `Archived completed group · ${result.archivedGroup.path}`,
+            `Moved completed group · ${result.completedGroup.path}`,
             stdoutStyle,
             stdoutSymbols,
           ),
@@ -786,17 +819,23 @@ async function main(): Promise<void> {
 
   if (command === "archive" || command === "restore") {
     const identifier = args.positionals[0];
-    if (!identifier) throw new WorkspaceError("invalid_input", `Usage: task ${command} <group>`);
-    const group =
+    if (!identifier)
+      throw new WorkspaceError("invalid_input", `Usage: task ${command} <task-or-group>`);
+    const isTask = identifier.startsWith("TSK-");
+    const result =
       command === "archive"
-        ? await archiveTaskGroup(context, identifier)
-        : await restoreTaskGroup(context, identifier);
-    if (json) output(group);
+        ? isTask
+          ? await archiveTask(context, identifier)
+          : await archiveTaskGroup(context, identifier)
+        : isTask
+          ? await restoreTask(context, identifier)
+          : await restoreTaskGroup(context, identifier);
+    if (json) output(result);
     else
       line(
         renderMessage(
           "success",
-          `${command === "archive" ? "Archived" : "Restored"} ${group.name} · ${group.path}`,
+          `${command === "archive" ? "Archived" : "Restored"} ${"name" in result ? result.name : result.metadata.name} · ${result.path}`,
           stdoutStyle,
           stdoutSymbols,
         ),

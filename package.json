@@ -19,6 +19,8 @@
     "dev:cli:watch": "bun run --filter @task/cli dev:watch",
     "cli:link": "bun run scripts/cli-link.ts install",
     "cli:unlink": "bun run scripts/cli-link.ts remove",
+    "cli:package": "bun run scripts/package-cli.ts",
+    "cli:publish:check": "bun run validate && bun run cli:package && bun run --filter @task/cli test && bun run --filter @task/workspace test && bun run --filter @task/tui test && bun run scripts/smoke-cli-package.ts && bun run scripts/smoke-cli-install.ts && npm pack --dry-run --ignore-scripts --workspace @task/cli",
     "dev:local": "concurrently -k \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
     "dev:local:runtime": "bun run --filter @task/local dev:runtime",
     "dev:local:web": "bun run --filter @task/local dev:web",

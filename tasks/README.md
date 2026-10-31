@@ -16,7 +16,8 @@ Use it for work and project context that the Task tool manages:
 - Agent and contributor handoffs under `handoffs/`.
 - Project agent profiles under `agents/` and reusable project rules under `rules/`.
 - Small, explicitly managed workspace state under `state/`.
-- Completed task groups under `todo/_archive/YYYY/MM/YYYY-MM-DD-<group-slug>/`.
+- Completed task groups under `todo/_completed/YYYY/MM/YYYY-MM-DD-<group-slug>/`.
+- Archived tasks and groups under `todo/_archived/YYYY/MM/YYYY-MM-DD-<slug>/`.
 
 A possible shape as records are added:
 
@@ -36,11 +37,13 @@ tasks/
 ├── rules/
 ├── state/
 └── todo/
-    └── _archive/
+    ├── _completed/
+    │   └── YYYY/MM/YYYY-MM-DD-<group-slug>/
+    └── _archived/
         └── YYYY/MM/YYYY-MM-DD-<group-slug>/
 ```
 
-Create these areas as real records are added; do not add empty placeholders. This is a new workspace layout: archive operations use `todo/_archive/` exclusively and intentionally do not read or migrate a workspace-root `archive/` directory.
+Create these areas as real records are added; do not add empty placeholders. Completed groups and explicit archives have separate date-grouped folders. Existing `todo/_archive/` records remain readable; new operations write to `todo/_archived/`. Setup should ask whether either folder belongs in Git and apply `.gitignore` changes only after the user chooses.
 
 ## Markdown frontmatter
 

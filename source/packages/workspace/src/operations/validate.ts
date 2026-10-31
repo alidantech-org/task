@@ -85,12 +85,12 @@ export async function validateWorkspace(
       push(
         diagnostics,
         task.path,
-        "Task records must be inside todo/ (archived groups belong under todo/_archive/)",
+        "Task records must be inside todo/ (historical groups belong under todo/_completed/ or todo/_archived/)",
         "group",
       );
     }
     if (
-      !/^todo\/(?:_archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[^/]+|[^/]+)\/\d{3,}-[a-z0-9-]+\.md$/i.test(
+      !/^todo\/(?:_(?:completed|archived|archive)\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[^/]+|[^/]+)\/\d{3,}-[a-z0-9-]+\.md$/i.test(
         task.path,
       )
     ) {
@@ -109,7 +109,11 @@ export async function validateWorkspace(
   }
   for (const [groupPath, groupTasks] of groups) {
     const plan = index.documents.get(`${groupPath}/plan.md`);
-    if (!plan?.metadata.id.startsWith("GRP-")) {
+    const isIndividualArchive =
+      groupPath.startsWith("todo/_archived/") &&
+      groupTasks.length === 1 &&
+      typeof groupTasks[0]?.metadata.extra?.archived_from === "string";
+    if (!plan?.metadata.id.startsWith("GRP-") && !isIndividualArchive) {
       for (const task of groupTasks)
         push(
           diagnostics,
@@ -120,6 +124,8 @@ export async function validateWorkspace(
     }
     if (
       groupPath.startsWith("todo/") &&
+      !groupPath.startsWith("todo/_completed/") &&
+      !groupPath.startsWith("todo/_archived/") &&
       !groupPath.startsWith("todo/_archive/") &&
       groupTasks.length > 0 &&
       groupTasks.every((task) => task.metadata.status === "completed")

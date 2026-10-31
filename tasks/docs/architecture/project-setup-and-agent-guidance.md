@@ -30,6 +30,8 @@ The plan is constrained to the selected project's approved guidance paths and th
 
 Git choices describe agent behavior only. Setup does not modify Git configuration, install hooks, or commit changes. This release prepares guidance and Skills; agent execution and orchestration are not implemented. The local browser does not receive workspace content through this feature.
 
-## Task group archives
+## Completed and archived work
 
-Completed groups are stored at `todo/_archive/YYYY/MM/YYYY-MM-DD-<slug>/`. Restore returns the group to `todo/<slug>/`. This repository uses the new layout exclusively; no workspace-root `archive/` compatibility or migration code is provided.
+When every task in a group is completed, the group moves to `todo/_completed/YYYY/MM/YYYY-MM-DD-<slug>/`. Explicitly archived tasks and groups (which may contain incomplete work) move to `todo/_archived/YYYY/MM/YYYY-MM-DD-<slug>/`. Task IDs and metadata remain stable. Individual task archives retain their original path in `extra.archived_from` so restore can return them to the prior group.
+
+Project setup should present a choice to commit these records or ignore one or both folders in `.gitignore`. Committing preserves portable history with the project. Ignoring keeps local history out of version control. Do not select or apply either choice silently; setup can recommend an option based on project conventions and ask the user. Existing `todo/_archive/` paths are read as legacy archive data while new archive operations use `todo/_archived/`.

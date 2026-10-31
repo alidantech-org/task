@@ -155,4 +155,100 @@ describe("local runtime HTTP boundary", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("switches only to explicitly trusted accessible projects and retains the active project on failure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-projects-"));
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
+    const first = join(root, "first");
+    const second = join(root, "second");
+    const missing = join(root, "missing");
+    try {
+      process.env.XDG_CONFIG_HOME = join(root, "config");
+      await mkdir(join(first, "tasks"), { recursive: true });
+      await mkdir(join(second, "tasks"), { recursive: true });
+      await writeFile(
+        join(first, "tasks", "first.md"),
+        "---\nid: D-1\nname: First\ntype: documentation\n---\n",
+      );
+      await writeFile(
+        join(second, "tasks", "second.md"),
+        "---\nid: D-2\nname: Second\ntype: documentation\n---\n",
+      );
+      await configureWorkspace(first);
+
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const session = await fetch(`${baseUrl}/internal/session`);
+      const { capability } = (await session.json()) as { capability: string };
+      const headers = { "content-type": "application/json", "x-task-capability": capability };
+
+      const untrustedSwitch = await fetch(`${baseUrl}/projects/select`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path: second }),
+      });
+      expect(untrustedSwitch.status).toBe(400);
+      const activeAfterDenied = await fetch(`${baseUrl}/workspace`, {
+        headers: { "x-task-capability": capability },
+      });
+      expect(await activeAfterDenied.json()).toMatchObject({ workspace: { projectRoot: first } });
+
+      const trust = await fetch(`${baseUrl}/projects/trusted`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path: second }),
+      });
+      expect(trust.status).toBe(201);
+      const trustFirst = await fetch(`${baseUrl}/projects/trusted`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path: first }),
+      });
+      expect(trustFirst.status).toBe(201);
+      const missingTrust = await fetch(`${baseUrl}/projects/trusted`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path: missing }),
+      });
+      expect(missingTrust.status).toBe(400);
+
+      closeLocalWorkspace();
+      const selected = await fetch(`${baseUrl}/projects/select`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path: second }),
+      });
+      expect(selected.status).toBe(200);
+      expect(await selected.json()).toMatchObject({ workspace: { projectRoot: second } });
+
+      const removeActive = await fetch(
+        `${baseUrl}/projects/trusted/${encodeURIComponent(second)}`,
+        {
+          method: "DELETE",
+          headers: { "x-task-capability": capability },
+        },
+      );
+      expect(removeActive.status).toBe(400);
+      await rm(first, { recursive: true, force: true });
+      const removeInactive = await fetch(
+        `${baseUrl}/projects/trusted/${encodeURIComponent(first)}`,
+        {
+          method: "DELETE",
+          headers: { "x-task-capability": capability },
+        },
+      );
+      expect(removeInactive.status).toBe(200);
+      expect(await removeInactive.json()).toMatchObject({
+        projects: [expect.objectContaining({ path: second })],
+      });
+    } finally {
+      if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previousConfigHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

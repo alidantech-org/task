@@ -10,6 +10,7 @@ describe("CLI command metadata", () => {
   test("advertises the workspace command surface", () => {
     expect(getCliMetadata("0.1.0").commands).toContain("group");
     expect(getCliMetadata("0.1.0").commands).toContain("validate");
+    expect(getCliMetadata("0.1.0").commands).toContain("run");
   });
 
   test("parses options, comma-separated values, and short help", () => {
@@ -44,5 +45,11 @@ describe("CLI command metadata", () => {
     expect(parseArgs(["-f"]).options.get("full-screen")).toBe(true);
     expect(parseArgs(["--full-screen"]).options.get("full-screen")).toBe(true);
     expect(getCliMetadata("0.1.0").commands).toContain("tui");
+  });
+
+  test("supports an unattended local dashboard launch", () => {
+    const parsed = parseArgs(["run", "--no-open"]);
+    expect(parsed.command).toBe("run");
+    expect(parsed.options.get("no-open")).toBe(true);
   });
 });

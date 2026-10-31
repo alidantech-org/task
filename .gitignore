@@ -22,6 +22,7 @@ coverage/
 
 # Local Task workspace state
 .tasks-cache/
+.task-cli-release-build-*/
 
 # Next.js and frontend tooling
 .next/

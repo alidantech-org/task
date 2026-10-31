@@ -2,7 +2,7 @@ import { dateKey, weekGrid } from "@/lib/calendar";
 
 export type StatusChange = { from: string; to: string; at: string };
 export type HistoricalTask = {
-  extra?: { status_history?: readonly StatusChange[] };
+  extra?: { status_history?: readonly StatusChange[]; hidden_from_recent?: boolean };
 };
 export type CompletedTaskRecord = HistoricalTask & {
   status?: string;
@@ -15,7 +15,9 @@ export type CompletedTaskRecord = HistoricalTask & {
 export function isArchivedTask(task: Pick<CompletedTaskRecord, "archived_at" | "path">): boolean {
   return (
     Boolean(task.archived_at) ||
+    task.path.startsWith("_archived/") ||
     task.path.startsWith("_archive/") ||
+    task.path.includes("/_archived/") ||
     task.path.includes("/_archive/")
   );
 }
@@ -40,6 +42,16 @@ export function sortCompletedTasks<T extends CompletedTaskRecord>(tasks: readonl
   return tasks
     .filter(isCompletedOrArchived)
     .sort((left, right) => completedAt(right) - completedAt(left));
+}
+
+export function getRecentCompletedTasks<T extends CompletedTaskRecord>(
+  tasks: readonly T[],
+  limit: number,
+): T[] {
+  const candidates = sortCompletedTasks(
+    tasks.filter((task) => task.status === "completed" && !isArchivedTask(task)),
+  ).slice(0, Math.max(0, limit));
+  return candidates.filter((task) => !task.extra?.hidden_from_recent);
 }
 
 export function completionWeek(tasks: readonly HistoricalTask[], now = new Date()) {

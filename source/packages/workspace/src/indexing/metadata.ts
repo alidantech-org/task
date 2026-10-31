@@ -119,6 +119,10 @@ export function parseFrontmatter(content: string): {
       throw new Error("depends_on must be a sequence of task IDs");
     }
     const history = (extra as Record<string, unknown> | undefined)?.status_history;
+    const hiddenFromRecent = (extra as Record<string, unknown> | undefined)?.hidden_from_recent;
+    if (hiddenFromRecent !== undefined && typeof hiddenFromRecent !== "boolean") {
+      throw new Error("extra.hidden_from_recent must be a boolean");
+    }
     if (history !== undefined) {
       if (!Array.isArray(history)) throw new Error("extra.status_history must be a sequence");
       let previous: TaskStatus | undefined;

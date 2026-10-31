@@ -23,6 +23,7 @@ export function getCliMetadata(version: string): CliMetadata {
     aliases: ["task", "tk"],
     status: "workspace-connected",
     commands: [
+      "run",
       "init",
       "setup",
       "project inspect",
@@ -68,6 +69,7 @@ const booleanOptions = new Set([
   "version",
   "archived",
   "full-screen",
+  "no-open",
 ]);
 const valueOptions = new Set([
   "workspace",

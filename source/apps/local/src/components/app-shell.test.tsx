@@ -8,16 +8,18 @@ describe("local dashboard", () => {
     expect(markup).toContain("Workspace overview");
     expect(markup).toContain("Search workspace");
     expect(markup).not.toContain("Connected");
-    expect(markup).toContain("Tasks</span>");
+    expect(markup).toContain('aria-label="Tasks"');
     expect(markup).toContain('data-slot="task-app-shell"');
     expect(markup).toContain('data-slot="main-toolbar"');
     expect(markup).toContain('aria-label="Workspace navigation"');
-    expect(markup).toContain('aria-label="Collapse sidebar"');
+    expect(markup).toContain('aria-label="Hide sidebar"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).toContain('data-slot="project-switcher"');
-    expect(markup).toContain('src="/task-mark.svg"');
-    expect(markup).toContain('src="/task-mark-dark.svg"');
-    expect(markup.match(/>New task<\/button>/g)).toHaveLength(1);
+    expect(markup).toContain('src="/task-symbol.svg"');
+    expect(markup).toContain('data-slot="global-navigation"');
+    expect(markup).toContain('data-slot="contextual-sidebar"');
+    expect(markup).toContain('aria-label="Create task"');
+    expect(markup).not.toContain(">New task</button>");
     expect(markup).toContain("h-svh");
   });
 
@@ -92,7 +94,7 @@ describe("local dashboard", () => {
               type: "task",
               status: "completed",
               priority: "medium",
-              path: "todo/_archive/2026/10/2026-10-31-old/001-archived.md",
+              path: "todo/_archived/2026/10/2026-10-31-task-archived/001-archived.md",
               size: 1,
               modifiedAt: 0,
               contentHash: "archived",
@@ -115,7 +117,8 @@ describe("local dashboard", () => {
       />,
     );
     expect(markup).toContain("Active");
-    expect(markup).toContain("Completed and archived");
+    expect(markup).toContain("Recently completed");
+    expect(markup).toContain("Archived");
     expect(markup).toContain("Archived");
     expect(markup).toContain("View all");
   });

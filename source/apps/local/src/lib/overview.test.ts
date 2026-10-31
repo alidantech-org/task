@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { completionWeek, isArchivedTask, sidebarResize, sortCompletedTasks } from "@/lib/overview";
+import {
+  completionWeek,
+  getRecentCompletedTasks,
+  isArchivedTask,
+  sidebarResize,
+  sortCompletedTasks,
+} from "@/lib/overview";
 
 describe("dashboard overview helpers", () => {
   test("counts only completed status transitions in the current local week", () => {
@@ -28,7 +34,7 @@ describe("dashboard overview helpers", () => {
     expect(sidebarResize(500)).toEqual({ width: 360, collapsed: false });
   });
 
-  test("includes archived records in completed tasks and sorts by explicit dates", () => {
+  test("recognizes archived records separately and sorts recent records by explicit dates", () => {
     const records = [
       {
         id: "active",
@@ -51,7 +57,7 @@ describe("dashboard overview helpers", () => {
         id: "archived",
         name: "Archived",
         type: "task",
-        path: "todo/_archive/2026/10/2026-10-30-group/task.md",
+        path: "todo/_archived/2026/10/2026-10-30-task-tsk-1/task.md",
         modifiedAt: 200,
         status: "completed",
         archived_at: "2026-10-30T09:00:00.000Z",
@@ -60,5 +66,20 @@ describe("dashboard overview helpers", () => {
     const completed = sortCompletedTasks(records);
     expect(completed.map((task) => task.id)).toEqual(["archived", "completed"]);
     expect(isArchivedTask(completed[0])).toBe(true);
+  });
+
+  test("hiding an item does not backfill outside the selected recent window", () => {
+    const tasks = Array.from({ length: 11 }, (_, index) => ({
+      id: `task-${index + 1}`,
+      name: `Task ${index + 1}`,
+      status: "completed",
+      path: `todo/group/${String(index + 1).padStart(3, "0")}-task-${index + 1}.md`,
+      modifiedAt: index,
+      updated_at: new Date(Date.UTC(2026, 9, index + 1)).toISOString(),
+      ...(index === 0 ? { extra: { hidden_from_recent: true } } : {}),
+    }));
+    const visible = getRecentCompletedTasks(tasks, 10);
+    expect(visible).toHaveLength(9);
+    expect(visible.map((task) => task.id)).not.toContain("task-11");
   });
 });

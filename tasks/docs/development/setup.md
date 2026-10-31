@@ -66,6 +66,10 @@ Bare `task` opens a terminal menu when attached to a TTY; in non-interactive she
 
 To set up a new local project, run `task init` (or `task init --workspace .tasks`) from its root. Then use `task -f` or `task tui` to open the read-only full-screen browser; it shares the CLI's resolved workspace. See [TUI setup and keys](../../../source/apps/tui/README.md).
 
+After initializing a project, run `task run` to start the local dashboard and its Bun workspace runtime. The CLI starts the packaged production Next.js build, waits for runtime and dashboard readiness, opens the loopback URL in the browser, and keeps both services attached to the terminal. Ctrl+C shuts them down. Use `task run --no-open` when launching from automation or a remote terminal. The dashboard uses port 5173 because the runtime’s browser mutation boundary is restricted to that same origin; close an existing dashboard before starting another.
+
+The CLI release package is prepared with `bun run cli:package`. This builds the production dashboard from an isolated temporary checkout and bundles the local runtime alongside the CLI’s Task workspace dependencies, preserving the developer's `.next` directory. Before publishing, run `bun run cli:publish:check`; it runs the repository validation gate, prepares release assets, and rechecks CLI, workspace, and TUI tests plus a temporary global installation. Publish shared packages before the CLI in this order: `@task/contracts`, `@task/ui`, `@task/workspace`, `@task/tui`, then `@task/cli`. Install the published CLI using `bun add --global @task/cli`. Publication itself is a separate maintainer action and is not performed by the check command.
+
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 
     bun run dev:local:runtime

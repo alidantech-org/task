@@ -42,12 +42,13 @@ export function getWorkspaceOverview(index: WorkspaceIndex): {
   recent: DocumentSummary[];
 } {
   const tasks = listTasks(index, { archived: false });
+  const completed = listTasks(index, { archived: false, status: "completed" });
   return {
     tasks: tasks.length,
     planned: tasks.filter((task) => task.metadata.status === "planned").length,
     inProgress: tasks.filter((task) => task.metadata.status === "in-progress").length,
     blocked: tasks.filter((task) => task.metadata.status === "blocked").length,
-    completed: tasks.filter((task) => task.metadata.status === "completed").length,
+    completed: completed.length,
     documents: listDocuments(index).length,
     diagnostics: index.diagnostics.length,
     recent: [...index.documents.values()]
@@ -62,8 +63,15 @@ export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): Doc
   );
   const filtered = tasks.filter((task) => {
     const archived =
-      task.path.startsWith(`todo${sep}_archive${sep}`) || task.path.startsWith("todo/_archive/");
+      task.path.startsWith(`todo${sep}_archived${sep}`) ||
+      task.path.startsWith("todo/_archived/") ||
+      task.path.startsWith(`todo${sep}_archive${sep}`) ||
+      task.path.startsWith("todo/_archive/");
     if (filters.archived !== undefined && archived !== filters.archived) return false;
+    const completedStorage =
+      task.path.startsWith(`todo${sep}_completed${sep}`) ||
+      task.path.startsWith("todo/_completed/");
+    if (completedStorage && filters.status !== "completed") return false;
     if (filters.status && task.metadata.status !== filters.status) return false;
     if (filters.priority && task.metadata.priority !== filters.priority) return false;
     if (
@@ -86,9 +94,12 @@ export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): Doc
       const taskGroupPath = dirname(task.path);
       const groupPath = groupDocument ? dirname(groupDocument.path) : undefined;
       const folderName = basename(taskGroupPath);
-      const groupSlug = task.path.startsWith("todo/_archive/")
-        ? folderName.replace(/^\d{4}-\d{2}-\d{2}-/, "")
-        : folderName;
+      const groupSlug =
+        task.path.startsWith("todo/_archived/") ||
+        task.path.startsWith("todo/_archive/") ||
+        task.path.startsWith("todo/_completed/")
+          ? folderName.replace(/^\d{4}-\d{2}-\d{2}-/, "")
+          : folderName;
       if (
         groupPath !== taskGroupPath &&
         filters.group !== taskGroupPath &&
@@ -164,10 +175,16 @@ export async function listTaskGroups(context: WorkspaceContext): Promise<TaskGro
   );
   return plans.map((plan) => {
     const archived =
-      plan.path.startsWith(`todo${sep}_archive${sep}`) || plan.path.startsWith("todo/_archive/");
+      plan.path.startsWith(`todo${sep}_archived${sep}`) ||
+      plan.path.startsWith("todo/_archived/") ||
+      plan.path.startsWith(`todo${sep}_archive${sep}`) ||
+      plan.path.startsWith("todo/_archive/");
+    const finished =
+      plan.path.startsWith(`todo${sep}_completed${sep}`) ||
+      plan.path.startsWith("todo/_completed/");
     const groupPath = dirname(plan.path);
     const last = basename(groupPath);
-    const slug = archived ? last.replace(/^\d{4}-\d{2}-\d{2}-/, "") : last;
+    const slug = archived || finished ? last.replace(/^\d{4}-\d{2}-\d{2}-/, "") : last;
     const tasks = [...index.documents.values()].filter(
       (document) => document.metadata.type === "task" && dirname(document.path) === groupPath,
     );
@@ -177,6 +194,7 @@ export async function listTaskGroups(context: WorkspaceContext): Promise<TaskGro
       slug,
       path: groupPath,
       archived,
+      finished,
       total: tasks.length,
       completed: tasks.filter((task) => task.metadata.status === "completed").length,
     };

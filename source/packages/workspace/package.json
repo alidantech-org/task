@@ -1,6 +1,6 @@
 {
   "name": "@task/workspace",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -13,6 +13,16 @@
   },
   "imports": {
     "#/*": "./src/*"
+  },
+  "engines": {
+    "bun": ">=1.3.14"
+  },
+  "files": [
+    "src",
+    "tsconfig.json"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "handlebars": "^4.7.10",

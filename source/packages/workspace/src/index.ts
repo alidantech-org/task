@@ -30,11 +30,13 @@ export type {
 } from "@task/workspace/indexing/types";
 export {
   archiveTaskGroup,
+  archiveTask,
   createDocument,
   createTask,
   createTaskGroup,
   replaceDocumentBody,
   restoreTaskGroup,
+  restoreTask,
   updateTask,
 } from "@task/workspace/operations/mutate";
 export type { TaskFilters } from "@task/workspace/operations/query";
