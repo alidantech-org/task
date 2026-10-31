@@ -24,6 +24,9 @@ describe("workspace-connected CLI", () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-e2e-"));
     const workspace = join(root, "tasks");
     await mkdir(workspace);
+    const overview = await cli(workspace, "--json");
+    expect(overview.exitCode).toBe(0);
+    expect(JSON.parse(overview.stdout.toString()).tasks).toBe(0);
     const groupResult = await cli(workspace, "group", "create", "--title", "CLI feature", "--json");
     expect(groupResult.exitCode).toBe(0);
     const group = JSON.parse(groupResult.stdout.toString());

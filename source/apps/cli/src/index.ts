@@ -197,6 +197,46 @@ async function main(): Promise<void> {
   const context = { root: selected.root, projectRoot: selected.projectRoot };
   const command = args.command;
 
+  if (
+    !command &&
+    !json &&
+    !args.options.has("quiet") &&
+    process.stdin.isTTY &&
+    process.stdout.isTTY
+  ) {
+    const action = await select({
+      message: `Task · ${selected.root}`,
+      options: [
+        { value: "info", label: "Workspace overview" },
+        { value: "list", label: "List tasks" },
+        { value: "create", label: "Create a task" },
+        { value: "group-create", label: "Create a task group" },
+        { value: "search", label: "Search workspace" },
+        { value: "docs", label: "Browse documents" },
+        { value: "validate", label: "Validate workspace" },
+        { value: "quit", label: "Quit" },
+      ],
+    });
+    if (isCancel(action)) {
+      cancel("Cancelled.");
+      process.exit(130);
+    }
+    if (action === "quit") {
+      outro("Workspace unchanged.");
+      return;
+    }
+    if (action === "group-create") {
+      args = { ...args, command: "group", positionals: ["create"] };
+    } else if (action === "search") {
+      const query = await promptText("Search text");
+      args = { ...args, command: "search", positionals: [query] };
+    } else {
+      args = { ...args, command: action, positionals: [] };
+      if (action === "docs") args.positionals.push("list");
+    }
+    return main();
+  }
+
   if (command === "doctor") {
     const majorMinorPatch = Bun.version.split(".").map(Number);
     const compatible =
@@ -388,6 +428,21 @@ async function main(): Promise<void> {
           process.exit(130);
         }
         group = chosen;
+      } else {
+        const createGroup = await select({
+          message: "There are no active task groups yet",
+          options: [
+            { value: "create", label: "Create a group now" },
+            { value: "cancel", label: "Cancel" },
+          ],
+        });
+        if (isCancel(createGroup) || createGroup === "cancel") {
+          cancel("No task created.");
+          process.exit(130);
+        }
+        const groupName = await promptText("New task group name");
+        const createdGroup = await createTaskGroup(context, groupName);
+        group = createdGroup.id;
       }
     }
     if (!title) throw new WorkspaceError("invalid_input", "Provide --title <name>");

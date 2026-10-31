@@ -60,7 +60,7 @@ To make `task` and `tk` available globally while pointing at this live checkout:
 
 Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -g)` is on `PATH`. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when CLI or workspace source changes. Global commands also load the linked checkout each time, so ordinary `task`/`tk` invocations immediately use saved edits without keeping the watcher open.
 
-Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and diagnostics to stderr. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
+Bare `task` opens a terminal menu when attached to a TTY; in non-interactive shells it prints the overview and exits. `task --json` returns machine-readable overview data. Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and diagnostics to stderr. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 
