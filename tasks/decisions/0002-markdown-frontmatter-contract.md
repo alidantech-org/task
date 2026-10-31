@@ -26,7 +26,7 @@ Requiring Task metadata in every Markdown file across the repository would impos
 4. A repository may configure a different workspace directory in `task.yaml`, such as `tasks/docs/` or `.tasks/`. When selected, that directory becomes the managed boundary and all Markdown files inside it require frontmatter.
 5. The common metadata contract begins with required `id`, `name`, and `type` fields. Type-specific schemas may require additional fields.
 6. The YAML frontmatter is the machine-readable document contract. The Markdown body is the human-readable content.
-7. `task validate` and `tk validate` must discover and validate every in-scope Markdown file inside the configured workspace. Missing or malformed frontmatter and schema violations are errors. They must not impose this rule on unrelated Markdown outside the workspace.
+7. `task validate` and `tc validate` must discover and validate every in-scope Markdown file inside the configured workspace. Missing or malformed frontmatter and schema violations are errors. They must not impose this rule on unrelated Markdown outside the workspace.
 8. Validation should report the file path and actionable field/line details. Identifier uniqueness and semantic/reference checks belong in validation where the relevant schemas define them.
 9. The local web application started by `task run` (for example, `task run -p 3004`) must discover and present documents from the configured workspace using their metadata. It should build navigation, listings, filters, and document pages from that workspace rather than maintaining a separate manual registry.
 10. CLI, dashboard, and terminal interfaces must share the same schema definitions and interpretation rules.

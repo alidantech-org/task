@@ -55,7 +55,7 @@ This is the intended product layout, not a requirement to create empty directori
 
 ## Local operating flow
 
-1. The user opens a workspace directory and runs `task run` or `tk run`.
+1. The user opens a workspace directory and runs `task run` or `tc run`.
 2. The CLI discovers and validates the workspace configuration.
 3. The CLI starts the local application/runtime for that workspace.
 4. The local application binds to loopback, serves the dashboard, and exposes a restricted local HTTP API and WebSocket.

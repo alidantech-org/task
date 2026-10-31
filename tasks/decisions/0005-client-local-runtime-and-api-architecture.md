@@ -22,7 +22,7 @@ The product also needs a terminal user interface (TUI) for people who prefer an 
 
 ## Decisions
 
-1. **Keep the CLI as a first-class interface for people and agents.** It provides commands for workspace discovery, task and document operations, validation, automation, authentication, and synchronization. Both `task` and `tk` invoke the same CLI.
+1. **Keep the CLI as a first-class interface for people and agents.** It provides commands for workspace discovery, task and document operations, validation, automation, authentication, and synchronization. Both `task` and `tc` invoke the same CLI.
 2. **Provide a local management dashboard.** The local dashboard manages the currently selected local Task workspace and remains useful without an account or internet access.
 3. **Provide a local runtime/service for local interfaces.** The CLI starts or manages the local runtime used by the dashboard and TUI where appropriate. This runtime owns safe workspace access, file watching, local operations, and a local HTTP/WebSocket interface.
 4. **Use WebSocket for live local updates.** The local dashboard subscribes to workspace changes through the local runtime. Changes made through the dashboard, CLI, agents, or external editors are reflected through the runtime's change notifications. WebSocket is a live-update transport, not the synchronization protocol.

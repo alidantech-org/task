@@ -4,30 +4,30 @@
 
 # Install Task once and use it in any project
 
-Task is a local-first task and project management CLI that operates on the configured workspace in the current project. The npm package is prepared as `tasknode` and exposes `tasknode`, `task`, and `tk` commands from the same CLI.
+Task is a local-first task and project management CLI that operates on the configured workspace in the current project. The npm package is prepared as `taskcode` and exposes `taskcode`, `task`, and `tc` commands from the same CLI.
 
 ## Install
 
 The initial npm release requires Bun 1.3.14 or later. npm, pnpm, and Bun can install the package globally; Bun is still the runtime used to execute it.
 
 ```sh
-npm install --global tasknode
-# or: pnpm add --global tasknode
-# or: bun add --global tasknode
+npm install --global taskcode
+# or: pnpm add --global taskcode
+# or: bun add --global taskcode
 ```
 
 Check the install and initialize a repository:
 
 ```sh
-tasknode --version
+taskcode --version
 task --version
-tk --version
+tc --version
 cd ~/Projects/my-project
 task init
 task run
 ```
 
-`tasknode`, `task`, and `tk` are aliases for one application. `task` and `tk` remain available for existing scripts and user habits. Ensure the package manager's global binary directory is on `PATH`.
+`taskcode`, `task`, and `tc` are aliases for one application. `task` and `tc` remain available for existing scripts and user habits. Ensure the package manager's global binary directory is on `PATH`.
 
 ## Runtime and feature requirements
 
@@ -54,4 +54,4 @@ The TUI is a read-only browser; use CLI commands to change tasks. `task run` sta
 
 ## Release preparation status
 
-The repository has a package staging script and consumer smoke scripts. A prepared package is not a published release. Before publishing, build and inspect the package with its lifecycle scripts enabled, install it into a clean consumer project, verify all three executable aliases and the CLI/TUI/dashboard workflows, and confirm npm accepts the `tasknode` package name. Publication and registry credentials remain an explicit release action.
+The repository has a package staging script and consumer smoke scripts. A prepared package is not a published release. Before publishing, build and inspect the package with its lifecycle scripts enabled, install it into a clean consumer project, verify all three executable aliases and the CLI/TUI/dashboard workflows, and confirm npm accepts the `taskcode` package name. Publication and registry credentials remain an explicit release action.

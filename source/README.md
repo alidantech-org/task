@@ -5,7 +5,7 @@ All application and package source code belongs under source/.
 ## Application foundations
 
 - api: NestJS hosted API with a health endpoint and controller smoke test.
-- apps/cli: coloured, scriptable workspace CLI; task and tk share one entry point and use @task/workspace operations.
+- apps/cli: coloured, scriptable workspace CLI; task and tc share one entry point and use @task/workspace operations.
 - apps/local: Next.js dashboard plus a separate loopback-only local runtime. The dashboard checks runtime health server-side.
 - apps/site: hosted Next.js website starter; it checks the configured Task API health endpoint server-side.
 - apps/mobile: Flutter/Dart application with a widget smoke test.

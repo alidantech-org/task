@@ -30,12 +30,12 @@
       },
     },
     "source/apps/cli": {
-      "name": "tasknode",
+      "name": "taskcode",
       "version": "0.1.0",
       "bin": {
-        "tasknode": "dist/cli.js",
+        "taskcode": "dist/cli.js",
         "task": "dist/cli.js",
-        "tk": "dist/cli.js",
+        "tc": "dist/cli.js",
       },
       "dependencies": {
         "@clack/prompts": "^1.8.1",
@@ -1288,7 +1288,7 @@
 
     "tapable": ["tapable@2.3.3", "", {}, "sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A=="],
 
-    "tasknode": ["tasknode@workspace:source/apps/cli"],
+    "taskcode": ["taskcode@workspace:source/apps/cli"],
 
     "toidentifier": ["toidentifier@1.0.1", "", {}, "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="],
 

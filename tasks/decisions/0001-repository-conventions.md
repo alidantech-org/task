@@ -19,7 +19,7 @@ Task needs clear separation between source code, engineering documentation, and 
 ## Decisions
 
 1. The product name is **Task**.
-2. The CLI will expose both `task` and `tk`, using one implementation.
+2. The CLI will expose both `task` and `tc`, using one implementation.
 3. Application and package source code belongs under `source/`.
 4. `tasks/docs/` is for engineering documentation about the Task software project.
 5. `tasks/` is the visible, Task-managed workspace for task records and project context. The same convention is intended for workspaces created by `task init`.

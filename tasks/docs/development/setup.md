@@ -23,7 +23,7 @@ From the repository root, install all Bun workspace dependencies and resolve the
 
 This resolves the root Bun workspace, including the CLI, local runtime/dashboard, hosted Next.js site, NestJS API, TUI, shared packages, and Biome, then runs Flutter `pub get` through the root bridge. It refreshes `bun.lock` and `source/apps/mobile/pubspec.lock` when manifests or SDK resolution require it. Flutter must already be installed and available on `PATH`; setup reports that prerequisite clearly.
 
-Flutter remains outside the Bun workspace. To also make `task` and `tk` available globally from this checkout, opt in to Bun's global links:
+Flutter remains outside the Bun workspace. To also make `task` and `tc` available globally from this checkout, opt in to Bun's global links:
 
     bun run setup --link-cli
 
@@ -47,7 +47,7 @@ Run terminal tools separately: CLI commands are short-lived and the TUI needs it
     bun run dev:tui
     bun run dev:mobile
 
-The CLI and its `task`/`tk` aliases operate on workspace files directly through `@task/workspace`:
+The CLI and its `task`/`tc` aliases operate on workspace files directly through `@task/workspace`:
 
     bun run dev:cli -- --help
     bun run dev:cli -- info
@@ -56,11 +56,11 @@ The CLI and its `task`/`tk` aliases operate on workspace files directly through 
     bun run dev:cli -- list --json
     bun run dev:cli -- validate
 
-To make `task` and `tk` available globally while pointing at this live checkout:
+To make `task` and `tc` available globally while pointing at this live checkout:
 
     bun run cli:link
 
-Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -g)` is on `PATH`. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when CLI or workspace source changes. Global commands also load the linked checkout each time, so ordinary `task`/`tk` invocations immediately use saved edits without keeping the watcher open.
+Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -g)` is on `PATH`. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when CLI or workspace source changes. Global commands also load the linked checkout each time, so ordinary `task`/`tc` invocations immediately use saved edits without keeping the watcher open.
 
 Bare `task` opens a terminal menu when attached to a TTY; in non-interactive shells it prints the overview and exits. `task --quiet` suppresses the bare overview. `task --json` returns machine-readable overview data. Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and errors to stderr. Human output uses compact width-aware task tables and grouped validation diagnostics; `--verbose` adds paths and metadata. `--plain` and `--no-color` disable color. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 
@@ -68,7 +68,7 @@ To set up a new local project, run `task init` (or `task init --workspace .tasks
 
 After initializing a project, run `task run` to start the local dashboard and its Bun workspace runtime. The CLI starts the packaged production Next.js build, waits for runtime and dashboard readiness, opens the loopback URL in the browser, and keeps both services attached to the terminal. Ctrl+C shuts them down. Use `task run --no-open` when launching from automation or a remote terminal. The dashboard uses port 5173 because the runtime’s browser mutation boundary is restricted to that same origin; close an existing dashboard before starting another.
 
-The CLI release package is prepared with `bun run cli:package`. This builds the production dashboard from an isolated temporary checkout and bundles the local runtime alongside the CLI’s Task workspace dependencies, preserving the developer's `.next` directory. Before publishing, run `bun run cli:publish:check`; it runs the repository validation gate, prepares release assets, and rechecks CLI, workspace, and TUI tests plus a temporary global installation. Publish shared packages before the CLI in this order: `@task/contracts`, `@task/ui`, `@task/workspace`, `@task/tui`, then `@task/cli`. Install the published CLI using `bun add --global @task/cli`. Publication itself is a separate maintainer action and is not performed by the check command.
+The CLI release package is prepared with `bun run cli:package`. This builds the production dashboard from an isolated temporary checkout and bundles the local runtime alongside the CLI’s Task workspace dependencies, preserving the developer's `.next` directory. Before publishing, run `bun run cli:publish:check`; it runs the repository validation gate, prepares release assets, and rechecks CLI, workspace, and TUI tests plus a temporary global installation. Publish shared packages before the CLI in this order: `@task/contracts`, `@task/ui`, `@task/workspace`, `@task/tui`, then `taskcode`. Install the published CLI using `bun add --global taskcode`. Publication itself is a separate maintainer action and is not performed by the check command.
 
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 

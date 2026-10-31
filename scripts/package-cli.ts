@@ -114,9 +114,9 @@ try {
   if (!buildId.trim()) throw new Error("Next.js production build did not produce a BUILD_ID");
 
   packageManifest.bin = {
-    tasknode: "dist/cli.js",
+    taskcode: "dist/cli.js",
     task: "dist/cli.js",
-    tk: "dist/cli.js",
+    tc: "dist/cli.js",
   };
   packageManifest.files = ["dist", "README.md"];
   await Bun.write(join(stagedRoot, "package.json"), JSON.stringify(packageManifest, null, 2));

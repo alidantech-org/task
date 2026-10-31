@@ -1,12 +1,12 @@
 {
-  "name": "tasknode",
+  "name": "taskcode",
   "private": false,
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "tasknode": "dist/cli.js",
+    "taskcode": "dist/cli.js",
     "task": "dist/cli.js",
-    "tk": "dist/cli.js"
+    "tc": "dist/cli.js"
   },
   "scripts": {
     "dev": "bun run src/index.ts",

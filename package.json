@@ -16,13 +16,13 @@
 
     "dev": "bun run dev:stack",
     "dev:stack": "concurrently --kill-others --names API,SITE,LOCAL-RUNTIME,LOCAL-WEB --prefix-colors blue,magenta,green,cyan \"bun run dev:api\" \"bun run dev:site\" \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
-    "dev:cli": "bun run --filter tasknode dev",
-    "dev:cli:watch": "bun run --filter tasknode dev:watch",
+    "dev:cli": "bun run --filter taskcode dev",
+    "dev:cli:watch": "bun run --filter taskcode dev:watch",
 
     "cli:link": "bun run scripts/cli-link.ts install",
     "cli:unlink": "bun run scripts/cli-link.ts remove",
     "cli:package": "bun run scripts/package-cli.ts",
-    "cli:publish:check": "bun run validate && bun run cli:package && bun run --filter tasknode test && bun run --filter @task/workspace test && bun run --filter @task/tui test && bun run scripts/smoke-cli-package.ts && bun run scripts/smoke-cli-install.ts && npm pack --dry-run --ignore-scripts --workspace tasknode",
+    "cli:publish:check": "bun run validate && bun run cli:package && bun run --filter taskcode test && bun run --filter @task/workspace test && bun run --filter @task/tui test && bun run scripts/smoke-cli-package.ts && bun run scripts/smoke-cli-install.ts && npm pack --dry-run --ignore-scripts --workspace taskcode",
 
     "dev:local": "concurrently -k \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
     "dev:local:runtime": "bun run --filter @task/local dev:runtime",

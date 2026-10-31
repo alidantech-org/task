@@ -29,7 +29,7 @@ try {
   );
   const packed = JSON.parse(output) as Array<{ filename: string }>;
   const filename = packed[0]?.filename;
-  if (!filename) throw new Error("npm did not produce a package archive for tasknode");
+  if (!filename) throw new Error("npm did not produce a package archive for taskcode");
 
   await mkdir(globalPrefix, { recursive: true });
   run([
@@ -44,14 +44,14 @@ try {
 
   const globalBin = join(globalPrefix, "bin");
   const taskPath = join(globalBin, process.platform === "win32" ? "task.cmd" : "task");
-  const tkPath = join(globalBin, process.platform === "win32" ? "tk.cmd" : "tk");
-  const tasknodePath = join(globalBin, process.platform === "win32" ? "tasknode.cmd" : "tasknode");
-  if (!run([tasknodePath, "--version"]).includes("task 0.1.0"))
-    throw new Error("Globally installed tasknode command returned an unexpected version");
+  const tcPath = join(globalBin, process.platform === "win32" ? "tc.cmd" : "tc");
+  const taskcodePath = join(globalBin, process.platform === "win32" ? "taskcode.cmd" : "taskcode");
+  if (!run([taskcodePath, "--version"]).includes("task 0.1.0"))
+    throw new Error("Globally installed taskcode command returned an unexpected version");
   if (!run([taskPath, "--version"]).includes("task 0.1.0"))
     throw new Error("Globally installed task command returned an unexpected version");
-  if (!run([tkPath, "--version"]).includes("task 0.1.0"))
-    throw new Error("Globally installed tk alias returned an unexpected version");
+  if (!run([tcPath, "--version"]).includes("task 0.1.0"))
+    throw new Error("Globally installed tc alias returned an unexpected version");
 
   const projectRoot = join(temporaryRoot, "consumer-project");
   await mkdir(projectRoot, { recursive: true });
@@ -79,7 +79,7 @@ try {
   };
   if (!validation.valid) throw new Error("Fresh installed workspace did not validate cleanly");
   process.stdout.write(
-    "Global install, task/tk bins, workspace init, create, list, and validation passed.\n",
+    "Global install, task/tc bins, workspace init, create, list, and validation passed.\n",
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

@@ -11,7 +11,7 @@ export const taskPriorities: readonly TaskPriority[] = ["low", "medium", "high"]
 export interface CliMetadata {
   name: "task";
   version: string;
-  aliases: readonly ["task", "tk"];
+  aliases: readonly ["task", "tc"];
   status: "workspace-connected";
   commands: readonly string[];
 }
@@ -20,7 +20,7 @@ export function getCliMetadata(version: string): CliMetadata {
   return {
     name: "task",
     version,
-    aliases: ["task", "tk"],
+    aliases: ["task", "tc"],
     status: "workspace-connected",
     commands: [
       "run",

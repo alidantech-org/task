@@ -26,7 +26,7 @@
 - The local Bun runtime remains separate from the Next.js dashboard and owns local filesystem access, workspace-scoped operations, transport, reconciliation, and security.
 - The TUI uses OpenTUI with React bindings for a native, keyboard-driven terminal application. It reuses shared workspace operations and must not create a separate task model.
 - The CLI uses terminal-aware colour and polished output, with picocolors and @clack/prompts as the accepted presentation foundation.
-- Preserve task and tk aliases, machine-readable JSON output, stable exit codes, and non-interactive use for agents and scripts.
+- Preserve task and tc aliases, machine-readable JSON output, stable exit codes, and non-interactive use for agents and scripts.
 - The root Bun workspace manages TypeScript applications and packages. OpenTUI requires Bun 1.3.14 or later.
 - Flutter/Dart remains outside the Bun workspace and uses Flutter tooling. Root scripts may delegate Flutter commands but must not make Dart packages Bun workspaces.
 
@@ -55,7 +55,7 @@ See Decision 0011 and tasks/docs/architecture/source-layout.md for the accepted 
 - Markdown files outside the configured workspace, including ordinary root README.md and AGENTS.md, do not need Task frontmatter. Engineering documentation under tasks/docs/ is inside the default managed workspace and must have valid metadata.
 - The YAML frontmatter is machine-readable metadata; the Markdown body is human-readable content.
 - Create new Markdown files inside the managed workspace with frontmatter from the outset.
-- task validate / tk validate must validate all in-scope Markdown inside the configured workspace. Missing or malformed frontmatter is an error. It must not impose this rule on unrelated repository Markdown outside the workspace.
+- task validate / tc validate must validate all in-scope Markdown inside the configured workspace. Missing or malformed frontmatter is an error. It must not impose this rule on unrelated repository Markdown outside the workspace.
 - The local application started by task run must discover and present documents from the configured workspace using their metadata.
 - The validator and UI must share the same schema definitions and document interpretation.
 - Update tasks/docs/ when engineering setup, architecture, or implementation behavior changes.

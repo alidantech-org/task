@@ -12,7 +12,7 @@ describe("local dashboard launcher", () => {
       const dashboardRoot = join(packageRoot, "dist/assets/local-dashboard");
       await mkdir(join(dashboardRoot, ".next"), { recursive: true });
       await mkdir(join(packageRoot, "dist/assets"), { recursive: true });
-      await writeFile(join(packageRoot, "package.json"), '{"name":"@task/cli"}');
+      await writeFile(join(packageRoot, "package.json"), '{"name":"taskcode"}');
       await writeFile(join(dashboardRoot, ".next/BUILD_ID"), "build");
       await writeFile(join(packageRoot, "dist/assets/local-runtime.js"), "");
 

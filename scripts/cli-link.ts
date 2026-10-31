@@ -29,12 +29,12 @@ if (result.exitCode !== 0) process.exit(result.exitCode ?? 1);
 if (action === "install") {
   const globalBin = Bun.spawnSync(["bun", "pm", "bin", "-g"], { stdout: "pipe" });
   const binPath = globalBin.stdout.toString().trim();
-  process.stdout.write(`Linked task and tk from ${expectedCliPackage}.\n`);
+  process.stdout.write(`Linked task and tc from ${expectedCliPackage}.\n`);
   process.stdout.write(`Bun global executable directory: ${binPath}\n`);
   if (!process.env.PATH?.split(":").includes(binPath)) {
     process.stdout.write(`Add this to your shell startup PATH: export PATH="${binPath}:$PATH"\n`);
   }
   process.stdout.write("These commands execute the live source in this checkout.\n");
 } else {
-  process.stdout.write("Removed the global task/tk link for this checkout.\n");
+  process.stdout.write("Removed the global task/tc link for this checkout.\n");
 }

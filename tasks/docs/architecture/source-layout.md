@@ -26,7 +26,7 @@ Architecture decisions:
     source/
     ├── api/                     # NestJS hosted API
     ├── apps/
-    │   ├── cli/                 # Scriptable CLI: task / tk
+    │   ├── cli/                 # Scriptable CLI: task / tc
     │   ├── local/               # Local runtime + Next.js dashboard
     │   ├── site/                # Hosted Next.js website
     │   ├── mobile/              # Flutter/Dart cloud client
@@ -64,7 +64,7 @@ OpenTUI requires Bun 1.3.14 or later. The root packageManager field pins Bun 1.3
 | Application | Responsibility | Runtime/deployment |
 | --- | --- | --- |
 | api/ | Identity, organisations, workspaces, records, authorization, cloud persistence and future sync endpoints | Standalone NestJS modular monolith at task-api.alidantech.org |
-| apps/cli/ | Polished, scriptable task/tk commands, validation, agent workflows and later cloud commands | Local executable; ordinary local commands need no server, account or network |
+| apps/cli/ | Polished, scriptable task/tc commands, validation, agent workflows and later cloud commands | Local executable; ordinary local commands need no server, account or network |
 | apps/local/ | Local dashboard, local HTTP API, WebSocket live updates, filesystem watching/reconciliation and controlled workspace access | Local runtime binds to loopback; dashboard is a separate Next.js process during development |
 | apps/site/ | Hosted account, personal workspace, organisation, project and collaboration experience | Next.js App Router; hosted at task.alidantech.org; calls hosted API directly |
 | apps/mobile/ | Focused mobile workflows for authorised cloud workspaces | Flutter app connecting directly to hosted API |
@@ -76,12 +76,12 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 
 - **Web:** Next.js App Router for every website and browser application. Do not introduce Vite as the application framework for new web surfaces.
 - **TUI:** OpenTUI with React bindings. Use its native renderer, responsive terminal layout, keyboard events, focus/selection primitives and component model. The TUI reuses shared workspace operations and must not create another domain model.
-- **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tk, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
+- **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tc, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
 - **Runtime:** Bun manages the TypeScript workspace. OpenTUI requires Bun 1.3.14 or later. Flutter remains on its independent Dart toolchain.
 
 ## Current implementation status
 
-- The CLI has task/tk aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, completion storage under `todo/_completed/`, explicit archive/restore under `todo/_archived/`, document commands, validation, index diagnostics, static project inspection, reviewed setup plans, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime. Project setup is static, does not execute repository code, and does not launch agents; it should ask before recommending or applying Git ignore choices for completed/archive history.
+- The CLI has task/tc aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, completion storage under `todo/_completed/`, explicit archive/restore under `todo/_archived/`, document commands, validation, index diagnostics, static project inspection, reviewed setup plans, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime. Project setup is static, does not execute repository code, and does not launch agents; it should ask before recommending or applying Git ignore choices for completed/archive history.
 - The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
 - The local application has a Next.js dashboard with overview, task list/board/calendar, document browsing, detail panels, prompt generation, global full-text search, and workspace diagnostics. Its loopback runtime exposes capability-protected read/query/validation/refresh and task create/update routes through a same-origin Next.js proxy. Writes use shared operations with hash conflicts, symlink rejection, and atomic file replacement; they recheck directory and file identity before replacement but do not use kernel-enforced directory handles against a hostile concurrent filesystem actor. Trusted project switching, Markdown source editing, and WebSocket updates are not implemented.
 - The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.

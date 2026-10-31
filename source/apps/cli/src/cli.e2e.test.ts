@@ -20,7 +20,7 @@ async function cli(workspace: string, ...args: string[]) {
 }
 
 describe("workspace-connected CLI", () => {
-  test("task and tk share workspace operations with machine-readable output", async () => {
+  test("task and tc share workspace operations with machine-readable output", async () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-e2e-"));
     const workspace = join(root, "tasks");
     await mkdir(workspace);

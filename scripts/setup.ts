@@ -81,7 +81,7 @@ function run(label: string, command: string[]): void {
 run("Install Bun workspace dependencies", ["bun", "install"]);
 run("Resolve Flutter mobile dependencies", ["bun", "run", "mobile:pub:get"]);
 
-if (linkCli) run("Link task and tk globally to this checkout", ["bun", "run", "cli:link"]);
+if (linkCli) run("Link task and tc globally to this checkout", ["bun", "run", "cli:link"]);
 
 process.stdout.write(
   "\nTask repository setup is complete. Start the web/API stack with bun dev.\n",

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { getCliMetadata, optionString, parseArgs } from "#/command";
 
 describe("CLI command metadata", () => {
-  test("supports task and tk aliases", () => {
-    expect(getCliMetadata("0.1.0").aliases).toEqual(["task", "tk"]);
+  test("supports task and tc aliases", () => {
+    expect(getCliMetadata("0.1.0").aliases).toEqual(["task", "tc"]);
     expect(getCliMetadata("0.1.0").commands).toContain("init");
   });
 

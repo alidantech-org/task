@@ -19,7 +19,7 @@ task/
 ├── source/
 │   ├── api/                     # NestJS hosted API
 │   ├── apps/
-│   │   ├── cli/                 # task / tk
+│   │   ├── cli/                 # task / tc
 │   │   ├── local/               # Local runtime + Next.js dashboard
 │   │   ├── site/                # Hosted Next.js website
 │   │   ├── mobile/              # Flutter/Dart cloud client

@@ -23,7 +23,7 @@ Task has multiple user-facing interfaces: hosted and local browser applications,
 3. **Advanced TUI with OpenTUI.** Use OpenTUI Core and its React bindings for native terminal rendering, responsive layouts, keyboard navigation, focus, selection, and rich interactive views. The TUI is a real interactive application, not a menu printed as static text.
 4. **TUI reuses the workspace engine.** All authoritative task/document behavior comes from the shared workspace engine. TUI owns terminal presentation and interaction only; it must not create a second domain model or independent storage.
 5. **Polished CLI presentation.** Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations, and progress. Provide carefully formatted help, status, errors, and future command output.
-6. **Preserve automation ergonomics.** CLI supports machine-readable output such as JSON, stable exit codes, predictable errors, and non-interactive operation. Do not force prompts or colour into scripts/pipes. task and tk remain equivalent command names.
+6. **Preserve automation ergonomics.** CLI supports machine-readable output such as JSON, stable exit codes, predictable errors, and non-interactive operation. Do not force prompts or colour into scripts/pipes. task and tc remain equivalent command names.
 7. **Bun runtime compatibility.** OpenTUI requires Bun 1.3.14 or later for the supported native runtime. Pin the repository packageManager metadata accordingly and keep all TypeScript projects under the root Bun workspace.
 8. **Keep Flutter independent.** Flutter/Dart remains outside the Bun workspace and uses Flutter tooling. It is not a website and is not subject to the Next.js requirement.
 
