@@ -23,6 +23,8 @@ export function getCliMetadata(version: string): CliMetadata {
     aliases: ["task", "tk"],
     status: "workspace-connected",
     commands: [
+      "init",
+      "tui",
       "doctor",
       "info",
       "status",
@@ -63,6 +65,7 @@ const booleanOptions = new Set([
   "help",
   "version",
   "archived",
+  "full-screen",
 ]);
 const valueOptions = new Set([
   "workspace",
@@ -104,6 +107,10 @@ export function parseArgs(args: readonly string[]): ParsedArgs {
     }
     if (key === "v") {
       options.set("version", true);
+      continue;
+    }
+    if (key === "f") {
+      options.set("full-screen", true);
       continue;
     }
     if (key === "no-color") {

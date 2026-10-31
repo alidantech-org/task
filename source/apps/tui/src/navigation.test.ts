@@ -1,24 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { buildWorkspaceIndex } from "@task/workspace";
-import { navigationSections } from "#/navigation";
+import { clampIndex, navigationSections, wrapIndex } from "#/navigation";
 
-describe("TUI navigation", () => {
-  test("exposes the initial workspace sections", () => {
-    expect(navigationSections).toEqual(["Overview", "Projects", "Tasks", "Documents", "Activity"]);
+describe("TUI navigation model", () => {
+  test("exposes the planned workspace sections", () => {
+    expect(navigationSections).toEqual(["Tasks", "Groups", "Docs", "Agents", "Activity"]);
   });
 
-  test("TUI workspace overview can consume the shared metadata index", async () => {
-    const root = await mkdtemp(join(tmpdir(), "task-tui-index-"));
-    try {
-      await mkdir(join(root, "tasks"));
-      await writeFile(join(root, "tasks", "one.md"), "---\nid: T-1\nname: One\ntype: task\n---\n");
-      const index = await buildWorkspaceIndex({ root });
-      expect(index.documents.size).toBe(1);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+  test("wraps section movement and clamps item movement", () => {
+    expect(wrapIndex(5, 5)).toBe(0);
+    expect(wrapIndex(-1, 5)).toBe(4);
+    expect(clampIndex(7, 3)).toBe(2);
+    expect(clampIndex(1, 0)).toBe(0);
   });
 });

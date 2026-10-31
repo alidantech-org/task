@@ -4,6 +4,7 @@ import { getCliMetadata, optionString, parseArgs } from "#/command";
 describe("CLI command metadata", () => {
   test("supports task and tk aliases", () => {
     expect(getCliMetadata("0.1.0").aliases).toEqual(["task", "tk"]);
+    expect(getCliMetadata("0.1.0").commands).toContain("init");
   });
 
   test("advertises the workspace command surface", () => {
@@ -37,5 +38,11 @@ describe("CLI command metadata", () => {
     expect(parsed.options.has("plain")).toBe(true);
     expect(parsed.options.has("quiet")).toBe(true);
     expect(parsed.options.has("verbose")).toBe(true);
+  });
+
+  test("supports the full-screen shortcut and long option", () => {
+    expect(parseArgs(["-f"]).options.get("full-screen")).toBe(true);
+    expect(parseArgs(["--full-screen"]).options.get("full-screen")).toBe(true);
+    expect(getCliMetadata("0.1.0").commands).toContain("tui");
   });
 });

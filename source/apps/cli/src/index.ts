@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import {
   createTaskGroup,
   findDocument,
   getDocument,
+  initializeWorkspace,
   listDocuments,
   listTaskGroups,
   listTasks,
@@ -89,6 +90,8 @@ function printHelp(): void {
     "",
     "Commands:",
     "  (no command)           Workspace overview",
+    "  init [--workspace <path>]  Initialize this project for Task",
+    "  tui | -f               Open the full-screen workspace interface",
     "  doctor                 Check Bun and workspace health",
     "  info | status | stats  Workspace information and counts",
     "  tree                   Show Markdown workspace paths",
@@ -105,7 +108,7 @@ function printHelp(): void {
     "  docs list|show|search|tree|open|create",
     "  index status|rebuild|verify",
     "",
-    "Options: --workspace <path> --json --plain --no-color --quiet --verbose --help --version",
+    "Options: --workspace <path> --json --plain --no-color --quiet --verbose -f/--full-screen --help --version",
     "Task fields: --title --group --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
   ];
   for (const row of rows) line(row, "requested");
@@ -209,6 +212,30 @@ async function main(): Promise<void> {
   if (args.options.has("help") || args.command === "help") return printHelp();
   if (args.options.has("version") || args.command === "version")
     return line(`task ${metadata.version}`);
+  if (args.command === "init") {
+    const workspace = optionString(args, "workspace") ?? "tasks";
+    const initialized = await initializeWorkspace({ projectRoot: process.cwd(), workspace });
+    const result = {
+      workspace: initialized.root,
+      config: join(initialized.projectRoot, "task.yaml"),
+      createdWorkspace: initialized.createdWorkspace,
+    };
+    if (json) output(result);
+    else {
+      line(
+        renderMessage(
+          "success",
+          `Initialized Task workspace · ${initialized.root}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+      line(`  ${stdoutStyle.muted("task.yaml")}`, "requested");
+      line('  Start with: task group create --title "My project"', "requested");
+    }
+    return;
+  }
   const workspaceOverride = optionString(args, "workspace");
   const selected = await resolveWorkspace({
     workspaceOverride,
@@ -216,6 +243,38 @@ async function main(): Promise<void> {
   });
   const context = { root: selected.root, projectRoot: selected.projectRoot };
   const command = args.command;
+
+  if (args.options.has("full-screen") || command === "tui") {
+    if (command && command !== "tui")
+      throw new WorkspaceError(
+        "invalid_input",
+        "Use `task -f` or `task tui` without another command",
+      );
+    if (json)
+      throw new WorkspaceError(
+        "invalid_input",
+        "The full-screen TUI cannot be combined with --json",
+      );
+    if (!isInteractive())
+      throw new WorkspaceError(
+        "invalid_input",
+        "The full-screen TUI requires an interactive terminal",
+      );
+    const tuiEntry = join(import.meta.dir, "../../tui/src/index.tsx");
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, [tuiEntry], {
+        cwd: selected.projectRoot,
+        env: { ...process.env, TASK_WORKSPACE_ROOT: selected.root },
+        stdio: "inherit",
+      });
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        process.exitCode = signal ? 130 : (code ?? 1);
+        resolve();
+      });
+    });
+    return;
+  }
 
   if (!command && !json && !args.options.has("quiet") && isInteractive()) {
     const action = await workspaceMenu(selected.root);

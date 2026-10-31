@@ -1,4 +1,9 @@
 export { resolveWorkspace } from "@task/workspace/config/resolve";
+export type {
+  InitializedWorkspace,
+  InitializeWorkspaceOptions,
+} from "@task/workspace/config/setup";
+export { initializeWorkspace } from "@task/workspace/config/setup";
 export { shouldIgnoreDirectory } from "@task/workspace/discovery/ignore";
 export { discoverMarkdown } from "@task/workspace/discovery/scan";
 export { classifyDocument } from "@task/workspace/documents/classify";

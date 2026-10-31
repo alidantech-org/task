@@ -30,3 +30,5 @@ The frontmatter `type` determines whether a record is a task or a document. Engi
 ## Current limits
 
 This resolver currently reads only the `workspace` key from `task.yaml`; wider application configuration and upward repository discovery are not implemented. Explicit paths and symlink-aware checks reduce common mistakes but do not claim race-safe filesystem operations. Browser-facing workspace routes remain disabled until local origin/capability authorization and safe operation-boundary protections are in place.
+
+`task init [--workspace <relative-path>]` bootstraps a project by creating its workspace directory and `task.yaml`. It refuses to overwrite an existing `task.yaml`, and the workspace path must resolve inside the project. It does not rewrite or initialize unrelated project files.

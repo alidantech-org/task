@@ -62,6 +62,8 @@ Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -
 
 Bare `task` opens a terminal menu when attached to a TTY; in non-interactive shells it prints the overview and exits. `task --quiet` suppresses the bare overview. `task --json` returns machine-readable overview data. Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and errors to stderr. Human output uses compact width-aware task tables and grouped validation diagnostics; `--verbose` adds paths and metadata. `--plain` and `--no-color` disable color. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 
+To set up a new local project, run `task init` (or `task init --workspace .tasks`) from its root. Then use `task -f` or `task tui` to open the read-only full-screen browser; it shares the CLI's resolved workspace. See [TUI setup and keys](../../../source/apps/tui/README.md).
+
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 
     bun run dev:local:runtime

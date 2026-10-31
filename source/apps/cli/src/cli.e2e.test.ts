@@ -121,4 +121,49 @@ describe("workspace-connected CLI", () => {
     expect(unsupported.exitCode).toBe(1);
     expect(unsupported.stderr.toString()).toContain("Unknown option: --watch");
   });
+
+  test("init configures a fresh project and supports a custom workspace", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-init-"));
+    const project = join(root, "custom-project");
+    await mkdir(project);
+    const initialized = await Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--workspace", ".tasks", "--json"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(initialized.exitCode).toBe(0);
+    expect(JSON.parse(initialized.stdout.toString()).workspace).toBe(join(project, ".tasks"));
+    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+    const overview = await Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "--json"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(overview.exitCode).toBe(0);
+    expect(JSON.parse(overview.stdout.toString()).workspace).toBe(join(project, ".tasks"));
+    const repeated = await Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(repeated.exitCode).toBe(1);
+    expect(repeated.stderr.toString()).toContain("already exists");
+    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+  });
+
+  test("accepts the project root as an explicit workspace", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-root-workspace-"));
+    const result = await Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "--workspace", ".", "--json"],
+      { cwd: root, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout.toString()).workspace).toBe(root);
+  });
+
+  test("requires a TTY for full-screen mode", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-fullscreen-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const result = await cli(workspace, "-f");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("requires an interactive terminal");
+  });
 });
