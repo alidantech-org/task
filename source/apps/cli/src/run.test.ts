@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveLocalAssets } from "#/run";
+import { resolveLocalAssets, resolveTuiEntry } from "#/run";
 
 describe("local dashboard launcher", () => {
   test("prefers the bundled dashboard and runtime assets for installed packages", async () => {
@@ -27,5 +27,11 @@ describe("local dashboard launcher", () => {
     } finally {
       await rm(packageRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("TUI launcher", () => {
+  test("uses the workspace TUI source in a repository checkout", () => {
+    expect(resolveTuiEntry()).toBe(fileURLToPath(import.meta.resolve("@task/tui")));
   });
 });

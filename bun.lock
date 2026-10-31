@@ -31,7 +31,7 @@
     },
     "source/apps/cli": {
       "name": "taskcode",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "taskcode": "dist/cli.js",
         "task": "dist/cli.js",

@@ -87,7 +87,7 @@ try {
     target: "bun",
     minify: false,
     packages: "bundle",
-    external: ["@opentui/core", "@opentui/react"],
+    external: ["@opentui/core", "@opentui/react", "react"],
   });
   if (!tuiBuild.success) {
     throw new Error(tuiBuild.logs.map((log) => log.message).join("\n"));
