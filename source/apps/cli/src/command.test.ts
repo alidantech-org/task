@@ -27,4 +27,15 @@ describe("CLI command metadata", () => {
     expect(parsed.options.get("tag")).toBe("a,b");
     expect(parsed.options.get("help")).toBe(true);
   });
+
+  test("rejects the unsupported watch option", () => {
+    expect(() => parseArgs(["--watch"])).toThrow("Unknown option: --watch");
+  });
+
+  test("keeps output controls explicit", () => {
+    const parsed = parseArgs(["--plain", "--quiet", "--verbose", "list"]);
+    expect(parsed.options.has("plain")).toBe(true);
+    expect(parsed.options.has("quiet")).toBe(true);
+    expect(parsed.options.has("verbose")).toBe(true);
+  });
 });

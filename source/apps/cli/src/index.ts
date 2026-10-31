@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cancel, intro, isCancel, outro, select, text } from "@clack/prompts";
+import { isCancel, outro, select } from "@clack/prompts";
 import type { DocumentSummary } from "@task/workspace";
 import {
   archiveTaskGroup,
@@ -26,7 +26,6 @@ import {
   validateWorkspace,
   WorkspaceError,
 } from "@task/workspace";
-import pc from "picocolors";
 import type { ParsedArgs } from "#/command";
 import {
   getCliMetadata,
@@ -37,6 +36,17 @@ import {
   taskPriorities,
   taskStatuses,
 } from "#/command";
+import { renderDiagnostics } from "#/output/diagnostics";
+import { renderDocument } from "#/output/documents";
+import { emitError, emitJson, emitLine } from "#/output/emit";
+import { renderMessage } from "#/output/message";
+import { renderOverview } from "#/output/overview";
+import { createStyle } from "#/output/style";
+import { createSymbols } from "#/output/symbols";
+import { renderTaskTable } from "#/output/table";
+import { resolveTerminal } from "#/output/terminal";
+import { isInteractive, promptText as promptTextInput } from "#/prompts/input";
+import { workspaceMenu } from "#/prompts/menu";
 
 const version = "0.1.0";
 let args: ParsedArgs;
@@ -51,44 +61,58 @@ try {
 }
 const metadata = getCliMetadata(version);
 const json = args.options.has("json");
-const plain = args.options.has("plain") || args.options.has("no-color") || !process.stdout.isTTY;
-const color = (value: string, style: (value: string) => string): string =>
-  plain ? value : style(value);
-const line = (value = ""): void => {
-  if (!args.options.has("quiet") || json) console.log(value);
-};
-const errorLine = (value: string): void => console.error(color(value, pc.red));
+const forcedPlain = args.options.has("plain") || args.options.has("no-color");
+const capabilities = resolveTerminal({
+  stdoutTTY: Boolean(process.stdout.isTTY),
+  stderrTTY: Boolean(process.stderr.isTTY),
+  env: {
+    ...process.env,
+    ...(forcedPlain ? { NO_COLOR: "1" } : {}),
+  },
+  stdoutEncoding: process.stdout.isTTY ? "utf-8" : undefined,
+  stderrEncoding: process.stderr.isTTY ? "utf-8" : undefined,
+  platform: process.platform,
+});
+const stdoutStyle = createStyle(capabilities.stdout);
+const stderrStyle = createStyle(capabilities.stderr);
+const stdoutSymbols = createSymbols(capabilities.stdout);
+const stderrSymbols = createSymbols(capabilities.stderr);
+const outputContext = { args, stdoutStyle, stderrStyle, stdoutSymbols, stderrSymbols };
+const line = (value = "", kind: "routine" | "requested" = "routine"): void =>
+  emitLine(outputContext, value, kind);
+const errorLine = (value: string): void => emitError(outputContext, value, false);
 
 function printHelp(): void {
-  line("TASK · Your work, organised.");
-  line("Usage: task [command] [options]");
-  line("");
-  line("Commands:");
-  line("  (no command)           Workspace overview");
-  line("  doctor                 Check Bun and workspace health");
-  line("  info | status | stats  Workspace information and counts");
-  line("  tree                   Show Markdown workspace paths");
-  line("  group create|list      Manage task groups");
-  line("  list [filters]         List active tasks (use --archived for archived)");
-  line("  show <id|path>         Show a task or document");
-  line("  search <query>         Search metadata and Markdown text");
-  line("  create                 Create a task in a group");
-  line("  update <id>            Update task metadata");
-  line("  edit <id>              Edit the Markdown body in $EDITOR");
-  line("  archive <group>        Archive a completed group");
-  line("  restore <group-id>     Restore an archived group");
-  line("  validate [scope]       Validate tasks, docs, links, and references");
-  line("  docs list|show|search|tree|open|create");
-  line("  index status|rebuild|verify");
-  line("");
-  line("Options: --workspace <path> --json --plain --no-color --quiet --verbose --help --version");
-  line(
+  const rows = [
+    "TASK · Your work, organised.",
+    "Usage: task [command] [options]",
+    "",
+    "Commands:",
+    "  (no command)           Workspace overview",
+    "  doctor                 Check Bun and workspace health",
+    "  info | status | stats  Workspace information and counts",
+    "  tree                   Show Markdown workspace paths",
+    "  group create|list      Manage task groups",
+    "  list [filters]         List active tasks (use --archived for archived)",
+    "  show <id|path>         Show a task or document",
+    "  search <query>         Search metadata and Markdown text",
+    "  create                 Create a task in a group",
+    "  update <id>            Update task metadata",
+    "  edit <id>              Edit the Markdown body in $EDITOR",
+    "  archive <group>        Archive a completed group",
+    "  restore <group-id>     Restore an archived group",
+    "  validate [scope]       Validate tasks, docs, links, and references",
+    "  docs list|show|search|tree|open|create",
+    "  index status|rebuild|verify",
+    "",
+    "Options: --workspace <path> --json --plain --no-color --quiet --verbose --help --version",
     "Task fields: --title --group --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
-  );
+  ];
+  for (const row of rows) line(row, "requested");
 }
 
 function output(value: unknown): void {
-  line(JSON.stringify(value, null, 2));
+  emitJson(value);
 }
 
 function record(summary: DocumentSummary): Record<string, unknown> {
@@ -107,12 +131,13 @@ function record(summary: DocumentSummary): Record<string, unknown> {
 }
 
 function printDocument(summary: DocumentSummary): void {
-  line(`${color(summary.metadata.id, pc.cyan)}  ${summary.metadata.name}`);
-  line(
-    `  ${summary.metadata.type}${summary.metadata.status ? ` · ${summary.metadata.status}` : ""}${summary.metadata.priority ? ` · ${summary.metadata.priority}` : ""}`,
-  );
-  line(`  ${summary.path}`);
-  if (summary.metadata.tags.length) line(`  tags: ${summary.metadata.tags.join(", ")}`);
+  for (const rendered of renderDocument(
+    summary,
+    stdoutStyle,
+    stdoutSymbols,
+    args.options.has("verbose"),
+  ))
+    line(rendered, "requested");
 }
 
 function requiredOption(key: string): string {
@@ -145,17 +170,12 @@ function extraOption(): Record<string, unknown> | undefined {
 }
 
 async function promptText(message: string, placeholder?: string): Promise<string> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY)
+  if (!isInteractive())
     throw new WorkspaceError(
       "invalid_input",
       `Non-interactive use requires ${placeholder ? `--${placeholder}` : "explicit arguments"}`,
     );
-  const answer = await text({ message, placeholder });
-  if (isCancel(answer)) {
-    cancel("Cancelled.");
-    process.exit(130);
-  }
-  return answer;
+  return promptTextInput(message, placeholder);
 }
 
 async function editDocumentBody(
@@ -197,30 +217,8 @@ async function main(): Promise<void> {
   const context = { root: selected.root, projectRoot: selected.projectRoot };
   const command = args.command;
 
-  if (
-    !command &&
-    !json &&
-    !args.options.has("quiet") &&
-    process.stdin.isTTY &&
-    process.stdout.isTTY
-  ) {
-    const action = await select({
-      message: `Task · ${selected.root}`,
-      options: [
-        { value: "info", label: "Workspace overview" },
-        { value: "list", label: "List tasks" },
-        { value: "create", label: "Create a task" },
-        { value: "group-create", label: "Create a task group" },
-        { value: "search", label: "Search workspace" },
-        { value: "docs", label: "Browse documents" },
-        { value: "validate", label: "Validate workspace" },
-        { value: "quit", label: "Quit" },
-      ],
-    });
-    if (isCancel(action)) {
-      cancel("Cancelled.");
-      process.exit(130);
-    }
+  if (!command && !json && !args.options.has("quiet") && isInteractive()) {
+    const action = await workspaceMenu(selected.root);
     if (action === "quit") {
       outro("Workspace unchanged.");
       return;
@@ -234,6 +232,7 @@ async function main(): Promise<void> {
       args = { ...args, command: action, positionals: [] };
       if (action === "docs") args.positionals.push("list");
     }
+    outputContext.args = args;
     return main();
   }
 
@@ -254,19 +253,24 @@ async function main(): Promise<void> {
     };
     if (json) output(details);
     else {
-      intro("Task environment check");
-      line(`${compatible ? "✓" : "✗"} Bun ${Bun.version}`);
-      line(`✓ Workspace ${selected.root}`);
       line(
-        `${index.diagnostics.length ? "!" : "✓"} ${index.documents.size} documents · ${index.diagnostics.length} metadata diagnostics`,
+        `${compatible ? stdoutSymbols.success : stdoutSymbols.error} Bun ${Bun.version}`,
+        "requested",
       );
-      outro(compatible ? "Environment check complete." : "Upgrade Bun to 1.3.14 or later.");
+      line(`${stdoutSymbols.success} Workspace ${selected.root}`, "requested");
+      line(
+        `${index.diagnostics.length ? stdoutSymbols.warning : stdoutSymbols.success} ${index.documents.size} documents · ${index.diagnostics.length} metadata diagnostics`,
+        "requested",
+      );
+      if (!args.options.has("quiet"))
+        outro(compatible ? "Environment check complete." : "Upgrade Bun to 1.3.14 or later.");
     }
     if (!compatible || index.diagnostics.length) process.exitCode = 1;
     return;
   }
 
   if (command === "info" || command === "status" || command === "stats" || !command) {
+    if (!command && args.options.has("quiet") && !json) return;
     const index = await readWorkspaceIndex(context);
     const tasks = listTasks(index, { archived: false });
     const groups = await listTaskGroups(context);
@@ -288,16 +292,8 @@ async function main(): Promise<void> {
     };
     if (json) output(overview);
     else {
-      line(`${color("TASK", pc.bold)} · ${selected.root}`);
-      line(
-        `${overview.tasks} active tasks · ${overview.groups} groups · ${overview.documents} documents · ${overview.diagnostics} metadata issues`,
-      );
-      for (const group of groups.filter((item) => !item.archived))
-        line(`  ${group.name}  ${group.completed}/${group.total} complete  (${group.path})`);
-      if (overview.tasks === 0)
-        line(
-          'No tasks yet. Create a group and add a task with: task group create --title "My project"',
-        );
+      for (const row of renderOverview(overview, groups, stdoutStyle, stdoutSymbols))
+        line(row, args.options.has("quiet") ? "routine" : "requested");
     }
     return;
   }
@@ -317,17 +313,26 @@ async function main(): Promise<void> {
       else
         for (const group of groups)
           line(
-            `${group.id}  ${group.archived ? "archived" : "active"}  ${group.completed}/${group.total}  ${group.name}  ${group.path}`,
+            `${stdoutSymbols.group} ${stdoutStyle.accent(group.id)}  ${group.archived ? "archived" : "active"}  ${group.completed}/${group.total} done  ${group.name}  ${stdoutStyle.muted(group.path)}`,
+            "requested",
           );
       return;
     }
     if (action === "create") {
       let name = optionString(args, "title");
-      if (!name && process.stdin.isTTY) name = await promptText("Group name");
+      if (!name && isInteractive()) name = await promptText("Group name", "title");
       if (!name) throw new WorkspaceError("invalid_input", "Provide --title <name>");
       const group = await createTaskGroup(context, name);
       if (json) output(group);
-      else line(`Created ${group.name} (${group.id}) at ${group.path}`);
+      else
+        line(
+          renderMessage(
+            "success",
+            `Created group ${group.name} (${group.id}) · ${group.path}`,
+            stdoutStyle,
+            stdoutSymbols,
+          ),
+        );
       return;
     }
     throw new WorkspaceError("invalid_input", "Use: task group create|list");
@@ -367,7 +372,25 @@ async function main(): Promise<void> {
     });
     if (limit !== undefined) tasks.splice(limit);
     if (json) output(tasks.map(record));
-    else tasks.forEach(printDocument);
+    else {
+      const rows = renderTaskTable(
+        tasks.map((task) => ({
+          id: task.metadata.id,
+          name: task.metadata.name,
+          status: task.metadata.status,
+          priority: task.metadata.priority,
+          assignee: task.metadata.assignee,
+          due: task.metadata.due_at,
+        })),
+        {
+          width: process.stdout.columns ?? 80,
+          symbols: stdoutSymbols,
+          style: stdoutStyle,
+          env: process.env,
+        },
+      );
+      for (const row of rows) line(row, "requested");
+    }
     return;
   }
 
@@ -379,7 +402,9 @@ async function main(): Promise<void> {
     else {
       printDocument(result.summary);
       line("");
-      line(result.body);
+      line(result.body, "requested");
+      if (args.options.has("verbose"))
+        line(`\nMetadata: ${JSON.stringify(result.summary.metadata, null, 2)}`, "requested");
     }
     return;
   }
@@ -405,9 +430,10 @@ async function main(): Promise<void> {
     });
     if (json) output(matches.map(({ summary, snippet }) => ({ ...record(summary), snippet })));
     else
-      matches.forEach(({ summary, snippet }) => {
+      matches.forEach(({ summary, snippet }, index) => {
+        if (index) line("", "requested");
         printDocument(summary);
-        line(`  ${snippet}`);
+        line(`  ${stdoutStyle.muted(snippet)}`, "requested");
       });
     return;
   }
@@ -415,8 +441,8 @@ async function main(): Promise<void> {
   if (command === "create") {
     let title = optionString(args, "title");
     let group = optionString(args, "group");
-    if (!title && process.stdin.isTTY) title = await promptText("Task title");
-    if (!group && process.stdin.isTTY) {
+    if (!title && isInteractive()) title = await promptText("Task title", "title");
+    if (!group && isInteractive()) {
       const groups = (await listTaskGroups(context)).filter((candidate) => !candidate.archived);
       if (groups.length) {
         const chosen = await select({
@@ -424,7 +450,7 @@ async function main(): Promise<void> {
           options: groups.map((candidate) => ({ value: candidate.id, label: candidate.name })),
         });
         if (isCancel(chosen)) {
-          cancel("Cancelled.");
+          emitError(outputContext, "Cancelled", false);
           process.exit(130);
         }
         group = chosen;
@@ -437,7 +463,7 @@ async function main(): Promise<void> {
           ],
         });
         if (isCancel(createGroup) || createGroup === "cancel") {
-          cancel("No task created.");
+          emitError(outputContext, "Cancelled", false);
           process.exit(130);
         }
         const groupName = await promptText("New task group name");
@@ -462,8 +488,15 @@ async function main(): Promise<void> {
     });
     if (json) output(record(task));
     else {
-      line(`Created ${task.metadata.id} · ${task.metadata.name}`);
-      line(`  ${task.path}`);
+      line(
+        renderMessage(
+          "success",
+          `Created ${task.metadata.id} · ${task.metadata.name}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+      );
+      line(`  ${stdoutStyle.muted(task.path)}`);
     }
     return;
   }
@@ -508,8 +541,23 @@ async function main(): Promise<void> {
     });
     if (json) output({ ...record(result.task), archivedGroup: result.archivedGroup });
     else {
-      line(`Updated ${result.task.metadata.id} · ${result.task.metadata.name}`);
-      if (result.archivedGroup) line(`Archived completed group to ${result.archivedGroup.path}`);
+      line(
+        renderMessage(
+          "success",
+          `Updated ${result.task.metadata.id} · ${result.task.metadata.name}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+      );
+      if (result.archivedGroup)
+        line(
+          renderMessage(
+            "success",
+            `Archived completed group · ${result.archivedGroup.path}`,
+            stdoutStyle,
+            stdoutSymbols,
+          ),
+        );
     }
     return;
   }
@@ -522,7 +570,15 @@ async function main(): Promise<void> {
         ? await archiveTaskGroup(context, identifier)
         : await restoreTaskGroup(context, identifier);
     if (json) output(group);
-    else line(`${command === "archive" ? "Archived" : "Restored"} ${group.name} at ${group.path}`);
+    else
+      line(
+        renderMessage(
+          "success",
+          `${command === "archive" ? "Archived" : "Restored"} ${group.name} · ${group.path}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+      );
     return;
   }
 
@@ -540,9 +596,14 @@ async function main(): Promise<void> {
       );
     const diagnostics = await validateWorkspace(context, scope);
     if (json) output({ valid: diagnostics.length === 0, diagnostics });
-    else if (!diagnostics.length) line("Workspace is valid.");
+    else if (!diagnostics.length)
+      line(
+        renderMessage("success", "Workspace is valid.", stdoutStyle, stdoutSymbols),
+        "requested",
+      );
     else
-      for (const diagnostic of diagnostics) errorLine(`${diagnostic.path}: ${diagnostic.message}`);
+      for (const rendered of renderDiagnostics(diagnostics, stderrStyle, stderrSymbols))
+        console.error(rendered);
     if (diagnostics.length) process.exitCode = 1;
     return;
   }
@@ -582,7 +643,15 @@ async function main(): Promise<void> {
         extra: extraOption(),
       });
       if (json) output(record(document));
-      else line(`Created ${document.metadata.id} · ${document.path}`);
+      else
+        line(
+          renderMessage(
+            "success",
+            `Created document ${document.metadata.id} · ${document.path}`,
+            stdoutStyle,
+            stdoutSymbols,
+          ),
+        );
       return;
     }
     throw new WorkspaceError("invalid_input", "Use task docs list|show|search|tree|open|create");
@@ -617,6 +686,7 @@ async function main(): Promise<void> {
           result.valid
             ? "Index and workspace verified."
             : `${diagnostics.length} validation issue(s).`,
+          "requested",
         );
       if (!result.valid) process.exitCode = 1;
       return;
@@ -635,7 +705,12 @@ try {
     console.error(
       JSON.stringify({ error: isWorkspaceError(error) ? error.code : "internal_error", message }),
     );
-  else errorLine(`task: ${message}`);
+  else {
+    const verbose = args.options.has("verbose");
+    errorLine(`task: ${message}`);
+    if (verbose && error instanceof Error && error.stack && !isWorkspaceError(error))
+      console.error(stderrStyle.muted(error.stack));
+  }
   process.exitCode =
     error instanceof WorkspaceError && error.code === "workspace_not_found" ? 2 : 1;
 }

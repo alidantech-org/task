@@ -80,4 +80,45 @@ describe("workspace-connected CLI", () => {
     expect(missing.exitCode).toBe(2);
     expect(missing.stderr.toString()).toContain("No Task workspace found");
   });
+
+  test("quiet mode retains requested results and help while suppressing routine output", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-quiet-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const help = await cli(workspace, "--quiet", "--help");
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout.toString()).toContain("Usage: task");
+    const overview = await cli(workspace, "--quiet");
+    expect(overview.exitCode).toBe(0);
+    expect(overview.stdout.toString()).toBe("");
+    const groupResult = await cli(workspace, "group", "create", "--title", "Quiet group", "--json");
+    const group = JSON.parse(groupResult.stdout.toString());
+    const taskResult = await cli(
+      workspace,
+      "create",
+      "--title",
+      "Visible task",
+      "--group",
+      group.id,
+      "--json",
+    );
+    const task = JSON.parse(taskResult.stdout.toString());
+    const list = await cli(workspace, "--quiet", "list");
+    expect(list.stdout.toString()).toContain("Visible task");
+    const show = await cli(workspace, "--quiet", "show", task.id);
+    expect(show.stdout.toString()).toContain("Visible task");
+  });
+
+  test("JSON output stays on stdout and unsupported watch fails", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-json-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const result = await cli(workspace, "--json", "--quiet");
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout.toString())).toMatchObject({ tasks: 0, groups: 0 });
+    expect(result.stderr.toString()).toBe("");
+    const unsupported = await cli(workspace, "--watch");
+    expect(unsupported.exitCode).toBe(1);
+    expect(unsupported.stderr.toString()).toContain("Unknown option: --watch");
+  });
 });

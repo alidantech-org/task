@@ -63,7 +63,6 @@ const booleanOptions = new Set([
   "help",
   "version",
   "archived",
-  "watch",
 ]);
 const valueOptions = new Set([
   "workspace",
