@@ -14,8 +14,8 @@ import {
   listTasks,
   readWorkspaceDocument,
   resolveWorkspace,
-  restoreTaskGroup,
   restoreTask,
+  restoreTaskGroup,
   searchWorkspace,
   updateTask,
   validateWorkspace,
@@ -162,6 +162,7 @@ describe("task operations", () => {
     });
     expect(completed.task.metadata.extra?.status_history?.[1]?.at).toBeTruthy();
     expect(started.task.metadata.extra?.status_history?.[0]?.at).toBeTruthy();
+    await archiveTaskGroup(context, group.id);
     const restored = await restoreTaskGroup(context, group.id);
     const restoredTask = (await buildWorkspaceIndex(context)).documents.get(
       `${restored.path}/001-track-transitions.md`,

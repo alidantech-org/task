@@ -13,26 +13,31 @@
   ],
   "scripts": {
     "setup": "bun run scripts/setup.ts",
+
     "dev": "bun run dev:stack",
     "dev:stack": "concurrently --kill-others --names API,SITE,LOCAL-RUNTIME,LOCAL-WEB --prefix-colors blue,magenta,green,cyan \"bun run dev:api\" \"bun run dev:site\" \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
-    "dev:cli": "bun run --filter @task/cli dev",
-    "dev:cli:watch": "bun run --filter @task/cli dev:watch",
+    "dev:cli": "bun run --filter tasknode dev",
+    "dev:cli:watch": "bun run --filter tasknode dev:watch",
+
     "cli:link": "bun run scripts/cli-link.ts install",
     "cli:unlink": "bun run scripts/cli-link.ts remove",
     "cli:package": "bun run scripts/package-cli.ts",
-    "cli:publish:check": "bun run validate && bun run cli:package && bun run --filter @task/cli test && bun run --filter @task/workspace test && bun run --filter @task/tui test && bun run scripts/smoke-cli-package.ts && bun run scripts/smoke-cli-install.ts && npm pack --dry-run --ignore-scripts --workspace @task/cli",
+    "cli:publish:check": "bun run validate && bun run cli:package && bun run --filter tasknode test && bun run --filter @task/workspace test && bun run --filter @task/tui test && bun run scripts/smoke-cli-package.ts && bun run scripts/smoke-cli-install.ts && npm pack --dry-run --ignore-scripts --workspace tasknode",
+
     "dev:local": "concurrently -k \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
     "dev:local:runtime": "bun run --filter @task/local dev:runtime",
     "dev:local:web": "bun run --filter @task/local dev:web",
     "dev:site": "bun run --filter @task/site dev",
     "dev:api": "bun run --filter @task/api dev",
     "dev:tui": "bun run --filter @task/tui dev",
+
     "typecheck": "bun run --filter \"@task/*\" typecheck && tsc --noEmit -p scripts/tsconfig.json && bun run check:imports",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "bun run --filter '@task/*' test",
+
     "build": "bun run --filter @task/api build && bun run --filter @task/local build && bun run --filter @task/site build",
     "validate": "bun run format:check && bun run audit && bun run lint && bun run typecheck && bun run test && bun run build && bun run validate:mobile",
     "check": "bun run validate",
@@ -40,6 +45,7 @@
     "test:watch": "bun run --filter '@task/*' test --watch",
     "test:coverage": "bun run --filter \"@task/*\" test --coverage",
     "audit": "bun audit",
+
     "dev:mobile": "bun run scripts/flutter.ts run",
     "mobile:pub:get": "bun run scripts/flutter.ts pub get",
     "mobile:analyze": "bun run scripts/flutter.ts analyze",
@@ -53,5 +59,8 @@
     "typescript": "^7.0.2",
     "@biomejs/biome": "^2.6.4"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "overrides": {
+    "katex": "^0.19.1"
+  }
 }

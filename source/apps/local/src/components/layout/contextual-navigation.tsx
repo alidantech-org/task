@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@task/ui";
 import {
   Activity,
   AlertTriangle,
@@ -14,8 +15,8 @@ import {
   Gauge,
   ListTodo,
   PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
-import { Button } from "@task/ui";
 import type { Dispatch, KeyboardEvent, PointerEvent, SetStateAction } from "react";
 
 type TaskRecord = { id: string; status?: string; due_at?: string };
@@ -32,6 +33,7 @@ type ContextualNavigationProps = {
   taskFilter: string | null;
   sidebarCompact: boolean;
   sidebarVisible: boolean;
+  setSidebarCompact(compact: boolean): void;
   sidebarWidth: number;
   tasks: TaskRecord[];
   setSidebarVisible: Dispatch<SetStateAction<boolean>>;
@@ -67,6 +69,7 @@ export function ContextualNavigation({
   taskFilter,
   sidebarCompact,
   sidebarVisible,
+  setSidebarCompact,
   sidebarWidth,
   tasks,
   setSidebarVisible,
@@ -90,10 +93,9 @@ export function ContextualNavigation({
       data-slot="contextual-sidebar"
       data-compact={sidebarCompact}
       aria-label={`${section} navigation`}
-      className={`relative flex min-h-0 shrink-0 flex-col border-r border-border/60 ${sidebarCompact ? "w-14 bg-background px-1.5" : "bg-card/20 px-3"} transition-[width]`}
+      className={`relative flex h-full min-h-0 shrink-0 flex-col border-r border-border/60 ${sidebarCompact ? "w-14 bg-background px-1.5" : "bg-card/20 px-3"} transition-[width]`}
       style={{
         ...(sidebarVisible && !sidebarCompact ? { width: sidebarWidth } : {}),
-        ...(sidebarCompact ? { borderRightWidth: 0 } : {}),
       }}
     >
       {sidebarVisible && (
@@ -101,7 +103,18 @@ export function ContextualNavigation({
           <div
             className={`flex h-12 shrink-0 items-center border-b border-border/50 ${sidebarCompact ? "justify-center" : "justify-between px-1"}`}
           >
-            {!sidebarCompact && (
+            {sidebarCompact ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+                onClick={() => setSidebarCompact(false)}
+              >
+                <PanelLeftOpen className="size-4" />
+              </Button>
+            ) : (
               <span className="truncate text-xs font-semibold">
                 {section === "Tasks" && taskFilter ? statusNames[taskFilter] : section}
               </span>

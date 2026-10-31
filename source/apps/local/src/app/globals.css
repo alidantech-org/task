@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../../../../packages/ui/src/styles.css";
+@import "@milkdown/crepe/theme/common/style.css";
 @import "@milkdown/crepe/theme/classic.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -90,6 +91,33 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+* {
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 36%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 0.2rem solid transparent;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--muted-foreground) 36%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--muted-foreground) 58%, transparent);
+  background-clip: padding-box;
 }
 
 .task-markdown {

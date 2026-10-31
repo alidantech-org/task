@@ -33,6 +33,7 @@ function imageAsDataUrl(file: File): Promise<string> {
 
 export function MarkdownEditor({ value, onChange, onError, className }: MarkdownEditorProps) {
   const root = useRef<HTMLDivElement>(null);
+  const initialValue = useRef(value);
   const onChangeRef = useRef(onChange);
   const onErrorRef = useRef(onError);
   onChangeRef.current = onChange;
@@ -43,7 +44,7 @@ export function MarkdownEditor({ value, onChange, onError, className }: Markdown
     if (!element) return;
     const editor = new Crepe({
       root: element,
-      defaultValue: value,
+      defaultValue: initialValue.current,
       features: {
         [Crepe.Feature.TopBar]: true,
         [Crepe.Feature.Toolbar]: true,

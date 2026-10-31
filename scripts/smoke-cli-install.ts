@@ -1,18 +1,12 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const temporaryRoot = await mkdtemp(join(tmpdir(), "task-cli-global-install-"));
 const globalPrefix = join(temporaryRoot, "npm-global");
-const packageRoots = [
-  "source/packages/contracts",
-  "source/packages/ui",
-  "source/packages/workspace",
-  "source/apps/tui",
-  "source/apps/cli",
-].map((path) => join(repositoryRoot, path));
+const cliRoot = join(repositoryRoot, "source/apps/cli");
 
 function run(command: string[], cwd = repositoryRoot): string {
   const result = Bun.spawnSync({ cmd: command, cwd, stdout: "pipe", stderr: "pipe" });
@@ -29,24 +23,31 @@ function runCli(taskPath: string, projectRoot: string, args: string[]): string {
 }
 
 try {
-  const tarballs: string[] = [];
-  for (const packageRoot of packageRoots) {
-    const output = run(
-      ["npm", "pack", "--ignore-scripts", "--pack-destination", temporaryRoot, "--json"],
-      packageRoot,
-    );
-    const packed = JSON.parse(output) as Array<{ filename: string }>;
-    const filename = packed[0]?.filename;
-    if (!filename) throw new Error(`npm did not produce a package archive for ${packageRoot}`);
-    tarballs.push(join(temporaryRoot, filename));
-  }
+  const output = run(
+    ["npm", "pack", "--ignore-scripts", "--pack-destination", temporaryRoot, "--json"],
+    cliRoot,
+  );
+  const packed = JSON.parse(output) as Array<{ filename: string }>;
+  const filename = packed[0]?.filename;
+  if (!filename) throw new Error("npm did not produce a package archive for tasknode");
 
   await mkdir(globalPrefix, { recursive: true });
-  run(["npm", "install", "--global", "--prefix", globalPrefix, "--ignore-scripts", ...tarballs]);
+  run([
+    "npm",
+    "install",
+    "--global",
+    "--prefix",
+    globalPrefix,
+    "--ignore-scripts",
+    join(temporaryRoot, filename),
+  ]);
 
   const globalBin = join(globalPrefix, "bin");
   const taskPath = join(globalBin, process.platform === "win32" ? "task.cmd" : "task");
   const tkPath = join(globalBin, process.platform === "win32" ? "tk.cmd" : "tk");
+  const tasknodePath = join(globalBin, process.platform === "win32" ? "tasknode.cmd" : "tasknode");
+  if (!run([tasknodePath, "--version"]).includes("task 0.1.0"))
+    throw new Error("Globally installed tasknode command returned an unexpected version");
   if (!run([taskPath, "--version"]).includes("task 0.1.0"))
     throw new Error("Globally installed task command returned an unexpected version");
   if (!run([tkPath, "--version"]).includes("task 0.1.0"))

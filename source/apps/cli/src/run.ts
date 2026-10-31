@@ -1,6 +1,6 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { createServer } from "node:net";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WorkspaceError } from "@task/workspace";
@@ -257,5 +257,8 @@ export async function runLocalDashboard(
 }
 
 export function resolveTuiEntry(): string {
+  const cliRoot = packageRootFrom(dirname(fileURLToPath(import.meta.url)));
+  const bundledEntry = join(cliRoot, "dist/tui-entry.js");
+  if (existsSync(bundledEntry)) return bundledEntry;
   return fileURLToPath(import.meta.resolve("@task/tui"));
 }

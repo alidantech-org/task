@@ -1,21 +1,25 @@
 "use client";
 
-import Image from "next/image";
+import { Button, Input } from "@task/ui";
 import {
   Check,
   FileText,
   Folder,
   FolderKanban,
+  Laptop,
   LayoutDashboard,
   ListTodo,
+  Moon,
   Pencil,
+  Sun,
   X,
 } from "lucide-react";
-import { Button, Input } from "@task/ui";
+import Image from "next/image";
 import type { Dispatch, SetStateAction } from "react";
 
 type Project = { path: string; addedAt: string; active?: boolean };
 type WorkspaceProject = { projectName: string; projectRoot: string } | null;
+type ThemeChoice = "system" | "light" | "dark";
 type GlobalNavigationProps = {
   section: string;
   selectSection(label: string): void;
@@ -29,6 +33,8 @@ type GlobalNavigationProps = {
   trustProjectPath(path: string): Promise<void>;
   switchProject(path: string): Promise<void>;
   removeProjectTrust(path: string): Promise<void>;
+  theme: ThemeChoice;
+  toggleTheme(): void;
 };
 const globalNavigation = [
   { label: "Overview", icon: LayoutDashboard },
@@ -51,11 +57,13 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     trustProjectPath,
     switchProject,
     removeProjectTrust,
+    theme,
+    toggleTheme,
   } = props;
   return (
     <aside
       data-slot="global-navigation"
-      className="hidden h-svh w-16 shrink-0 flex-col items-center px-2 py-3 md:flex"
+      className="sticky top-2 hidden h-[calc(100svh-1rem)] w-16 shrink-0 flex-col items-center self-start px-2 py-3 md:flex"
     >
       <span aria-label="Task" className="mb-5 grid size-10 place-items-center" role="img">
         <Image src="/task-symbol.svg" alt="" width={36} height={36} priority />
@@ -88,7 +96,25 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
           <Pencil className="size-4" />
         </Button>
       </div>
-      <div className="mt-auto relative" data-slot="project-switcher">
+      <div className="mt-auto mb-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Theme: ${theme}`}
+          title={`Theme: ${theme}`}
+          onClick={toggleTheme}
+          className="size-10"
+        >
+          {theme === "system" ? (
+            <Laptop className="size-4" />
+          ) : theme === "light" ? (
+            <Sun className="size-4" />
+          ) : (
+            <Moon className="size-4" />
+          )}
+        </Button>
+      </div>
+      <div className="relative" data-slot="project-switcher">
         <Button
           variant={projectSwitcherOpen ? "secondary" : "ghost"}
           size="icon"

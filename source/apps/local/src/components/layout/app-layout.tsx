@@ -18,9 +18,8 @@ import {
   AlertTriangle,
   BookOpen,
   Check,
-  ChevronDown,
   ChevronRight,
-  CircleDot,
+  type CircleDot,
   Clock3,
   Command,
   EyeOff,
@@ -28,15 +27,11 @@ import {
   Folder,
   FolderKanban,
   Gauge,
-  Laptop,
   LayoutDashboard,
   ListTodo,
-  Moon,
-  PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   Search,
-  Sun,
   Timer,
   X,
 } from "lucide-react";
@@ -50,11 +45,11 @@ import {
   useState,
 } from "react";
 import { BoardTask, CalendarView, StatusDropZone } from "@/components/calendar";
-import { MarkdownBody } from "@/components/markdown-body";
-import { ShellFrame } from "@/components/layout/shell-frame";
-import { GlobalNavigation } from "@/components/layout/global-navigation";
 import { ContextualNavigation } from "@/components/layout/contextual-navigation";
+import { GlobalNavigation } from "@/components/layout/global-navigation";
 import { PromptBuilder } from "@/components/layout/prompt-builder";
+import { ShellFrame } from "@/components/layout/shell-frame";
+import { MarkdownBody } from "@/components/markdown-body";
 import { dateKey } from "@/lib/calendar";
 import { taskDropUpdate } from "@/lib/drop-mutation";
 import { listDocumentFolders, toggleMarkdownCheckbox } from "@/lib/markdown";
@@ -219,7 +214,7 @@ export function App({
   const [taskFilter, setTaskFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [, setSearching] = useState(false);
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [detail, setDetail] = useState<{
     body: string;
@@ -327,8 +322,6 @@ export function App({
   const visibleDocuments = documentFolder
     ? docs.filter((item) => item.path.startsWith(`${documentFolder}/`))
     : docs;
-  const themeIcons = { system: Laptop, light: Sun, dark: Moon };
-  const ThemeIcon = themeIcons[theme];
 
   useEffect(() => {
     const stored = window.localStorage.getItem("task-theme");
@@ -899,6 +892,7 @@ export function App({
             taskFilter={taskFilter}
             sidebarCompact={sidebarCompact}
             sidebarVisible={sidebarVisible}
+            setSidebarCompact={setSidebarCompact}
             setSidebarVisible={setSidebarVisible}
             sidebarWidth={sidebarWidth}
             tasks={tasks}
@@ -957,140 +951,26 @@ export function App({
           trustProjectPath={trustProjectPath}
           switchProject={switchProject}
           removeProjectTrust={removeProjectTrust}
+          theme={theme}
+          toggleTheme={() => {
+            const next: ThemeChoice =
+              theme === "system" ? "light" : theme === "light" ? "dark" : "system";
+            setTheme(next);
+            window.localStorage.setItem("task-theme", next);
+            applyTheme(next);
+          }}
         />
-        <div className="relative m-2 ml-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background">
+        <div className="relative m-2 ml-0 flex h-[calc(100svh-1rem)] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background">
           {mobileContextDrawer}
-          <header
-            data-slot="main-toolbar"
-            className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-5"
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              aria-label="Open contextual navigation"
-              onClick={() => setMobileNav(true)}
-            >
-              <PanelLeftOpen className="size-4" />
-            </Button>
-            {!sidebarVisible && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden md:inline-flex"
-                aria-label="Show contextual sidebar"
-                title="Show sidebar (Ctrl/Cmd+B)"
-                onClick={() => setSidebarVisible(true)}
-              >
-                <PanelLeftOpen className="size-4" />
-              </Button>
-            )}
-            <h1 className="min-w-0 shrink-0 truncate text-sm font-semibold tracking-tight sm:text-base">
-              {taskFilter
-                ? taskFilter === "due-soon"
-                  ? "Due soon"
-                  : (statusNames[taskFilter] ?? section)
-                : section}
-            </h1>
-            <div className="relative mx-auto hidden w-full max-w-xl lg:block">
-              <InputGroup className="h-10 bg-card">
-                <Search className="size-4 shrink-0" />
-                <InputGroupInput
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && matchingSearch[0])
-                      void selectSearchResult(matchingSearch[0]);
-                  }}
-                  placeholder="Search tasks and documents…"
-                  aria-label="Search workspace"
-                />
-                <kbd className="rounded-lg border bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  ⌘ K
-                </kbd>
-                {query && (
-                  <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
-                    <X className="size-4" />
-                  </button>
-                )}
-              </InputGroup>
-              {query.trim() && (
-                <div className="absolute top-12 z-40 max-h-96 w-full overflow-y-auto rounded-2xl border bg-popover p-1.5">
-                  {searching ? (
-                    <p className="p-3 text-sm text-muted-foreground">Searching workspace…</p>
-                  ) : matchingSearch.length ? (
-                    matchingSearch.map((result) => (
-                      <button
-                        type="button"
-                        key={result.path}
-                        onClick={() => void selectSearchResult(result)}
-                        className="flex w-full items-start gap-3 rounded-xl p-3 text-left hover:bg-accent"
-                      >
-                        <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{result.name}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {result.id} · {result.path}
-                          </span>
-                          <span className="mt-1 block line-clamp-2 text-xs text-muted-foreground">
-                            {result.snippet}
-                          </span>
-                        </span>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="p-3 text-sm text-muted-foreground">
-                      No matching records in this workspace.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="max-w-36 justify-start truncate px-2 md:hidden"
-                aria-label="Switch project"
-                onClick={() => setMobileProjectOpen(true)}
-              >
-                <FolderKanban className="size-4 shrink-0" />
-                <span className="truncate">{workspace?.projectName ?? "Project"}</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                aria-label="Search workspace"
-                onClick={() => setPaletteOpen(true)}
-              >
-                <Search className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label={`Theme: ${theme}`}
-                title={`Theme: ${theme}`}
-                onClick={() => {
-                  const next: ThemeChoice =
-                    theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-                  setTheme(next);
-                  window.localStorage.setItem("task-theme", next);
-                  applyTheme(next);
-                }}
-              >
-                <ThemeIcon className="size-4" />
-              </Button>
-            </div>
-          </header>
           <div className="flex min-h-0 flex-1">
             {sidebarVisible && (
-              <div className="hidden md:flex">
+              <div className="hidden min-h-0 md:flex">
                 <ContextualNavigation
                   section={section}
                   taskFilter={taskFilter}
                   sidebarCompact={sidebarCompact}
                   sidebarVisible={sidebarVisible}
+                  setSidebarCompact={setSidebarCompact}
                   setSidebarVisible={setSidebarVisible}
                   sidebarWidth={sidebarWidth}
                   tasks={tasks}
@@ -1113,1036 +993,1123 @@ export function App({
             )}
             <main
               data-slot="main-content"
-              className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-16 md:pb-0"
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
-              {connectionStatus === "offline" && (
-                <div
-                  role="alert"
-                  className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm sm:mx-7 xl:mx-10"
-                >
-                  <p className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
-                    <AlertTriangle className="size-4 shrink-0" />
-                    Local runtime connection failed. Workspace changes may be unavailable.
-                  </p>
-                  <Button size="sm" variant="outline" onClick={() => void refresh()}>
-                    Retry connection
+              <header
+                data-slot="main-toolbar"
+                className="z-30 h-12 shrink-0 border-b border-border/20 bg-background/75 backdrop-blur-md dark:border-white/5"
+              >
+                <div className="mx-auto flex h-12 w-full max-w-[1600px] items-center gap-2 px-4 sm:gap-3 sm:px-7 xl:px-10">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    aria-label="Open contextual navigation"
+                    onClick={() => setMobileNav(true)}
+                  >
+                    <PanelLeftOpen className="size-4" />
                   </Button>
+                  {!sidebarVisible && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden md:inline-flex"
+                      aria-label="Show contextual sidebar"
+                      title="Show sidebar (Ctrl/Cmd+B)"
+                      onClick={() => setSidebarVisible(true)}
+                    >
+                      <PanelLeftOpen className="size-4" />
+                    </Button>
+                  )}
+                  <nav
+                    aria-label="Breadcrumb"
+                    className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                  >
+                    <ol className="flex min-w-0 items-center gap-1.5">
+                      <li className="shrink-0">Workspace</li>
+                      <li aria-hidden="true">
+                        <ChevronRight className="size-3" />
+                      </li>
+                      <li className="truncate font-medium text-foreground">{section}</li>
+                      {taskFilter && (
+                        <>
+                          <li aria-hidden="true">
+                            <ChevronRight className="size-3" />
+                          </li>
+                          <li className="truncate">
+                            {taskFilter === "due-soon"
+                              ? "Due soon"
+                              : (statusNames[taskFilter] ?? taskFilter)}
+                          </li>
+                        </>
+                      )}
+                    </ol>
+                  </nav>
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="max-w-36 justify-start truncate px-2 md:hidden"
+                      aria-label="Switch project"
+                      onClick={() => setMobileProjectOpen(true)}
+                    >
+                      <FolderKanban className="size-4 shrink-0" />
+                      <span className="truncate">{workspace?.projectName ?? "Project"}</span>
+                    </Button>
+                    <button
+                      type="button"
+                      aria-label="Create task"
+                      title="Create task"
+                      onClick={() => openCreate()}
+                      className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Search workspace"
+                      title="Search workspace"
+                      onClick={() => setPaletteOpen(true)}
+                      className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    >
+                      <Search className="size-4" />
+                    </button>
+                  </div>
                 </div>
-              )}
-              <section className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-7 sm:py-8 xl:px-10">
-                <div
-                  className={`grid gap-5 ${selected && !(section === "Documents" && selected.type !== "task") ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
+              </header>
+              <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-16 md:pb-0">
+                {connectionStatus === "offline" && (
+                  <div
+                    role="alert"
+                    className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm sm:mx-7 xl:mx-10"
+                  >
+                    <p className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      Local runtime connection failed. Workspace changes may be unavailable.
+                    </p>
+                    <Button size="sm" variant="outline" onClick={() => void refresh()}>
+                      Retry connection
+                    </Button>
+                  </div>
+                )}
+                <section
+                  className={`mx-auto w-full max-w-[1600px] px-4 xl:px-10 ${section === "Documents" && selected !== null && selected.type !== "task" ? "py-2 sm:px-7 sm:py-3" : "py-6 sm:px-7 sm:py-8"}`}
                 >
-                  <div className="min-w-0">
-                    {section === "Overview" && (
-                      <>
-                        <div className="flex flex-wrap items-end justify-between gap-4">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Workspace overview</p>
-                            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                              {workspace?.projectName ?? "Your workspace"}
-                            </h1>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {workspace?.workspaceDirectory ??
-                                "Local project activity and task progress"}
-                            </p>
+                  <div
+                    className={`grid gap-5 ${selected && !(section === "Documents" && selected.type !== "task") ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
+                  >
+                    <div className="min-w-0">
+                      {section === "Overview" && (
+                        <>
+                          <div className="flex flex-wrap items-end justify-between gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Workspace overview</p>
+                              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                                {workspace?.projectName ?? "Your workspace"}
+                              </h1>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {workspace?.workspaceDirectory ??
+                                  "Local project activity and task progress"}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge variant="outline" className="h-10 rounded-xl px-3">
+                                <Clock3 className="size-4" /> This week
+                              </Badge>
+                            </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <Badge variant="outline" className="h-10 rounded-xl px-3">
-                              <Clock3 className="size-4" /> This week
-                            </Badge>
-                          </div>
-                        </div>
-                        {!workspace && connectionStatus !== "offline" && (
-                          <Card className="mt-5 border-dashed">
-                            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
-                              <div>
-                                <p className="font-medium">
-                                  {workspaceError
-                                    ? "Could not load this project"
-                                    : "Loading project workspace…"}
-                                </p>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                  {workspaceError ?? "Connecting to the selected local project."}
-                                </p>
-                              </div>
-                              <Button variant="outline" onClick={() => void refresh()}>
-                                Refresh workspace
-                              </Button>
-                            </CardContent>
-                          </Card>
-                        )}
-                        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                          <Metric
-                            label="Completed this week"
-                            value={completedThisWeek}
-                            icon={Check}
-                          />
-                          <Metric
-                            label="Active tasks"
-                            value={workspace?.overview.inProgress ?? "—"}
-                            icon={Timer}
-                          />
-                          <Metric label="Upcoming" value={upcomingCount} icon={Clock3} />
-                          <Metric
-                            label="Blocked"
-                            value={workspace?.overview.blocked ?? "—"}
-                            icon={AlertTriangle}
-                          />
-                        </div>
-                        <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,.85fr)]">
-                          <div className="space-y-5">
-                            <Card>
-                              <CardHeader className="flex-row items-center justify-between">
+                          {!workspace && connectionStatus !== "offline" && (
+                            <Card className="mt-5 border-dashed">
+                              <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
                                 <div>
-                                  <CardTitle>Tasks completed</CardTitle>
+                                  <p className="font-medium">
+                                    {workspaceError
+                                      ? "Could not load this project"
+                                      : "Loading project workspace…"}
+                                  </p>
                                   <p className="mt-1 text-sm text-muted-foreground">
-                                    Daily completions · this week
+                                    {workspaceError ?? "Connecting to the selected local project."}
                                   </p>
                                 </div>
-                                <Badge variant="secondary">{completedThisWeek} total</Badge>
-                              </CardHeader>
-                              <CardContent>
-                                <div
-                                  role="img"
-                                  aria-label={`Tasks completed each day this week: ${completionByDay.map((day) => `${day.date} ${day.count}`).join(", ")}`}
-                                  className="relative grid h-52 grid-cols-7 items-end gap-3 border-b px-2 pt-4 sm:gap-5"
-                                >
-                                  {completedThisWeek === 0 && (
-                                    <span className="pointer-events-none absolute inset-x-0 top-12 text-center text-xs text-muted-foreground">
-                                      No completions recorded this week yet.
-                                    </span>
-                                  )}
-                                  {completionByDay.map((day) => {
-                                    const date = new Date(`${day.date}T12:00:00`);
-                                    const height =
-                                      day.count === 0
-                                        ? 3
-                                        : Math.max(12, (day.count / maxCompletion) * 160);
-                                    return (
-                                      <div
-                                        key={day.date}
-                                        className="flex h-full min-w-0 flex-col items-center"
-                                      >
-                                        <span className="mb-2 text-xs font-medium tabular-nums">
-                                          {day.count}
-                                        </span>
-                                        <div className="mt-auto flex h-40 w-full items-end">
-                                          <div
-                                            className={`w-full rounded-t-lg ${day.count > 0 ? "bg-primary/75" : "bg-muted"}`}
-                                            style={{ height: `${height}px` }}
-                                          />
-                                        </div>
-                                        <span className="py-2 text-[10px] text-muted-foreground sm:text-xs">
-                                          {new Intl.DateTimeFormat(undefined, {
-                                            weekday: "short",
-                                          }).format(date)}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <p className="mt-3 text-xs text-muted-foreground">
-                                  History is recorded from status changes made after tracking was
-                                  enabled.
-                                </p>
+                                <Button variant="outline" onClick={() => void refresh()}>
+                                  Refresh workspace
+                                </Button>
                               </CardContent>
                             </Card>
-                            <Card>
-                              <CardHeader className="flex-row items-center justify-between">
-                                <CardTitle>Recent workspace changes</CardTitle>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => selectSection("Activity")}
-                                >
-                                  View activity
-                                </Button>
-                              </CardHeader>
-                              <CardContent className="divide-y">
-                                {workspace?.overview.recent.slice(0, 5).map((item) => (
-                                  <button
-                                    type="button"
-                                    key={item.path}
-                                    onClick={() => setSelected(item)}
-                                    className="flex w-full items-center gap-3 py-3 text-left"
+                          )}
+                          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <Metric
+                              label="Completed this week"
+                              value={completedThisWeek}
+                              icon={Check}
+                            />
+                            <Metric
+                              label="Active tasks"
+                              value={workspace?.overview.inProgress ?? "—"}
+                              icon={Timer}
+                            />
+                            <Metric label="Upcoming" value={upcomingCount} icon={Clock3} />
+                            <Metric
+                              label="Blocked"
+                              value={workspace?.overview.blocked ?? "—"}
+                              icon={AlertTriangle}
+                            />
+                          </div>
+                          <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,.85fr)]">
+                            <div className="space-y-5">
+                              <Card>
+                                <CardHeader className="flex-row items-center justify-between">
+                                  <div>
+                                    <CardTitle>Tasks completed</CardTitle>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      Daily completions · this week
+                                    </p>
+                                  </div>
+                                  <Badge variant="secondary">{completedThisWeek} total</Badge>
+                                </CardHeader>
+                                <CardContent>
+                                  <div
+                                    role="img"
+                                    aria-label={`Tasks completed each day this week: ${completionByDay.map((day) => `${day.date} ${day.count}`).join(", ")}`}
+                                    className="relative grid h-52 grid-cols-7 items-end gap-3 border-b px-2 pt-4 sm:gap-5"
                                   >
-                                    <FileText className="size-4 text-muted-foreground" />
-                                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                                      {item.name}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {formatDate(item.updated_at)}
-                                    </span>
-                                  </button>
-                                ))}
-                                {workspace?.overview.recent.length === 0 && (
-                                  <p className="py-4 text-sm text-muted-foreground">
-                                    No workspace changes yet.
+                                    {completedThisWeek === 0 && (
+                                      <span className="pointer-events-none absolute inset-x-0 top-12 text-center text-xs text-muted-foreground">
+                                        No completions recorded this week yet.
+                                      </span>
+                                    )}
+                                    {completionByDay.map((day) => {
+                                      const date = new Date(`${day.date}T12:00:00`);
+                                      const height =
+                                        day.count === 0
+                                          ? 3
+                                          : Math.max(12, (day.count / maxCompletion) * 160);
+                                      return (
+                                        <div
+                                          key={day.date}
+                                          className="flex h-full min-w-0 flex-col items-center"
+                                        >
+                                          <span className="mb-2 text-xs font-medium tabular-nums">
+                                            {day.count}
+                                          </span>
+                                          <div className="mt-auto flex h-40 w-full items-end">
+                                            <div
+                                              className={`w-full rounded-t-lg ${day.count > 0 ? "bg-primary/75" : "bg-muted"}`}
+                                              style={{ height: `${height}px` }}
+                                            />
+                                          </div>
+                                          <span className="py-2 text-[10px] text-muted-foreground sm:text-xs">
+                                            {new Intl.DateTimeFormat(undefined, {
+                                              weekday: "short",
+                                            }).format(date)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="mt-3 text-xs text-muted-foreground">
+                                    History is recorded from status changes made after tracking was
+                                    enabled.
                                   </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                            <Card>
-                              <CardHeader className="flex-row items-center justify-between">
-                                <div>
-                                  <CardTitle>Task groups</CardTitle>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    Your workspace organization
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => selectSection("Groups")}
-                                >
-                                  View all
-                                </Button>
-                              </CardHeader>
-                              <CardContent className="divide-y">
-                                {workspace?.groups
-                                  .filter((item) => !item.archived && !item.finished)
-                                  .slice(0, 4)
-                                  .map((item) => (
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader className="flex-row items-center justify-between">
+                                  <CardTitle>Recent workspace changes</CardTitle>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => selectSection("Activity")}
+                                  >
+                                    View activity
+                                  </Button>
+                                </CardHeader>
+                                <CardContent className="divide-y">
+                                  {workspace?.overview.recent.slice(0, 5).map((item) => (
                                     <button
                                       type="button"
-                                      key={item.id}
-                                      onClick={() => selectSection("Groups")}
+                                      key={item.path}
+                                      onClick={() => setSelected(item)}
                                       className="flex w-full items-center gap-3 py-3 text-left"
                                     >
-                                      <FolderKanban className="size-4 text-muted-foreground" />
+                                      <FileText className="size-4 text-muted-foreground" />
                                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
                                         {item.name}
                                       </span>
                                       <span className="text-xs text-muted-foreground">
-                                        {item.completed}/{item.total} complete
+                                        {formatDate(item.updated_at)}
                                       </span>
                                     </button>
                                   ))}
-                                {workspace?.groups.filter(
-                                  (item) => !item.archived && !item.finished,
-                                ).length === 0 && (
-                                  <p className="py-4 text-sm text-muted-foreground">
-                                    Create a task to start your first group.
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                          </div>
-                          <div className="space-y-5">
-                            <Card>
-                              <CardHeader className="flex-row items-center justify-between">
-                                <div>
-                                  <CardTitle>Recently completed</CardTitle>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    Latest {completedLimit} completed tasks
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <label className="sr-only" htmlFor="completed-limit">
-                                    Number of recent completed tasks
-                                  </label>
-                                  <select
-                                    id="completed-limit"
-                                    value={completedLimit}
-                                    onChange={(event) =>
-                                      setCompletedLimit(Number(event.target.value))
-                                    }
-                                    className="h-8 rounded-md border bg-background px-2 text-xs"
-                                  >
-                                    {[5, 10, 20].map((count) => (
-                                      <option key={count} value={count}>
-                                        Latest {count}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  {workspace?.overview.recent.length === 0 && (
+                                    <p className="py-4 text-sm text-muted-foreground">
+                                      No workspace changes yet.
+                                    </p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader className="flex-row items-center justify-between">
+                                  <div>
+                                    <CardTitle>Task groups</CardTitle>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      Your workspace organization
+                                    </p>
+                                  </div>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => selectSavedView("completed")}
+                                    onClick={() => selectSection("Groups")}
                                   >
                                     View all
                                   </Button>
-                                </div>
-                              </CardHeader>
-                              <CardContent className="divide-y">
-                                {recentCompletedTasks.map((task) => {
-                                  const completionEvent = [...(task.extra?.status_history ?? [])]
-                                    .reverse()
-                                    .find((change) => change.to === "completed");
-                                  return (
-                                    <div key={task.path} className="flex items-center gap-2 py-2">
+                                </CardHeader>
+                                <CardContent className="divide-y">
+                                  {workspace?.groups
+                                    .filter((item) => !item.archived && !item.finished)
+                                    .slice(0, 4)
+                                    .map((item) => (
                                       <button
                                         type="button"
-                                        onClick={() => setSelected(task)}
-                                        className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
+                                        key={item.id}
+                                        onClick={() => selectSection("Groups")}
+                                        className="flex w-full items-center gap-3 py-3 text-left"
                                       >
-                                        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
-                                          <Check className="size-3.5" />
+                                        <FolderKanban className="size-4 text-muted-foreground" />
+                                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                                          {item.name}
                                         </span>
-                                        <span className="min-w-0 flex-1">
-                                          <span className="block truncate text-sm font-medium">
-                                            {task.name}
-                                          </span>
-                                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                            {task.id} · Completed
-                                          </span>
-                                        </span>
-                                        <span className="shrink-0 text-xs text-muted-foreground">
-                                          {formatDate(completionEvent?.at ?? task.updated_at)}
+                                        <span className="text-xs text-muted-foreground">
+                                          {item.completed}/{item.total} complete
                                         </span>
                                       </button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="size-8 shrink-0"
-                                        aria-label={`Hide ${task.name} from recent completed tasks`}
-                                        title="Hide from recent completions"
-                                        onClick={() => void setCompletedHidden(task, true)}
-                                      >
-                                        <EyeOff className="size-4" />
-                                      </Button>
-                                    </div>
-                                  );
-                                })}
-                                {recentCompletedTasks.length === 0 && (
-                                  <p className="py-4 text-sm text-muted-foreground">
-                                    No visible tasks in this recent completion window.
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                            <Card>
-                              <CardHeader className="flex-row items-center justify-between">
-                                <div>
-                                  <CardTitle>Archived</CardTitle>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    Archived separately from completed work
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => selectSavedView("archived")}
-                                >
-                                  View all
-                                </Button>
-                              </CardHeader>
-                              <CardContent className="divide-y">
-                                {archivedTasks.slice(0, 5).map((task) => (
-                                  <button
-                                    type="button"
-                                    key={task.path}
-                                    onClick={() => setSelected(task)}
-                                    className="flex w-full items-center gap-3 py-3 text-left"
+                                    ))}
+                                  {workspace?.groups.filter(
+                                    (item) => !item.archived && !item.finished,
+                                  ).length === 0 && (
+                                    <p className="py-4 text-sm text-muted-foreground">
+                                      Create a task to start your first group.
+                                    </p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </div>
+                            <div className="space-y-5">
+                              <Card>
+                                <CardHeader className="flex-row items-center justify-between">
+                                  <div>
+                                    <CardTitle>Recently completed</CardTitle>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      Latest {completedLimit} completed tasks
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <label className="sr-only" htmlFor="completed-limit">
+                                      Number of recent completed tasks
+                                    </label>
+                                    <select
+                                      id="completed-limit"
+                                      value={completedLimit}
+                                      onChange={(event) =>
+                                        setCompletedLimit(Number(event.target.value))
+                                      }
+                                      className="h-8 rounded-md border bg-background px-2 text-xs"
+                                    >
+                                      {[5, 10, 20].map((count) => (
+                                        <option key={count} value={count}>
+                                          Latest {count}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => selectSavedView("completed")}
+                                    >
+                                      View all
+                                    </Button>
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="divide-y">
+                                  {recentCompletedTasks.map((task) => {
+                                    const completionEvent = [...(task.extra?.status_history ?? [])]
+                                      .reverse()
+                                      .find((change) => change.to === "completed");
+                                    return (
+                                      <div key={task.path} className="flex items-center gap-2 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelected(task)}
+                                          className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
+                                        >
+                                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
+                                            <Check className="size-3.5" />
+                                          </span>
+                                          <span className="min-w-0 flex-1">
+                                            <span className="block truncate text-sm font-medium">
+                                              {task.name}
+                                            </span>
+                                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                              {task.id} · Completed
+                                            </span>
+                                          </span>
+                                          <span className="shrink-0 text-xs text-muted-foreground">
+                                            {formatDate(completionEvent?.at ?? task.updated_at)}
+                                          </span>
+                                        </button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="size-8 shrink-0"
+                                          aria-label={`Hide ${task.name} from recent completed tasks`}
+                                          title="Hide from recent completions"
+                                          onClick={() => void setCompletedHidden(task, true)}
+                                        >
+                                          <EyeOff className="size-4" />
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
+                                  {recentCompletedTasks.length === 0 && (
+                                    <p className="py-4 text-sm text-muted-foreground">
+                                      No visible tasks in this recent completion window.
+                                    </p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader className="flex-row items-center justify-between">
+                                  <div>
+                                    <CardTitle>Archived</CardTitle>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      Archived separately from completed work
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => selectSavedView("archived")}
                                   >
-                                    <Folder className="size-4 shrink-0 text-muted-foreground" />
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-sm font-medium">
-                                        {task.name}
-                                      </span>
-                                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                        {task.id} · Archived
-                                      </span>
-                                    </span>
-                                    <span className="shrink-0 text-xs text-muted-foreground">
-                                      {formatDate(task.archived_at)}
-                                    </span>
-                                  </button>
-                                ))}
-                                {archivedTasks.length === 0 && (
-                                  <p className="py-4 text-sm text-muted-foreground">
-                                    Archived tasks will appear here.
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                            <Card>
-                              <CardHeader>
-                                <CardTitle>Upcoming tasks</CardTitle>
-                              </CardHeader>
-                              <CardContent className="divide-y">
-                                {tasks
-                                  .filter((task) => task.due_at && task.status !== "completed")
-                                  .sort((left, right) =>
-                                    (left.due_at ?? "").localeCompare(right.due_at ?? ""),
-                                  )
-                                  .slice(0, 5)
-                                  .map((task) => (
+                                    View all
+                                  </Button>
+                                </CardHeader>
+                                <CardContent className="divide-y">
+                                  {archivedTasks.slice(0, 5).map((task) => (
                                     <button
                                       type="button"
-                                      key={task.id}
+                                      key={task.path}
                                       onClick={() => setSelected(task)}
-                                      className="flex w-full items-start gap-3 py-3 text-left"
+                                      className="flex w-full items-center gap-3 py-3 text-left"
                                     >
-                                      <span className="mt-1.5 size-2 rounded-full bg-primary/70" />
+                                      <Folder className="size-4 shrink-0 text-muted-foreground" />
                                       <span className="min-w-0 flex-1">
                                         <span className="block truncate text-sm font-medium">
                                           {task.name}
                                         </span>
-                                        <span className="mt-1 block text-xs text-muted-foreground">
-                                          {task.id}
+                                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                          {task.id} · Archived
                                         </span>
                                       </span>
                                       <span className="shrink-0 text-xs text-muted-foreground">
-                                        {formatDate(task.due_at)}
+                                        {formatDate(task.archived_at)}
                                       </span>
                                     </button>
                                   ))}
-                                {tasks.filter((task) => task.due_at && task.status !== "completed")
-                                  .length === 0 && (
-                                  <p className="py-4 text-sm text-muted-foreground">
-                                    No scheduled tasks coming up.
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                            <Card>
-                              <CardHeader>
-                                <CardTitle>Workspace health</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-muted-foreground">Runtime</span>
-                                  <Badge
-                                    variant={
-                                      connectionStatus === "connected" ? "success" : "warning"
-                                    }
-                                  >
-                                    {connectionStatus}
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-muted-foreground">Validation issues</span>
-                                  <span className="font-medium">
-                                    {workspace?.overview.diagnostics ?? "—"}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-muted-foreground">Documents</span>
-                                  <span className="font-medium">
-                                    {workspace?.overview.documents ?? "—"}
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  className="w-full"
-                                  onClick={() => void validate()}
-                                >
-                                  Run validation
-                                </Button>
-                              </CardContent>
-                            </Card>
-                            <Card>
-                              <CardHeader>
-                                <CardTitle>Quick actions</CardTitle>
-                                <p className="text-sm text-muted-foreground">
-                                  Workspace shortcuts.
-                                </p>
-                              </CardHeader>
-                              <CardContent className="grid gap-2">
-                                <Button
-                                  variant="ghost"
-                                  className="justify-start"
-                                  onClick={() => selectSection("Documents")}
-                                >
-                                  <BookOpen className="size-4" />
-                                  Browse documents
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  className="justify-start"
-                                  onClick={() => void refresh()}
-                                >
-                                  <Activity className="size-4" />
-                                  Refresh workspace index
-                                </Button>
-                              </CardContent>
-                            </Card>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {section === "Tasks" && (
-                      <>
-                        <div className="flex flex-wrap items-end justify-between gap-3">
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              Plan, prioritize, and keep work moving.
-                            </p>
-                            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                              {section}
-                            </h1>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant={taskView === "List" ? "secondary" : "ghost"}
-                              size="sm"
-                              onClick={() => setTaskView("List")}
-                            >
-                              List
-                            </Button>
-                            <Button
-                              variant={taskView === "Board" ? "secondary" : "ghost"}
-                              size="sm"
-                              onClick={() => setTaskView("Board")}
-                            >
-                              Board
-                            </Button>
-                            <Button
-                              variant={taskView === "Calendar" ? "secondary" : "ghost"}
-                              size="sm"
-                              onClick={() => setTaskView("Calendar")}
-                            >
-                              Calendar
-                            </Button>
-                          </div>
-                        </div>
-                        {taskView === "Board" ? (
-                          <div className="mt-5 grid gap-3 xl:grid-cols-4">
-                            {statuses.map((status) => (
-                              <Card key={status} className="min-w-0 bg-muted/25">
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="flex items-center justify-between text-sm">
-                                    {statusNames[status]}
-                                    <Badge variant="secondary">
-                                      {boardTasks.filter((task) => task.status === status).length}
-                                    </Badge>
-                                  </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                  <StatusDropZone status={status}>
-                                    {boardTasks
-                                      .filter((task) => task.status === status)
-                                      .map((task) => (
-                                        <div
-                                          key={task.id}
-                                          className="border-b border-border/70 px-3 py-3 last:border-b-0 hover:bg-accent/30"
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() => setSelected(task)}
-                                            className="w-full text-left"
-                                          >
-                                            <p className="text-sm font-medium">{task.name}</p>
-                                            <p className="mt-2 text-[11px] text-muted-foreground">
-                                              {task.id}
-                                              {isArchivedTask(task) ? " · Archived" : ""}
-                                            </p>
-                                          </button>
-                                          {!isArchivedTask(task) &&
-                                            !task.path.startsWith("todo/_completed/") && (
-                                              <div className="mt-2">
-                                                <BoardTask
-                                                  task={task}
-                                                  onSelect={() => setSelected(task)}
-                                                />
-                                              </div>
-                                            )}
-                                        </div>
-                                      ))}
-                                  </StatusDropZone>
+                                  {archivedTasks.length === 0 && (
+                                    <p className="py-4 text-sm text-muted-foreground">
+                                      Archived tasks will appear here.
+                                    </p>
+                                  )}
                                 </CardContent>
                               </Card>
-                            ))}
-                          </div>
-                        ) : taskView === "Calendar" ? (
-                          <CalendarView
-                            tasks={
-                              taskFilter === "archived" || taskFilter === "completed"
-                                ? []
-                                : visibleTasks.filter(
-                                    (task) => task.status !== "completed" && !isArchivedTask(task),
-                                  )
-                            }
-                            recentCompleted={recentCompletedTasks.map((task) => ({
-                              id: task.id,
-                              name: task.name,
-                              status: task.status,
-                              archived: false,
-                            }))}
-                            onCreate={openCreate}
-                            onSelect={(task) =>
-                              setSelected(records.find((item) => item.id === task.id) ?? null)
-                            }
-                          />
-                        ) : (
-                          <div className="mt-5 overflow-hidden border-y border-border/70">
-                            {visibleTasks.map((item) => (
-                              <button
-                                type="button"
-                                key={item.path}
-                                onClick={() => setSelected(item)}
-                                className="flex w-full items-center gap-3 border-b p-3.5 text-left last:border-0 hover:bg-accent/50"
-                              >
-                                <span className="grid size-5 place-items-center rounded-full border">
-                                  <span
-                                    className={`size-2 rounded-full ${item.status === "completed" ? "bg-emerald-500" : ""}`}
-                                  />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium">
-                                    {item.name}
-                                  </span>
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {item.id} · {item.path}
-                                  </span>
-                                </span>
-                                <Badge variant={statusVariant(item.status)}>
-                                  {statusNames[item.status ?? ""] ?? item.status ?? "Planned"}
-                                </Badge>
-                                <span className="hidden w-24 text-right text-xs text-muted-foreground sm:block">
-                                  {formatDate(item.due_at)}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {section === "Documents" && (
-                      <div className="mt-2 grid min-h-[calc(100svh-9rem)] grid-cols-1 gap-0">
-                        <div className="min-w-0">
-                          {selected && selected.type !== "task" ? (
-                            <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-8 sm:py-7">
-                              <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-4">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelected(null);
-                                    setEditingDocument(false);
-                                  }}
-                                >
-                                  <ChevronRight className="size-4 rotate-180" />
-                                  Documents
-                                </Button>
-                                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                                  {selected.path}
-                                </span>
-                                {detail && !editingDocument && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Upcoming tasks</CardTitle>
+                                </CardHeader>
+                                <CardContent className="divide-y">
+                                  {tasks
+                                    .filter((task) => task.due_at && task.status !== "completed")
+                                    .sort((left, right) =>
+                                      (left.due_at ?? "").localeCompare(right.due_at ?? ""),
+                                    )
+                                    .slice(0, 5)
+                                    .map((task) => (
+                                      <button
+                                        type="button"
+                                        key={task.id}
+                                        onClick={() => setSelected(task)}
+                                        className="flex w-full items-start gap-3 py-3 text-left"
+                                      >
+                                        <span className="mt-1.5 size-2 rounded-full bg-primary/70" />
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block truncate text-sm font-medium">
+                                            {task.name}
+                                          </span>
+                                          <span className="mt-1 block text-xs text-muted-foreground">
+                                            {task.id}
+                                          </span>
+                                        </span>
+                                        <span className="shrink-0 text-xs text-muted-foreground">
+                                          {formatDate(task.due_at)}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  {tasks.filter(
+                                    (task) => task.due_at && task.status !== "completed",
+                                  ).length === 0 && (
+                                    <p className="py-4 text-sm text-muted-foreground">
+                                      No scheduled tasks coming up.
+                                    </p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Workspace health</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Runtime</span>
+                                    <Badge
+                                      variant={
+                                        connectionStatus === "connected" ? "success" : "warning"
+                                      }
+                                    >
+                                      {connectionStatus}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Validation issues</span>
+                                    <span className="font-medium">
+                                      {workspace?.overview.diagnostics ?? "—"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Documents</span>
+                                    <span className="font-medium">
+                                      {workspace?.overview.documents ?? "—"}
+                                    </span>
+                                  </div>
                                   <Button
                                     variant="outline"
+                                    className="w-full"
+                                    onClick={() => void validate()}
+                                  >
+                                    Run validation
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Quick actions</CardTitle>
+                                  <p className="text-sm text-muted-foreground">
+                                    Workspace shortcuts.
+                                  </p>
+                                </CardHeader>
+                                <CardContent className="grid gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    className="justify-start"
+                                    onClick={() => selectSection("Documents")}
+                                  >
+                                    <BookOpen className="size-4" />
+                                    Browse documents
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    className="justify-start"
+                                    onClick={() => void refresh()}
+                                  >
+                                    <Activity className="size-4" />
+                                    Refresh workspace index
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {section === "Tasks" && (
+                        <>
+                          <div className="flex flex-wrap items-end justify-between gap-3">
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                Plan, prioritize, and keep work moving.
+                              </p>
+                              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                                {section}
+                              </h1>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant={taskView === "List" ? "secondary" : "ghost"}
+                                size="sm"
+                                onClick={() => setTaskView("List")}
+                              >
+                                List
+                              </Button>
+                              <Button
+                                variant={taskView === "Board" ? "secondary" : "ghost"}
+                                size="sm"
+                                onClick={() => setTaskView("Board")}
+                              >
+                                Board
+                              </Button>
+                              <Button
+                                variant={taskView === "Calendar" ? "secondary" : "ghost"}
+                                size="sm"
+                                onClick={() => setTaskView("Calendar")}
+                              >
+                                Calendar
+                              </Button>
+                            </div>
+                          </div>
+                          {taskView === "Board" ? (
+                            <div className="mt-5 grid gap-3 xl:grid-cols-4">
+                              {statuses.map((status) => (
+                                <Card key={status} className="min-w-0 bg-muted/25">
+                                  <CardHeader className="pb-2">
+                                    <CardTitle className="flex items-center justify-between text-sm">
+                                      {statusNames[status]}
+                                      <Badge variant="secondary">
+                                        {boardTasks.filter((task) => task.status === status).length}
+                                      </Badge>
+                                    </CardTitle>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <StatusDropZone status={status}>
+                                      {boardTasks
+                                        .filter((task) => task.status === status)
+                                        .map((task) => (
+                                          <div
+                                            key={task.id}
+                                            className="border-b border-border/70 px-3 py-3 last:border-b-0 hover:bg-accent/30"
+                                          >
+                                            <button
+                                              type="button"
+                                              onClick={() => setSelected(task)}
+                                              className="w-full text-left"
+                                            >
+                                              <p className="text-sm font-medium">{task.name}</p>
+                                              <p className="mt-2 text-[11px] text-muted-foreground">
+                                                {task.id}
+                                                {isArchivedTask(task) ? " · Archived" : ""}
+                                              </p>
+                                            </button>
+                                            {!isArchivedTask(task) &&
+                                              !task.path.startsWith("todo/_completed/") && (
+                                                <div className="mt-2">
+                                                  <BoardTask
+                                                    task={task}
+                                                    onSelect={() => setSelected(task)}
+                                                  />
+                                                </div>
+                                              )}
+                                          </div>
+                                        ))}
+                                    </StatusDropZone>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          ) : taskView === "Calendar" ? (
+                            <CalendarView
+                              tasks={
+                                taskFilter === "archived" || taskFilter === "completed"
+                                  ? []
+                                  : visibleTasks.filter(
+                                      (task) =>
+                                        task.status !== "completed" && !isArchivedTask(task),
+                                    )
+                              }
+                              recentCompleted={recentCompletedTasks.map((task) => ({
+                                id: task.id,
+                                name: task.name,
+                                status: task.status,
+                                archived: false,
+                              }))}
+                              onCreate={openCreate}
+                              onSelect={(task) =>
+                                setSelected(records.find((item) => item.id === task.id) ?? null)
+                              }
+                            />
+                          ) : (
+                            <div className="mt-5 overflow-hidden border-y border-border/70">
+                              {visibleTasks.map((item) => (
+                                <button
+                                  type="button"
+                                  key={item.path}
+                                  onClick={() => setSelected(item)}
+                                  className="flex w-full items-center gap-3 border-b p-3.5 text-left last:border-0 hover:bg-accent/50"
+                                >
+                                  <span className="grid size-5 place-items-center rounded-full border">
+                                    <span
+                                      className={`size-2 rounded-full ${item.status === "completed" ? "bg-emerald-500" : ""}`}
+                                    />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-medium">
+                                      {item.name}
+                                    </span>
+                                    <span className="block truncate text-xs text-muted-foreground">
+                                      {item.id} · {item.path}
+                                    </span>
+                                  </span>
+                                  <Badge variant={statusVariant(item.status)}>
+                                    {statusNames[item.status ?? ""] ?? item.status ?? "Planned"}
+                                  </Badge>
+                                  <span className="hidden w-24 text-right text-xs text-muted-foreground sm:block">
+                                    {formatDate(item.due_at)}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {section === "Documents" && (
+                        <div className="mt-2 grid min-h-[calc(100svh-9rem)] grid-cols-1 gap-0">
+                          <div className="min-w-0">
+                            {selected && selected.type !== "task" ? (
+                              <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-8 sm:py-3">
+                                <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-3">
+                                  <Button
+                                    variant="ghost"
                                     size="sm"
                                     onClick={() => {
-                                      setDocumentDraft(detail.body);
-                                      setEditingDocument(true);
+                                      setSelected(null);
+                                      setEditingDocument(false);
                                     }}
                                   >
-                                    Edit document
+                                    <ChevronRight className="size-4 rotate-180" />
+                                    Documents
                                   </Button>
-                                )}
-                                {detail && editingDocument && (
-                                  <>
+                                  <span
+                                    className="min-w-0 max-w-[24ch] flex-1 truncate text-xs text-muted-foreground"
+                                    title={selected.id}
+                                  >
+                                    {selected.id}
+                                  </span>
+                                  {detail && !editingDocument && (
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      disabled={savingDocument}
                                       onClick={() => {
                                         setDocumentDraft(detail.body);
-                                        setEditingDocument(false);
+                                        setEditingDocument(true);
                                       }}
                                     >
-                                      Cancel
+                                      Edit document
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      disabled={savingDocument || documentDraft === detail.body}
-                                      onClick={() => void saveDocument()}
-                                    >
-                                      {savingDocument ? "Saving…" : "Save changes"}
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                              <header className="py-7">
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <Badge variant="outline">{selected.type}</Badge>
-                                  <span>{selected.id}</span>
+                                  )}
+                                  {detail && editingDocument && (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={savingDocument}
+                                        onClick={() => {
+                                          setDocumentDraft(detail.body);
+                                          setEditingDocument(false);
+                                        }}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        disabled={savingDocument || documentDraft === detail.body}
+                                        onClick={() => void saveDocument()}
+                                      >
+                                        {savingDocument ? "Saving…" : "Save changes"}
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
-                                <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                                  {selected.name}
-                                </h1>
-                              </header>
-                              {detail ? (
-                                editingDocument ? (
-                                  <MarkdownEditor
-                                    key={selected.id}
-                                    value={documentDraft}
-                                    onChange={setDocumentDraft}
-                                    onError={setNotice}
-                                    className="min-h-[60vh] border-y border-border/70"
-                                  />
-                                ) : (
-                                  <MarkdownBody
-                                    body={detail.body}
-                                    onToggleTask={(index, checked) =>
-                                      void toggleDocumentTask(index, checked)
-                                    }
-                                    taskUpdatesDisabled={savingDocument}
-                                  />
-                                )
-                              ) : (
-                                <p className="border-y border-border/70 py-6 text-sm text-muted-foreground">
-                                  Loading document…
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="px-4 py-5 sm:px-8 sm:py-7">
-                              <p className="text-sm text-muted-foreground">
-                                Browse managed Markdown by folder.
-                              </p>
-                              <div className="mt-1 flex items-end justify-between gap-4">
-                                <div>
-                                  <h1 className="text-3xl font-semibold tracking-tight">
-                                    Documents
+                                <header className="py-4">
+                                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                                    {selected.name}
                                   </h1>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    {documentFolder || "All folders"} · {visibleDocuments.length}{" "}
-                                    documents
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="mt-5 divide-y divide-border/70 border-y border-border/70">
-                                {visibleDocuments.map((item) => (
-                                  <button
-                                    type="button"
-                                    key={item.path}
-                                    onClick={() => {
-                                      setSelected(item);
-                                      setEditingDocument(false);
-                                    }}
-                                    className="flex w-full items-center gap-3 py-3.5 text-left hover:bg-accent/40"
-                                  >
-                                    <FileText className="size-4 shrink-0 text-muted-foreground" />
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-sm font-medium">
-                                        {item.name}
-                                      </span>
-                                      <span className="block truncate text-xs text-muted-foreground">
-                                        {item.path}
-                                      </span>
-                                    </span>
-                                    <Badge variant="outline">{item.type}</Badge>
-                                    <ChevronRight className="size-4 text-muted-foreground" />
-                                  </button>
-                                ))}
-                                {visibleDocuments.length === 0 && (
-                                  <p className="py-8 text-center text-sm text-muted-foreground">
-                                    No Markdown documents in this folder.
+                                </header>
+                                {detail ? (
+                                  editingDocument ? (
+                                    <MarkdownEditor
+                                      key={selected.id}
+                                      value={documentDraft}
+                                      onChange={setDocumentDraft}
+                                      onError={setNotice}
+                                      className="min-h-[60vh] border-y border-border/70"
+                                    />
+                                  ) : (
+                                    <MarkdownBody
+                                      body={detail.body}
+                                      onToggleTask={(index, checked) =>
+                                        void toggleDocumentTask(index, checked)
+                                      }
+                                      taskUpdatesDisabled={savingDocument}
+                                    />
+                                  )
+                                ) : (
+                                  <p className="border-y border-border/70 py-6 text-sm text-muted-foreground">
+                                    Loading document…
                                   </p>
                                 )}
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {section === "Groups" && (
-                      <>
-                        <h1 className="text-3xl font-semibold">Groups</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Task groups organize work inside this active local project.
-                        </p>
-                        <div className="mt-5 grid gap-3 md:grid-cols-2">
-                          {workspace?.groups
-                            .filter((item) => !item.archived && !item.finished)
-                            .map((item) => (
-                              <Card key={item.id} className="">
-                                <CardContent className="flex items-center gap-3 p-4">
-                                  <FolderKanban className="size-5 text-muted-foreground" />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate font-medium">{item.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {item.completed}/{item.total} complete · {item.path}
+                            ) : (
+                              <div className="px-4 py-5 sm:px-8 sm:py-7">
+                                <p className="text-sm text-muted-foreground">
+                                  Browse managed Markdown by folder.
+                                </p>
+                                <div className="mt-1 flex items-end justify-between gap-4">
+                                  <div>
+                                    <h1 className="text-3xl font-semibold tracking-tight">
+                                      Documents
+                                    </h1>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      {documentFolder || "All folders"} · {visibleDocuments.length}{" "}
+                                      documents
                                     </p>
                                   </div>
-                                  <ChevronRight className="size-4 text-muted-foreground" />
-                                </CardContent>
-                              </Card>
-                            ))}
+                                </div>
+                                <div className="mt-5 divide-y divide-border/70 border-y border-border/70">
+                                  {visibleDocuments.map((item) => (
+                                    <button
+                                      type="button"
+                                      key={item.path}
+                                      onClick={() => {
+                                        setSelected(item);
+                                        setEditingDocument(false);
+                                      }}
+                                      className="flex w-full items-center gap-3 py-3.5 text-left hover:bg-accent/40"
+                                    >
+                                      <FileText className="size-4 shrink-0 text-muted-foreground" />
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-medium">
+                                          {item.name}
+                                        </span>
+                                        <span className="block truncate text-xs text-muted-foreground">
+                                          {item.path}
+                                        </span>
+                                      </span>
+                                      <Badge variant="outline">{item.type}</Badge>
+                                      <ChevronRight className="size-4 text-muted-foreground" />
+                                    </button>
+                                  ))}
+                                  {visibleDocuments.length === 0 && (
+                                    <p className="py-8 text-center text-sm text-muted-foreground">
+                                      No Markdown documents in this folder.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {workspace?.groups.some((item) => item.finished) && (
-                          <section className="mt-8">
-                            <h2 className="text-sm font-semibold">Completed groups</h2>
-                            <div className="mt-2 divide-y border-y border-border/70">
-                              {workspace.groups
-                                .filter((item) => item.finished)
-                                .map((item) => (
-                                  <div key={item.id} className="flex items-center gap-3 py-3">
-                                    <Check className="size-4 text-muted-foreground" />
-                                    <span className="min-w-0 flex-1 truncate text-sm">
-                                      {item.name}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {item.path}
-                                    </span>
-                                  </div>
-                                ))}
-                            </div>
-                          </section>
-                        )}
-                        {workspace?.groups.some((item) => item.archived) && (
-                          <section className="mt-8">
-                            <h2 className="text-sm font-semibold">Archived groups</h2>
-                            <div className="mt-2 divide-y border-y border-border/70">
-                              {workspace.groups
-                                .filter((item) => item.archived)
-                                .map((item) => (
-                                  <div key={item.id} className="flex items-center gap-3 py-3">
-                                    <Folder className="size-4 text-muted-foreground" />
-                                    <span className="min-w-0 flex-1 truncate text-sm">
-                                      {item.name}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {item.path}
-                                    </span>
-                                  </div>
-                                ))}
-                            </div>
-                          </section>
-                        )}
-                      </>
-                    )}
-                    {section === "Agent prompts" && (
-                      <PromptBuilder
-                        records={records}
-                        workspace={workspace}
-                        setNotice={setNotice}
-                      />
-                    )}
-                    {section === "Activity" && (
-                      <>
-                        <h1 className="text-3xl font-semibold">Activity</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Recent filesystem reconciliation view (source: workspace modified
-                          timestamps).
-                        </p>
-                        <div className="mt-5 space-y-2">
-                          {[...records]
-                            .sort((a, b) => b.modifiedAt - a.modifiedAt)
-                            .slice(0, 30)
-                            .map((item) => (
-                              <button
-                                type="button"
-                                key={item.path}
-                                onClick={() => setSelected(item)}
-                                className="flex w-full items-center gap-3 border-b border-border/70 px-3 py-3 text-left last:border-b-0 hover:bg-accent/30"
-                              >
-                                <Activity className="size-4 text-muted-foreground" />
-                                <span className="flex-1 text-sm">{item.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(item.modifiedAt).toLocaleString()}
-                                </span>
-                              </button>
-                            ))}
-                        </div>
-                      </>
-                    )}
-                    {section === "Workspace health" && (
-                      <>
-                        <h1 className="text-3xl font-semibold">Workspace health</h1>
-                        <Card className="mt-5">
-                          <CardContent className="space-y-3 p-5">
-                            <p>
-                              Runtime: <strong>{connectionStatus}</strong>
-                            </p>
-                            <p>
-                              Project:{" "}
-                              <code className="text-xs">
-                                {workspace?.projectRoot ?? "Not selected"}
-                              </code>
-                            </p>
-                            <p>
-                              Managed directory:{" "}
-                              <code className="text-xs">
-                                {workspace?.workspaceDirectory ?? "—"}
-                              </code>
-                            </p>
-                            <p>Index source: {workspace?.source ?? "—"}</p>
-                            <p>
-                              Last snapshot:{" "}
-                              {workspace ? new Date(workspace.scannedAt).toLocaleString() : "—"}
-                            </p>
-                            <Separator />
-                            {workspace?.diagnostics.map((item) => (
-                              <p
-                                key={`${item.path}:${item.message}`}
-                                className="text-sm text-amber-700"
-                              >
-                                {item.path}: {item.message}
+                      )}
+                      {section === "Groups" && (
+                        <>
+                          <h1 className="text-3xl font-semibold">Groups</h1>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Task groups organize work inside this active local project.
+                          </p>
+                          <div className="mt-5 grid gap-3 md:grid-cols-2">
+                            {workspace?.groups
+                              .filter((item) => !item.archived && !item.finished)
+                              .map((item) => (
+                                <Card key={item.id} className="">
+                                  <CardContent className="flex items-center gap-3 p-4">
+                                    <FolderKanban className="size-5 text-muted-foreground" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate font-medium">{item.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {item.completed}/{item.total} complete · {item.path}
+                                      </p>
+                                    </div>
+                                    <ChevronRight className="size-4 text-muted-foreground" />
+                                  </CardContent>
+                                </Card>
+                              ))}
+                          </div>
+                          {workspace?.groups.some((item) => item.finished) && (
+                            <section className="mt-8">
+                              <h2 className="text-sm font-semibold">Completed groups</h2>
+                              <div className="mt-2 divide-y border-y border-border/70">
+                                {workspace.groups
+                                  .filter((item) => item.finished)
+                                  .map((item) => (
+                                    <div key={item.id} className="flex items-center gap-3 py-3">
+                                      <Check className="size-4 text-muted-foreground" />
+                                      <span className="min-w-0 flex-1 truncate text-sm">
+                                        {item.name}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {item.path}
+                                      </span>
+                                    </div>
+                                  ))}
+                              </div>
+                            </section>
+                          )}
+                          {workspace?.groups.some((item) => item.archived) && (
+                            <section className="mt-8">
+                              <h2 className="text-sm font-semibold">Archived groups</h2>
+                              <div className="mt-2 divide-y border-y border-border/70">
+                                {workspace.groups
+                                  .filter((item) => item.archived)
+                                  .map((item) => (
+                                    <div key={item.id} className="flex items-center gap-3 py-3">
+                                      <Folder className="size-4 text-muted-foreground" />
+                                      <span className="min-w-0 flex-1 truncate text-sm">
+                                        {item.name}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {item.path}
+                                      </span>
+                                    </div>
+                                  ))}
+                              </div>
+                            </section>
+                          )}
+                        </>
+                      )}
+                      {section === "Agent prompts" && (
+                        <PromptBuilder
+                          records={records}
+                          workspace={workspace}
+                          setNotice={setNotice}
+                        />
+                      )}
+                      {section === "Activity" && (
+                        <>
+                          <h1 className="text-3xl font-semibold">Activity</h1>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Recent filesystem reconciliation view (source: workspace modified
+                            timestamps).
+                          </p>
+                          <div className="mt-5 space-y-2">
+                            {[...records]
+                              .sort((a, b) => b.modifiedAt - a.modifiedAt)
+                              .slice(0, 30)
+                              .map((item) => (
+                                <button
+                                  type="button"
+                                  key={item.path}
+                                  onClick={() => setSelected(item)}
+                                  className="flex w-full items-center gap-3 border-b border-border/70 px-3 py-3 text-left last:border-b-0 hover:bg-accent/30"
+                                >
+                                  <Activity className="size-4 text-muted-foreground" />
+                                  <span className="flex-1 text-sm">{item.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(item.modifiedAt).toLocaleString()}
+                                  </span>
+                                </button>
+                              ))}
+                          </div>
+                        </>
+                      )}
+                      {section === "Workspace health" && (
+                        <>
+                          <h1 className="text-3xl font-semibold">Workspace health</h1>
+                          <Card className="mt-5">
+                            <CardContent className="space-y-3 p-5">
+                              <p>
+                                Runtime: <strong>{connectionStatus}</strong>
                               </p>
-                            ))}
-                            <Button onClick={() => void refresh()}>Refresh index</Button>
-                            <Button variant="outline" onClick={() => void validate()}>
-                              Validate
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </>
-                    )}
-                  </div>
-                  {selected && !(section === "Documents" && selected.type !== "task") && (
-                    <aside className="border-l border-border/60 bg-transparent p-5 xl:sticky xl:top-4 xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs text-muted-foreground">{selected.id}</p>
-                          <h2 className="mt-1 text-xl font-semibold">{selected.name}</h2>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Close details"
-                          onClick={() => setSelected(null)}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                      <div className="mt-4 flex items-center gap-2">
-                        <Badge variant={statusVariant(selected.status)}>
-                          {statusNames[selected.status ?? ""] ?? "Document"}
-                        </Badge>
-                        {selected.priority && (
-                          <Badge variant="outline">{selected.priority} priority</Badge>
-                        )}
-                      </div>
-                      {selected.type === "task" && (
-                        <div className="mt-4 flex flex-wrap gap-2">
+                              <p>
+                                Project:{" "}
+                                <code className="text-xs">
+                                  {workspace?.projectRoot ?? "Not selected"}
+                                </code>
+                              </p>
+                              <p>
+                                Managed directory:{" "}
+                                <code className="text-xs">
+                                  {workspace?.workspaceDirectory ?? "—"}
+                                </code>
+                              </p>
+                              <p>Index source: {workspace?.source ?? "—"}</p>
+                              <p>
+                                Last snapshot:{" "}
+                                {workspace ? new Date(workspace.scannedAt).toLocaleString() : "—"}
+                              </p>
+                              <Separator />
+                              {workspace?.diagnostics.map((item) => (
+                                <p
+                                  key={`${item.path}:${item.message}`}
+                                  className="text-sm text-amber-700"
+                                >
+                                  {item.path}: {item.message}
+                                </p>
+                              ))}
+                              <Button onClick={() => void refresh()}>Refresh index</Button>
+                              <Button variant="outline" onClick={() => void validate()}>
+                                Validate
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        </>
+                      )}
+                    </div>
+                    {selected && !(section === "Documents" && selected.type !== "task") && (
+                      <aside className="border-l border-border/60 bg-transparent p-5 xl:sticky xl:top-4 xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs text-muted-foreground">{selected.id}</p>
+                            <h2 className="mt-1 text-xl font-semibold">{selected.name}</h2>
+                          </div>
                           <Button
-                            size="sm"
-                            variant={isArchivedTask(selected) ? "secondary" : "outline"}
-                            onClick={() =>
-                              void setTaskArchived(selected, !isArchivedTask(selected))
-                            }
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Close details"
+                            onClick={() => setSelected(null)}
                           >
-                            <Folder className="size-4" />
-                            {isArchivedTask(selected)
-                              ? selected.extra?.archived_from
-                                ? "Restore task"
-                                : "Restore group"
-                              : "Archive task"}
+                            <X className="size-4" />
                           </Button>
-                          {selected.status === "completed" && !isArchivedTask(selected) && (
+                        </div>
+                        <div className="mt-4 flex items-center gap-2">
+                          <Badge variant={statusVariant(selected.status)}>
+                            {statusNames[selected.status ?? ""] ?? "Document"}
+                          </Badge>
+                          {selected.priority && (
+                            <Badge variant="outline">{selected.priority} priority</Badge>
+                          )}
+                        </div>
+                        {selected.type === "task" && (
+                          <div className="mt-4 flex flex-wrap gap-2">
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant={isArchivedTask(selected) ? "secondary" : "outline"}
                               onClick={() =>
-                                void setCompletedHidden(
-                                  selected,
-                                  !selected.extra?.hidden_from_recent,
-                                )
+                                void setTaskArchived(selected, !isArchivedTask(selected))
                               }
                             >
-                              <EyeOff className="size-4" />
-                              {selected.extra?.hidden_from_recent
-                                ? "Show in recent"
-                                : "Hide in recent"}
+                              <Folder className="size-4" />
+                              {isArchivedTask(selected)
+                                ? selected.extra?.archived_from
+                                  ? "Restore task"
+                                  : "Restore group"
+                                : "Archive task"}
+                            </Button>
+                            {selected.status === "completed" && !isArchivedTask(selected) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  void setCompletedHidden(
+                                    selected,
+                                    !selected.extra?.hidden_from_recent,
+                                  )
+                                }
+                              >
+                                <EyeOff className="size-4" />
+                                {selected.extra?.hidden_from_recent
+                                  ? "Show in recent"
+                                  : "Hide in recent"}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        {selected.type !== "task" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => {
+                              setDocumentFolder(selected.path.split("/").slice(0, -1).join("/"));
+                              setSection("Documents");
+                            }}
+                          >
+                            Open full document
+                            <ChevronRight className="size-4" />
+                          </Button>
+                        )}
+                        <Separator className="my-5" />
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Start</p>
+                            <p className="mt-1 font-medium">{formatDate(selected.start_at)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Due</p>
+                            <p className="mt-1 font-medium">{formatDate(selected.due_at)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Created</p>
+                            <p className="mt-1 font-medium">{formatDate(selected.created_at)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Updated</p>
+                            <p className="mt-1 font-medium">{formatDate(selected.updated_at)}</p>
+                          </div>
+                        </div>
+                        <p className="mt-4 break-all text-xs text-muted-foreground">
+                          {selected.path}
+                        </p>
+                        <Separator className="my-5" />
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-semibold">
+                            {editingDocument ? "Markdown editor" : "Markdown preview"}
+                          </h3>
+                          {detail && !editingDocument && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setDocumentDraft(detail.body);
+                                setEditingDocument(true);
+                              }}
+                            >
+                              Edit Markdown
                             </Button>
                           )}
                         </div>
-                      )}
-                      {selected.type !== "task" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-3"
-                          onClick={() => {
-                            setDocumentFolder(selected.path.split("/").slice(0, -1).join("/"));
-                            setSection("Documents");
-                          }}
-                        >
-                          Open full document
-                          <ChevronRight className="size-4" />
-                        </Button>
-                      )}
-                      <Separator className="my-5" />
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <p className="text-muted-foreground">Start</p>
-                          <p className="mt-1 font-medium">{formatDate(selected.start_at)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Due</p>
-                          <p className="mt-1 font-medium">{formatDate(selected.due_at)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Created</p>
-                          <p className="mt-1 font-medium">{formatDate(selected.created_at)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Updated</p>
-                          <p className="mt-1 font-medium">{formatDate(selected.updated_at)}</p>
-                        </div>
-                      </div>
-                      <p className="mt-4 break-all text-xs text-muted-foreground">
-                        {selected.path}
-                      </p>
-                      <Separator className="my-5" />
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold">
-                          {editingDocument ? "Markdown editor" : "Markdown preview"}
-                        </h3>
-                        {detail && !editingDocument && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setDocumentDraft(detail.body);
-                              setEditingDocument(true);
-                            }}
-                          >
-                            Edit Markdown
-                          </Button>
-                        )}
-                      </div>
-                      {detail ? (
-                        editingDocument ? (
-                          <>
-                            <MarkdownEditor
-                              key={selected.id}
-                              value={documentDraft}
-                              onChange={setDocumentDraft}
-                              onError={setNotice}
-                              className="mt-3 border-y border-border/70"
-                            />
-                            <div className="mt-3 flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                disabled={savingDocument}
-                                onClick={() => {
-                                  setDocumentDraft(detail.body);
-                                  setEditingDocument(false);
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                disabled={savingDocument || documentDraft === detail.body}
-                                onClick={() => void saveDocument()}
-                              >
-                                {savingDocument ? "Saving…" : "Save changes"}
-                              </Button>
+                        {detail ? (
+                          editingDocument ? (
+                            <>
+                              <MarkdownEditor
+                                key={selected.id}
+                                value={documentDraft}
+                                onChange={setDocumentDraft}
+                                onError={setNotice}
+                                className="mt-3 border-y border-border/70"
+                              />
+                              <div className="mt-3 flex justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  disabled={savingDocument}
+                                  onClick={() => {
+                                    setDocumentDraft(detail.body);
+                                    setEditingDocument(false);
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  disabled={savingDocument || documentDraft === detail.body}
+                                  onClick={() => void saveDocument()}
+                                >
+                                  {savingDocument ? "Saving…" : "Save changes"}
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-3 border-y border-border/60 py-3">
+                              <MarkdownBody
+                                body={detail.body}
+                                onToggleTask={(index, checked) =>
+                                  void toggleDocumentTask(index, checked)
+                                }
+                                taskUpdatesDisabled={savingDocument}
+                              />
                             </div>
-                          </>
+                          )
                         ) : (
-                          <div className="mt-3 border-y border-border/60 py-3">
-                            <MarkdownBody
-                              body={detail.body}
-                              onToggleTask={(index, checked) =>
-                                void toggleDocumentTask(index, checked)
-                              }
-                              taskUpdatesDisabled={savingDocument}
-                            />
-                          </div>
-                        )
-                      ) : (
-                        <p className="mt-3 text-xs text-muted-foreground">Loading content…</p>
-                      )}
-                    </aside>
-                  )}
-                </div>
-              </section>
+                          <p className="mt-3 text-xs text-muted-foreground">Loading content…</p>
+                        )}
+                      </aside>
+                    )}
+                  </div>
+                </section>
+              </div>
             </main>
           </div>
         </div>

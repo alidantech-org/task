@@ -1,4 +1,4 @@
-import type { ReactNode, PointerEventHandler } from "react";
+import type { PointerEventHandler, ReactNode } from "react";
 
 type AppLayoutProps = {
   children: ReactNode;

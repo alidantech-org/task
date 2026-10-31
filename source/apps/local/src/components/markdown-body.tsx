@@ -1,6 +1,6 @@
 "use client";
 
-import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
+import ReactMarkdown, { type Components, defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type MarkdownBodyProps = {

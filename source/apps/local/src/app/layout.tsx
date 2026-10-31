@@ -19,7 +19,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={cn("font-sans", geist.variable)}>
-      <head></head>
+      <head>
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" sizes="any" />
+      </head>
       <body>
         <Script src="/theme-init.js" strategy="beforeInteractive" />
         {children}

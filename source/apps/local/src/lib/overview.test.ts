@@ -75,7 +75,7 @@ describe("dashboard overview helpers", () => {
       status: "completed",
       path: `todo/group/${String(index + 1).padStart(3, "0")}-task-${index + 1}.md`,
       modifiedAt: index,
-      updated_at: new Date(Date.UTC(2026, 9, index + 1)).toISOString(),
+      updated_at: new Date(Date.UTC(2026, 9, 11 - index)).toISOString(),
       ...(index === 0 ? { extra: { hidden_from_recent: true } } : {}),
     }));
     const visible = getRecentCompletedTasks(tasks, 10);

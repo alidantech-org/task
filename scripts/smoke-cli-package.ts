@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -78,7 +78,7 @@ function stop(child: ChildProcess): Promise<void> {
 
 try {
   await mkdir(join(projectRoot, "tasks"), { recursive: true });
-  const init = Bun.spawnSync(["bun", "run", join(cliRoot, "src/index.ts"), "init"], {
+  const init = Bun.spawnSync(["bun", "run", join(cliRoot, "dist/cli.js"), "init"], {
     cwd: projectRoot,
     stdout: "pipe",
     stderr: "pipe",
@@ -87,7 +87,7 @@ try {
 
   const runtimePort = await getPort();
   const dashboardPort = await getPort();
-  const runtime = launch(process.execPath, [runtimeEntry], projectRoot, {
+  const runtime = launch("bun", [runtimeEntry], projectRoot, {
     ...process.env,
     TASK_WORKSPACE_ROOT: join(projectRoot, "tasks"),
     TASK_LOCAL_PORT: String(runtimePort),

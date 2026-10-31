@@ -23,4 +23,4 @@ Prepare Task for a reliable public npm release at version `0.1.0`, with the inst
 
 ## Notes
 
-The repository currently declares `@task/cli` at `0.1.0` and has package and install smoke scripts. Confirm package identity, scoped name, ownership/access, and npm credentials before publication; do not publish until release readiness and consumer installation checks pass.
+The CLI package is being prepared as unscoped `tasknode@0.1.0`, with `tasknode`, `task`, and `tk` executable aliases. Exact-name npm lookup returned not found, but npm's similarity check can only be confirmed by publishing the genuine package. The release must not be published until the package build and clean consumer checks pass. The current implementation requires Bun 1.3.14 or later; npm, pnpm, and Bun are install choices, not interchangeable runtimes. Registry ownership/access and credentials must be confirmed as part of the final publication action.

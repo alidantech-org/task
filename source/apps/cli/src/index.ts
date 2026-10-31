@@ -25,8 +25,8 @@ import {
   readWorkspaceIndex,
   replaceDocumentBody,
   resolveWorkspace,
-  restoreTaskGroup,
   restoreTask,
+  restoreTaskGroup,
   searchWorkspace,
   updateTask,
   validateWorkspace,
@@ -55,10 +55,7 @@ import { isInteractive, promptText as promptTextInput } from "#/prompts/input";
 import { workspaceMenu } from "#/prompts/menu";
 import { resolveTuiEntry, runLocalDashboard } from "#/run";
 
-const packageMetadata = (await Bun.file(join(import.meta.dir, "../package.json")).json()) as {
-  version: string;
-};
-const version = packageMetadata.version;
+const version = "0.1.0";
 let args: ParsedArgs;
 try {
   args = parseArgs(process.argv.slice(2));

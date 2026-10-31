@@ -1,11 +1,12 @@
 {
-  "name": "@task/cli",
+  "name": "tasknode",
   "private": false,
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "task": "src/index.ts",
-    "tk": "src/index.ts"
+    "tasknode": "dist/cli.js",
+    "task": "dist/cli.js",
+    "tk": "dist/cli.js"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
@@ -20,10 +21,8 @@
     "@milkdown/crepe": "^7.23.0",
     "@milkdown/kit": "^7.23.0",
     "@milkdown/react": "^7.23.0",
-    "@task/contracts": "^0.1.0",
-    "@task/tui": "^0.1.0",
-    "@task/ui": "^0.1.0",
-    "@task/workspace": "^0.1.0",
+    "@opentui/core": "^0.8.0",
+    "@opentui/react": "^0.8.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.1",
     "lucide-react": "^1.65.0",
@@ -44,11 +43,10 @@
     "node": ">=20.9.0"
   },
   "files": [
-    "src",
     "dist",
-    "README.md",
-    "tsconfig.json"
+    "README.md"
   ],
+  "description": "Local-first task and project management CLI with a terminal UI and local dashboard",
   "publishConfig": {
     "access": "public"
   },

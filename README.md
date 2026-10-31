@@ -34,7 +34,7 @@ Install and configure dependencies for all Bun workspace projects and the separa
 
 To also make `task` and `tk` available globally from this live checkout, run `bun run setup --link-cli`. This optional flag creates global Bun links; the default setup only installs project dependencies.
 
-For a new local project with the released CLI, install once with `bun add --global @task/cli`, enter the project, run `task init`, and start the local workspace dashboard with `task run`. The CLI runs the packaged production Next.js dashboard and a loopback-only Bun runtime; it binds the workspace chosen by `task.yaml`, `TASK_WORKSPACE_ROOT`, or `--workspace`. Press Ctrl+C in the terminal to stop both services. Use `task run --no-open` when the browser should not be opened automatically.
+For a new local project with the prepared npm CLI package, install once with `npm install --global tasknode` (or pnpm/Bun global install), enter the project, run `task init`, and start the local workspace dashboard with `task run`. The package exposes `tasknode`, `task`, and `tk` aliases. The CLI requires Bun 1.3.14 or later; `task run` also requires Node.js 20.9 or later for Next.js. The dashboard and a loopback-only Bun runtime use the workspace chosen by `task.yaml`, `TASK_WORKSPACE_ROOT`, or `--workspace`. Press Ctrl+C to stop both services. Use `task run --no-open` when the browser should not be opened automatically. Registry publication has not occurred.
 
 Start the complete local development stack:
 
