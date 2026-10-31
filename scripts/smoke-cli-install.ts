@@ -7,6 +7,9 @@ const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const temporaryRoot = await mkdtemp(join(tmpdir(), "task-cli-global-install-"));
 const globalPrefix = join(temporaryRoot, "npm-global");
 const cliRoot = join(repositoryRoot, "source/apps/cli");
+const packageManifest = JSON.parse(await Bun.file(join(cliRoot, "package.json")).text()) as {
+  version: string;
+};
 
 function run(command: string[], cwd = repositoryRoot): string {
   const result = Bun.spawnSync({ cmd: command, cwd, stdout: "pipe", stderr: "pipe" });
@@ -46,11 +49,11 @@ try {
   const taskPath = join(globalBin, process.platform === "win32" ? "task.cmd" : "task");
   const tcPath = join(globalBin, process.platform === "win32" ? "tc.cmd" : "tc");
   const taskcodePath = join(globalBin, process.platform === "win32" ? "taskcode.cmd" : "taskcode");
-  if (!run([taskcodePath, "--version"]).includes("task 0.1.0"))
+  if (!run([taskcodePath, "--version"]).includes(`task ${packageManifest.version}`))
     throw new Error("Globally installed taskcode command returned an unexpected version");
-  if (!run([taskPath, "--version"]).includes("task 0.1.0"))
+  if (!run([taskPath, "--version"]).includes(`task ${packageManifest.version}`))
     throw new Error("Globally installed task command returned an unexpected version");
-  if (!run([tcPath, "--version"]).includes("task 0.1.0"))
+  if (!run([tcPath, "--version"]).includes(`task ${packageManifest.version}`))
     throw new Error("Globally installed tc alias returned an unexpected version");
 
   const projectRoot = join(temporaryRoot, "consumer-project");

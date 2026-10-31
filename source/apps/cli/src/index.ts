@@ -55,7 +55,12 @@ import { isInteractive, promptText as promptTextInput } from "#/prompts/input";
 import { workspaceMenu } from "#/prompts/menu";
 import { resolveTuiEntry, runLocalDashboard } from "#/run";
 
-const version = "0.1.0";
+const cliPackage = JSON.parse(
+  await Bun.file(new URL("../package.json", import.meta.url)).text(),
+) as {
+  version: string;
+};
+const version = cliPackage.version;
 let args: ParsedArgs;
 try {
   args = parseArgs(process.argv.slice(2));
