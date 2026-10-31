@@ -23,7 +23,7 @@ From the repository root, install all Bun workspace dependencies and resolve the
 
 This resolves the root Bun workspace, including the CLI, local runtime/dashboard, hosted Next.js site, NestJS API, TUI, shared packages, and Biome, then runs Flutter `pub get` through the root bridge. It refreshes `bun.lock` and `source/apps/mobile/pubspec.lock` when manifests or SDK resolution require it. Flutter must already be installed and available on `PATH`; setup reports that prerequisite clearly.
 
-Flutter remains outside the Bun workspace. To also make `task` and `tc` available globally from this checkout, opt in to Bun's global links:
+Flutter remains outside the Bun workspace. To install checkout-only `taskcode-dev` and `tc-dev` commands in Bun's global executable directory, opt in during setup:
 
     bun run setup --link-cli
 
@@ -56,11 +56,11 @@ The CLI and its `task`/`tc` aliases operate on workspace files directly through 
     bun run dev:cli -- list --json
     bun run dev:cli -- validate
 
-To make `task` and `tc` available globally while pointing at this live checkout:
+To make `taskcode-dev` and `tc-dev` available globally while pointing at this live checkout:
 
     bun run cli:link
 
-Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -g)` is on `PATH`. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when CLI or workspace source changes. Global commands also load the linked checkout each time, so ordinary `task`/`tc` invocations immediately use saved edits without keeping the watcher open.
+Run `bun run cli:unlink` to remove those development commands. Make sure `$(bun pm bin -g)` is on `PATH`. The commands invoke the CLI source in this checkout and leave any installed `taskcode`, `task`, and `tc` commands untouched. For example, use `taskcode-dev --version` for the checkout version and `taskcode --version` for the installed release. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when source changes.
 
 Bare `task` opens a terminal menu when attached to a TTY; in non-interactive shells it prints the overview and exits. `task --quiet` suppresses the bare overview. `task --json` returns machine-readable overview data. Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and errors to stderr. Human output uses compact width-aware task tables and grouped validation diagnostics; `--verbose` adds paths and metadata. `--plain` and `--no-color` disable color. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 

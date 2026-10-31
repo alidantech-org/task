@@ -1,40 +1,117 @@
-import { realpath } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  realpath,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cliPackage = join(repositoryRoot, "source/apps/cli");
+const devEntry = join(repositoryRoot, "scripts/taskcode-dev.ts");
 const action = process.argv[2] ?? "install";
+const commandNames = ["taskcode-dev", "tc-dev"] as const;
 
 if (action !== "install" && action !== "remove") {
   process.stderr.write("Usage: bun run cli:link [install|remove]\n");
   process.exit(2);
 }
 
-const currentDirectory = await realpath(process.cwd());
-const expectedCliPackage = await realpath(cliPackage);
-if (currentDirectory !== repositoryRoot) {
+if (resolve(process.cwd()) !== repositoryRoot) {
   process.stderr.write(`Run this command from the repository root: ${repositoryRoot}\n`);
   process.exit(2);
 }
 
-const result = Bun.spawnSync(action === "install" ? ["bun", "link"] : ["bun", "unlink"], {
-  cwd: expectedCliPackage,
-  stdin: "inherit",
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const globalBinResult = Bun.spawnSync(["bun", "pm", "bin", "-g"], { stdout: "pipe" });
+if (globalBinResult.exitCode !== 0) {
+  process.stderr.write("Could not locate Bun's global executable directory.\n");
+  process.exit(globalBinResult.exitCode ?? 1);
+}
 
-if (result.exitCode !== 0) process.exit(result.exitCode ?? 1);
-if (action === "install") {
-  const globalBin = Bun.spawnSync(["bun", "pm", "bin", "-g"], { stdout: "pipe" });
-  const binPath = globalBin.stdout.toString().trim();
-  process.stdout.write(`Linked task and tc from ${expectedCliPackage}.\n`);
-  process.stdout.write(`Bun global executable directory: ${binPath}\n`);
-  if (!process.env.PATH?.split(":").includes(binPath)) {
-    process.stdout.write(`Add this to your shell startup PATH: export PATH="${binPath}:$PATH"\n`);
+const globalBin = globalBinResult.stdout.toString().trim();
+await mkdir(globalBin, { recursive: true });
+const expectedEntry = await realpath(devEntry);
+const windows = process.platform === "win32";
+const installed: string[] = [];
+
+for (const name of commandNames) {
+  const target = join(globalBin, windows ? `${name}.cmd` : name);
+  if (windows) {
+    const contents = `@echo off\r\n"${process.execPath}" "${devEntry}" %*\r\n`;
+    if (action === "install") {
+      try {
+        if ((await readFile(target, "utf8")) !== contents) {
+          process.stderr.write(`Refusing to replace an existing command: ${target}\n`);
+          process.exitCode = 1;
+          continue;
+        }
+      } catch {
+        try {
+          await lstat(target);
+          process.stderr.write(`Refusing to replace an existing command: ${target}\n`);
+          process.exitCode = 1;
+          continue;
+        } catch {
+          await writeFile(target, contents, { flag: "wx" });
+        }
+      }
+      installed.push(target);
+    } else {
+      try {
+        if ((await Bun.file(target).text()) === contents) {
+          await unlink(target);
+          installed.push(target);
+        }
+      } catch {
+        // This command was not linked from this checkout.
+      }
+    }
+    continue;
   }
-  process.stdout.write("These commands execute the live source in this checkout.\n");
+
+  if (action === "install") {
+    try {
+      const existing = await lstat(target);
+      if (
+        !existing.isSymbolicLink() ||
+        resolve(dirname(target), await readlink(target)) !== expectedEntry
+      ) {
+        process.stderr.write(`Refusing to replace an existing command: ${target}\n`);
+        process.exitCode = 1;
+        continue;
+      }
+    } catch {
+      await symlink(expectedEntry, target);
+    }
+    installed.push(target);
+  } else {
+    try {
+      if (resolve(dirname(target), await readlink(target)) === expectedEntry) {
+        await unlink(target);
+        installed.push(target);
+      }
+    } catch {
+      // This command was not linked from this checkout.
+    }
+  }
+}
+
+if (process.exitCode && process.exitCode !== 0) process.exit(process.exitCode);
+if (action === "install") {
+  process.stdout.write(`Linked ${commandNames.join(" and ")} to ${expectedEntry}.\n`);
+  process.stdout.write(`Bun global executable directory: ${globalBin}\n`);
+  if (!process.env.PATH?.split(process.platform === "win32" ? ";" : ":").includes(globalBin)) {
+    process.stdout.write(`Add this directory to PATH: ${globalBin}\n`);
+  }
+  process.stdout.write("The published taskcode, task, and tc commands are not changed.\n");
 } else {
-  process.stdout.write("Removed the global task/tc link for this checkout.\n");
+  process.stdout.write(
+    installed.length
+      ? `Removed ${installed.map((path) => path.split(/[\\/]/).pop()).join(" and ")}.\n`
+      : "No taskcode-dev or tc-dev links from this checkout were found.\n",
+  );
 }
