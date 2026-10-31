@@ -8,11 +8,15 @@ import {
   searchWorkspace,
   validateWorkspace,
   getDocument,
+  listTaskGroups,
+  createTask,
+  createTaskGroup,
+  updateTask,
   type WorkspaceIndex,
   type WorkspaceWatcher,
   watchWorkspaceIndex,
 } from "@task/workspace";
-import type { ResolvedWorkspace } from "@task/workspace";
+import { WorkspaceError, type ResolvedWorkspace } from "@task/workspace";
 
 const host = "127.0.0.1";
 type RuntimeError = {
@@ -41,29 +45,64 @@ export function closeLocalWorkspace(): void {
   runtimeState.workspace = undefined;
 }
 
-function authorized(request: IncomingMessage, response: ServerResponse, requestId: string): boolean {
+function authorized(
+  request: IncomingMessage,
+  response: ServerResponse,
+  requestId: string,
+): boolean {
   const origin = request.headers.origin;
   const cookieHeader = request.headers.cookie ?? "";
   const token = request.headers["x-task-capability"];
   if (origin && !allowedOrigins.has(origin)) {
-    send(response, 403, { error: { code: "forbidden", message: "Origin is not allowed", requestId } }, requestId);
+    send(
+      response,
+      403,
+      { error: { code: "forbidden", message: "Origin is not allowed", requestId } },
+      requestId,
+    );
     return false;
   }
   if (origin) {
-    send(response, 403, { error: { code: "forbidden", message: "Browser access must use the dashboard server proxy", requestId } }, requestId);
+    send(
+      response,
+      403,
+      {
+        error: {
+          code: "forbidden",
+          message: "Browser access must use the dashboard server proxy",
+          requestId,
+        },
+      },
+      requestId,
+    );
     return false;
   }
-  const cookieValue = cookieHeader.split(";").map((part) => part.trim()).find((part) => part.startsWith("task-capability="))?.slice("task-capability=".length);
+  const cookieValue = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("task-capability="))
+    ?.slice("task-capability=".length);
   const supplied = typeof token === "string" ? Buffer.from(token) : Buffer.from(cookieValue ?? "");
   const expected = Buffer.from(runtimeState.capability);
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
-    send(response, 401, { error: { code: "unauthorized", message: "Runtime capability is missing or invalid", requestId } }, requestId);
+    send(
+      response,
+      401,
+      {
+        error: {
+          code: "unauthorized",
+          message: "Runtime capability is missing or invalid",
+          requestId,
+        },
+      },
+      requestId,
+    );
     return false;
   }
   return true;
 }
 
-function snapshot(index: WorkspaceIndex): object {
+async function snapshot(index: WorkspaceIndex): Promise<object> {
   const workspace = runtimeState.workspace;
   if (!workspace) throw new Error("No workspace is selected");
   return {
@@ -74,7 +113,7 @@ function snapshot(index: WorkspaceIndex): object {
     source: workspace.source,
     scannedAt: index.scannedAt,
     overview: getWorkspaceOverview(index),
-    groups: [],
+    groups: await listTaskGroups(workspace),
     documents: [...index.documents.values()].map((document) => ({
       path: document.path,
       id: document.metadata.id,
@@ -130,19 +169,36 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     return;
   }
   if (path === "/health/ready") {
-    send(response, 200, { status: "ok", service: "task-local", workspace: !!runtimeState.workspace, requestId }, requestId);
+    send(
+      response,
+      200,
+      { status: "ok", service: "task-local", workspace: !!runtimeState.workspace, requestId },
+      requestId,
+    );
     return;
   }
   if (path === "/internal/session" && method === "GET") {
     if (request.headers.origin) {
-      send(response, 403, { error: { code: "forbidden", message: "Session bootstrap is server-side only", requestId } }, requestId);
+      send(
+        response,
+        403,
+        {
+          error: { code: "forbidden", message: "Session bootstrap is server-side only", requestId },
+        },
+        requestId,
+      );
       return;
     }
     send(response, 200, { capability: runtimeState.capability, requestId }, requestId);
     return;
   }
   if (path === "/runtime/session" && method === "GET") {
-    send(response, 200, { status: "ok", workspace: !!runtimeState.workspace, requestId }, requestId);
+    send(
+      response,
+      200,
+      { status: "ok", workspace: !!runtimeState.workspace, requestId },
+      requestId,
+    );
     return;
   }
   if (path.startsWith("/workspace")) {
@@ -150,12 +206,23 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     const workspace = runtimeState.workspace;
     const monitor = runtimeState.monitor;
     if (!workspace || !monitor) {
-      send(response, 409, { error: { code: "workspace_unavailable", message: "Start the runtime from a Task project or select a workspace", requestId } }, requestId);
+      send(
+        response,
+        409,
+        {
+          error: {
+            code: "workspace_unavailable",
+            message: "Start the runtime from a Task project or select a workspace",
+            requestId,
+          },
+        },
+        requestId,
+      );
       return;
     }
     try {
       if (path === "/workspace" && method === "GET") {
-        send(response, 200, { workspace: snapshot(monitor.index), requestId }, requestId);
+        send(response, 200, { workspace: await snapshot(monitor.index), requestId }, requestId);
         return;
       }
       if (path === "/workspace/search" && method === "GET") {
@@ -165,7 +232,21 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
           return;
         }
         const results = await searchWorkspace(workspace, query, { limit: 100 });
-        send(response, 200, { results: results.map(({ summary, snippet }) => ({ path: summary.path, id: summary.metadata.id, name: summary.metadata.name, type: summary.metadata.type, snippet })), requestId }, requestId);
+        send(
+          response,
+          200,
+          {
+            results: results.map(({ summary, snippet }) => ({
+              path: summary.path,
+              id: summary.metadata.id,
+              name: summary.metadata.name,
+              type: summary.metadata.type,
+              snippet,
+            })),
+            requestId,
+          },
+          requestId,
+        );
         return;
       }
       if (path === "/workspace/validate" && method === "POST") {
@@ -176,16 +257,115 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       if (path.startsWith("/workspace/document/") && method === "GET") {
         const identifier = decodeURIComponent(path.slice("/workspace/document/".length));
         const result = await getDocument(workspace, identifier);
-        send(response, 200, { document: { path: result.summary.path, contentHash: result.summary.contentHash, body: result.body }, requestId }, requestId);
+        send(
+          response,
+          200,
+          {
+            document: {
+              path: result.summary.path,
+              contentHash: result.summary.contentHash,
+              body: result.body,
+            },
+            requestId,
+          },
+          requestId,
+        );
         return;
       }
       if (path === "/workspace/refresh" && method === "POST") {
         await monitor.watcher.reconcile();
-        send(response, 200, { workspace: snapshot(monitor.index), requestId }, requestId);
+        send(response, 200, { workspace: await snapshot(monitor.index), requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/task-groups" && method === "POST") {
+        const input = await readJson(request);
+        assertKeys(input, ["name"]);
+        const name = stringField(input, "name");
+        const group = await createTaskGroup(workspace, name);
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          201,
+          { group, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/tasks" && method === "POST") {
+        const input = await readJson(request);
+        assertKeys(input, ["title", "group", "description", "startAt", "dueAt"]);
+        const task = await createTask(workspace, {
+          title: stringField(input, "title"),
+          group: stringField(input, "group"),
+          ...(optionalString(input, "description")
+            ? { description: optionalString(input, "description") }
+            : {}),
+          ...(optionalString(input, "startAt")
+            ? { startAt: optionalString(input, "startAt") }
+            : {}),
+          ...(optionalString(input, "dueAt") ? { dueAt: optionalString(input, "dueAt") } : {}),
+        });
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          201,
+          { task, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path.startsWith("/workspace/task/") && method === "PATCH") {
+        const input = await readJson(request);
+        assertKeys(input, ["status", "dueAt", "expectedHash"]);
+        const identifier = decodeURIComponent(path.slice("/workspace/task/".length));
+        const task = await updateTask(
+          workspace,
+          identifier,
+          {
+            ...(optionalString(input, "status")
+              ? {
+                  status: optionalString(input, "status") as
+                    | "planned"
+                    | "in-progress"
+                    | "blocked"
+                    | "completed",
+                }
+              : {}),
+            ...(optionalString(input, "dueAt") ? { dueAt: optionalString(input, "dueAt") } : {}),
+          },
+          stringField(input, "expectedHash"),
+        );
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { task: task.task, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
         return;
       }
     } catch (error) {
-      send(response, 400, { error: { code: "workspace_error", message: error instanceof Error ? error.message : "Workspace request failed", requestId } }, requestId);
+      const code = error instanceof WorkspaceError ? error.code : "invalid_input";
+      const status =
+        code === "conflict"
+          ? 409
+          : code === "not_found"
+            ? 404
+            : code === "already_exists"
+              ? 409
+              : 400;
+      send(
+        response,
+        status,
+        {
+          error: {
+            code,
+            message: error instanceof Error ? error.message : "Workspace request failed",
+            requestId,
+          },
+        },
+        requestId,
+      );
       return;
     }
   }
@@ -193,6 +373,41 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     error: { code: "not_found", message: "Route not found", requestId },
   };
   send(response, 404, error, requestId);
+}
+
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 64_000) throw new Error("Request body is too large");
+    chunks.push(buffer);
+  }
+  const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("Request body must be a JSON object");
+  return parsed as Record<string, unknown>;
+}
+
+function stringField(input: Record<string, unknown>, key: string): string {
+  const value = input[key];
+  if (typeof value !== "string" || !value.trim())
+    throw new Error(`${key} must be a non-empty string`);
+  return value;
+}
+
+function assertKeys(input: Record<string, unknown>, allowed: readonly string[]): void {
+  for (const key of Object.keys(input)) {
+    if (!allowed.includes(key)) throw new Error(`Unsupported request field: ${key}`);
+  }
+}
+
+function optionalString(input: Record<string, unknown>, key: string): string | undefined {
+  const value = input[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new Error(`${key} must be a string`);
+  return value;
 }
 
 export function createLocalServer(): Server {
@@ -235,7 +450,9 @@ if (import.meta.main) {
   const workspaceMonitor = runtimeState.monitor;
   const server = createLocalServer();
   server.listen(port, host, () =>
-    process.stdout.write(`Task local runtime listening on http://${host}:${port}; capability=${runtimeState.capability}\n`),
+    process.stdout.write(
+      `Task local runtime listening on http://${host}:${port}; capability=${runtimeState.capability}\n`,
+    ),
   );
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {

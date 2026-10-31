@@ -73,7 +73,15 @@ export function parseFrontmatter(content: string): {
     if (values.priority !== undefined && !taskPriorities.has(values.priority as TaskPriority)) {
       throw new Error("Task priority must be low, medium, or high");
     }
-    for (const key of ["assignee", "project", "start_at", "due_at", "created_at", "updated_at", "archived_at"] as const) {
+    for (const key of [
+      "assignee",
+      "project",
+      "start_at",
+      "due_at",
+      "created_at",
+      "updated_at",
+      "archived_at",
+    ] as const) {
       if (values[key] !== undefined && typeof values[key] !== "string") {
         throw new Error(`${key} must be a string`);
       }
@@ -90,7 +98,11 @@ export function parseFrontmatter(content: string): {
         }
       }
     }
-    if (typeof values.start_at === "string" && typeof values.due_at === "string" && values.start_at > values.due_at) {
+    if (
+      typeof values.start_at === "string" &&
+      typeof values.due_at === "string" &&
+      values.start_at > values.due_at
+    ) {
       throw new Error("start_at must not be after due_at");
     }
     if (

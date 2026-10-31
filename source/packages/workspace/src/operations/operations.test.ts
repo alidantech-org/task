@@ -7,6 +7,7 @@ import {
   createDocument,
   createTask,
   createTaskGroup,
+  initializeWorkspace,
   listTaskGroups,
   listTasks,
   readWorkspaceDocument,
@@ -40,6 +41,36 @@ async function project(): Promise<{ projectRoot: string; workspace: string }> {
 }
 
 describe("workspace resolution", () => {
+  test("initializes a project workspace without overwriting existing content", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-init-project-"));
+    await writeFile(join(root, "README.md"), "keep me\n");
+    const initialized = await initializeWorkspace({ projectRoot: root, workspace: ".tasks" });
+    expect(initialized.root).toBe(join(root, ".tasks"));
+    expect(initialized.createdWorkspace).toBe(true);
+    expect(await readFile(join(root, "task.yaml"), "utf8")).toBe('workspace: ".tasks"\n');
+    expect(await readFile(join(root, "README.md"), "utf8")).toBe("keep me\n");
+    await expect(initializeWorkspace({ projectRoot: root })).rejects.toThrow("already exists");
+    expect(await readFile(join(root, "task.yaml"), "utf8")).toBe('workspace: ".tasks"\n');
+  });
+
+  test("rejects workspace paths outside the project", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-init-escape-"));
+    await expect(
+      initializeWorkspace({ projectRoot: root, workspace: "../outside" }),
+    ).rejects.toThrow("inside the project");
+  });
+
+  test("rejects symlinked workspace components before creating outside paths", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-init-symlink-"));
+    const outside = await mkdtemp(join(tmpdir(), "task-init-outside-"));
+    await symlink(outside, join(root, "linked"), "dir");
+    await expect(
+      initializeWorkspace({ projectRoot: root, workspace: "linked/new-workspace" }),
+    ).rejects.toMatchObject({ code: "path_not_safe" });
+    await expect(readFile(join(outside, "new-workspace"), "utf8")).rejects.toThrow();
+    await rm(outside, { recursive: true, force: true });
+  });
+
   test("finds the nearest default workspace from nested directories", async () => {
     const { projectRoot, workspace } = await project();
     await mkdir(join(projectRoot, "src", "nested"), { recursive: true });
@@ -123,6 +154,17 @@ describe("task operations", () => {
     await expect(updateTask(context, task.metadata.id, { startAt: "2026-11-10" })).rejects.toThrow(
       "start_at must not be after due_at",
     );
+  });
+
+  test("rejects updates against a stale task content hash", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Concurrent edits");
+    const task = await createTask(context, { group: group.id, title: "Avoid overwriting" });
+    await updateTask(context, task.metadata.id, { status: "in-progress" });
+    await expect(
+      updateTask(context, task.metadata.id, { status: "blocked" }, task.contentHash),
+    ).rejects.toMatchObject({ code: "conflict" });
   });
 
   test("archives a completed group and restores it by group ID", async () => {

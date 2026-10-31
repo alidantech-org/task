@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { closeLocalWorkspace, configureWorkspace, createLocalServer, monitorWorkspace } from "@/server";
+import {
+  closeLocalWorkspace,
+  configureWorkspace,
+  createLocalServer,
+  monitorWorkspace,
+} from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
 
@@ -60,13 +65,57 @@ describe("local runtime HTTP boundary", () => {
       const baseUrl = `http://127.0.0.1:${address.port}`;
       const session = await fetch(`${baseUrl}/internal/session`);
       const { capability } = (await session.json()) as { capability: string };
-      const denied = await fetch(`${baseUrl}/workspace`, { headers: { origin: "https://evil.example", "x-task-capability": capability } });
+      const denied = await fetch(`${baseUrl}/workspace`, {
+        headers: { origin: "https://evil.example", "x-task-capability": capability },
+      });
       expect(denied.status).toBe(403);
       const unauthorized = await fetch(`${baseUrl}/workspace`);
       expect(unauthorized.status).toBe(401);
-      const snapshot = await fetch(`${baseUrl}/workspace`, { headers: { "x-task-capability": capability } });
+      const snapshot = await fetch(`${baseUrl}/workspace`, {
+        headers: { "x-task-capability": capability },
+      });
       expect(snapshot.status).toBe(200);
-      expect(await snapshot.json()).toMatchObject({ workspace: { documents: [{ id: "T-1", name: "One" }] } });
+      expect(await snapshot.json()).toMatchObject({
+        workspace: { documents: [{ id: "T-1", name: "One" }] },
+      });
+
+      const createdGroup = await fetch(`${baseUrl}/workspace/task-groups`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({ name: "Dashboard" }),
+      });
+      expect(createdGroup.status).toBe(201);
+      const groupPayload = (await createdGroup.json()) as {
+        group: { id: string };
+        workspace: { groups: Array<{ id: string }> };
+      };
+      expect(groupPayload.workspace.groups).toHaveLength(1);
+      const createdTask = await fetch(`${baseUrl}/workspace/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({
+          title: "Created locally",
+          group: groupPayload.group.id,
+          dueAt: "2026-11-05",
+        }),
+      });
+      expect(createdTask.status).toBe(201);
+      const taskPayload = (await createdTask.json()) as {
+        task: { metadata: { id: string; due_at: string }; contentHash: string };
+      };
+      expect(taskPayload.task.metadata.due_at).toBe("2026-11-05");
+      const moved = await fetch(`${baseUrl}/workspace/task/${taskPayload.task.metadata.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({ status: "in-progress", expectedHash: taskPayload.task.contentHash }),
+      });
+      expect(moved.status).toBe(200);
+      const conflict = await fetch(`${baseUrl}/workspace/task/${taskPayload.task.metadata.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({ status: "blocked", expectedHash: taskPayload.task.contentHash }),
+      });
+      expect(conflict.status).toBe(409);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1,7 +1,10 @@
 import { App } from "@/components/app-shell";
 import { cookies } from "next/headers";
 
-async function getRuntime(): Promise<{ status: "connected" | "offline"; workspace: Record<string, unknown> | null }> {
+async function getRuntime(): Promise<{
+  status: "connected" | "offline";
+  workspace: Record<string, unknown> | null;
+}> {
   try {
     const port = process.env.TASK_LOCAL_PORT ?? "4317";
     const response = await fetch(`http://127.0.0.1:${port}/health/live`, { cache: "no-store" });

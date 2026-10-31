@@ -20,9 +20,10 @@
     "tailwindcss": "^4.3.3"
   },
   "dependencies": {
+    "@dnd-kit/react": "^0.5.1",
     "@task/contracts": "workspace:*",
-    "@task/workspace": "workspace:*",
     "@task/ui": "workspace:*",
+    "@task/workspace": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.1",
     "lucide-react": "^1.65.0",

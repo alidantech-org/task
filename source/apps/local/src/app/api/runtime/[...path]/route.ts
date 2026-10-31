@@ -3,15 +3,30 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-async function forward(request: Request, context: { params: Promise<{ path: string[] }> }): Promise<NextResponse> {
+async function forward(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+): Promise<NextResponse> {
   const { path } = await context.params;
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method)) {
+    const origin = request.headers.get("origin");
+    if (!origin || origin !== new URL(request.url).origin) {
+      return NextResponse.json(
+        { error: { code: "forbidden", message: "Mutation origin is not allowed" } },
+        { status: 403 },
+      );
+    }
+  }
   const cookieStore = await cookies();
   let capability = cookieStore.get("task_runtime_capability")?.value;
   const port = process.env.TASK_LOCAL_PORT ?? "4317";
 
   if (!capability) {
-    const handshake = await fetch(`http://127.0.0.1:${port}/internal/session`, { cache: "no-store" }).catch(() => null);
-    if (!handshake?.ok) return NextResponse.json({ error: { message: "Local runtime is offline" } }, { status: 503 });
+    const handshake = await fetch(`http://127.0.0.1:${port}/internal/session`, {
+      cache: "no-store",
+    }).catch(() => null);
+    if (!handshake?.ok)
+      return NextResponse.json({ error: { message: "Local runtime is offline" } }, { status: 503 });
     const payload = (await handshake.json()) as { capability: string };
     capability = payload.capability;
   }
@@ -20,9 +35,11 @@ async function forward(request: Request, context: { params: Promise<{ path: stri
   const headers = new Headers();
   headers.set("x-task-capability", capability);
   const init: RequestInit = { method: request.method, headers, cache: "no-store" };
-  if (request.method !== "GET" && request.method !== "HEAD") init.body = await request.arrayBuffer();
+  if (request.method !== "GET" && request.method !== "HEAD")
+    init.body = await request.arrayBuffer();
   const response = await fetch(target, init).catch(() => null);
-  if (!response) return NextResponse.json({ error: { message: "Local runtime is offline" } }, { status: 503 });
+  if (!response)
+    return NextResponse.json({ error: { message: "Local runtime is offline" } }, { status: 503 });
   const result = new NextResponse(await response.arrayBuffer(), {
     status: response.status,
     headers: { "content-type": response.headers.get("content-type") ?? "application/json" },
@@ -41,3 +58,4 @@ async function forward(request: Request, context: { params: Promise<{ path: stri
 
 export const GET = forward;
 export const POST = forward;
+export const PATCH = forward;

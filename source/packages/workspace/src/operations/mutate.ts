@@ -68,6 +68,11 @@ async function replaceFile(
   const absolute = await resolveSafeWorkspacePath(context.root, path);
   const stat = await lstat(absolute);
   if (!stat.isFile()) throw new WorkspaceError("path_not_safe", `Not a regular file: ${path}`);
+  const parentPath = dirname(absolute);
+  const parentStat = await lstat(parentPath);
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+    throw new WorkspaceError("path_not_safe", `Task parent is not a safe directory: ${path}`);
+  }
   const current = await Bun.file(absolute).text();
   const hash = new Bun.CryptoHasher("sha256").update(current).digest("hex");
   if (hash !== expectedHash)
@@ -86,6 +91,32 @@ async function replaceFile(
       await temporary.close();
     }
     await resolveSafeWorkspacePath(context.root, path);
+    const currentParent = await lstat(parentPath);
+    const currentTarget = await lstat(absolute);
+    if (
+      currentParent.dev !== parentStat.dev ||
+      currentParent.ino !== parentStat.ino ||
+      currentParent.isSymbolicLink()
+    ) {
+      throw new WorkspaceError(
+        "conflict",
+        `Task directory changed while you were editing: ${path}`,
+      );
+    }
+    if (
+      !currentTarget.isFile() ||
+      currentTarget.dev !== stat.dev ||
+      currentTarget.ino !== stat.ino
+    ) {
+      throw new WorkspaceError(
+        "conflict",
+        `Task file was replaced while you were editing: ${path}`,
+      );
+    }
+    const latest = await Bun.file(absolute).text();
+    if (new Bun.CryptoHasher("sha256").update(latest).digest("hex") !== expectedHash) {
+      throw new WorkspaceError("conflict", `File changed while you were editing: ${path}`);
+    }
     await rename(temporaryPath, absolute);
   } catch (error) {
     await rm(temporaryPath, { force: true }).catch(() => undefined);
@@ -251,6 +282,7 @@ export async function updateTask(
   context: WorkspaceContext,
   identifier: string,
   input: TaskUpdateInput,
+  expectedHash?: string,
 ): Promise<{ task: DocumentSummary; archivedGroup?: TaskGroup }> {
   const index = await buildWorkspaceIndex(context);
   const task = findDocument(index, identifier);
@@ -261,6 +293,9 @@ export async function updateTask(
       "invalid_input",
       "Restore the archived group before updating its tasks",
     );
+  if (expectedHash !== undefined && task.contentHash !== expectedHash) {
+    throw new WorkspaceError("conflict", `Task changed since it was loaded: ${task.path}`);
+  }
   const path = await resolveSafeWorkspacePath(context.root, task.path);
   const content = await Bun.file(path).text();
   const parsed = parseFrontmatter(content);
@@ -287,7 +322,11 @@ export async function updateTask(
   try {
     parseFrontmatter(next);
   } catch (error) {
-    throw new WorkspaceError("validation_failed", error instanceof Error ? error.message : "Invalid task metadata", { cause: error });
+    throw new WorkspaceError(
+      "validation_failed",
+      error instanceof Error ? error.message : "Invalid task metadata",
+      { cause: error },
+    );
   }
   await replaceFile(context, task.path, next, task.contentHash);
   const updatedIndex = await buildWorkspaceIndex(context);
@@ -392,7 +431,12 @@ export async function archiveGroup(
     const path = await resolveSafeWorkspacePath(context.root, task.path);
     const parsed = parseFrontmatter(await Bun.file(path).text());
     parsed.values.archived_at = archivedAt;
-    await replaceFile(context, task.path, serializeMarkdown(parsed.values, parsed.body), task.contentHash);
+    await replaceFile(
+      context,
+      task.path,
+      serializeMarkdown(parsed.values, parsed.body),
+      task.contentHash,
+    );
   }
   await rename(sourcePath, destinationPath);
   return { ...group, path: destination, archived: true };
@@ -422,7 +466,12 @@ export async function restoreGroup(
     const path = await resolveSafeWorkspacePath(context.root, task.path);
     const parsed = parseFrontmatter(await Bun.file(path).text());
     delete parsed.values.archived_at;
-    await replaceFile(context, task.path, serializeMarkdown(parsed.values, parsed.body), task.contentHash);
+    await replaceFile(
+      context,
+      task.path,
+      serializeMarkdown(parsed.values, parsed.body),
+      task.contentHash,
+    );
   }
   await rename(sourcePath, destinationPath);
   return { ...group, path: destination, archived: false };

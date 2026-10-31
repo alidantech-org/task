@@ -33,6 +33,7 @@ Architecture decisions:
     │   └── tui/                 # OpenTUI + React terminal application
     └── packages/
         ├── contracts/           # Shared TypeScript contracts
+        ├── ui/                  # Shared browser design tokens and primitives
         └── workspace/           # Shared local workspace index and path primitives
 
 Root-level scripts/ contains small Bun bridges for native toolchains such as Flutter; it is not an application source directory.
@@ -82,7 +83,7 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 
 - The CLI has task/tk aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, archive/restore, document commands, validation, index diagnostics, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime.
 - The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
-- The local application has a Next.js dashboard starter and a separate loopback-only HTTP runtime exposing only GET /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
+- The local application has a Next.js dashboard with overview, task list/board/calendar, document browsing, detail panels, prompt generation, global full-text search, and workspace diagnostics. Its loopback runtime exposes capability-protected read/query/validation/refresh and task create/update routes through a same-origin Next.js proxy. Writes use shared operations with hash conflicts, symlink rejection, and atomic file replacement; they recheck directory and file identity before replacement but do not use kernel-enforced directory handles against a hostile concurrent filesystem actor. Trusted project switching, Markdown source editing, and WebSocket updates are not implemented.
 - The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.
 - The Flutter project has a minimal Material application and widget smoke test, with Flutter analyze/test wired into root scripts.
 - The TUI has an OpenTUI/React interactive navigation shell and navigation test. It does not yet read or mutate workspace files.
@@ -97,6 +98,7 @@ source/packages is the home for reusable code shared across applications. Extrac
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
+- @task/ui: shared Tailwind design tokens and React primitives for local and hosted Next.js apps. It does not own app routes, state, or data adapters.
 - @task/workspace: workspace configuration/discovery, in-memory Markdown summaries and reconciliation, on-demand body reads, validation, queries/search, and local task/group operations shared by consumers.
 
 TypeScript packages are not directly consumable by Flutter/Dart. The mobile client must use generated or separately maintained Dart contracts from a language-neutral schema or API definition.

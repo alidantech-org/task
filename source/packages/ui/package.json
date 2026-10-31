@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
-    "./*.tsx": "./src/*.tsx"
+    "./*.tsx": "./src/*.tsx",
+    "./*.ts": "./src/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

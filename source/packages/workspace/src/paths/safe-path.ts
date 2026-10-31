@@ -42,6 +42,10 @@ export async function resolveSafeWorkspacePath(root: string, candidate: string):
       continue;
     }
 
+    const info = await lstat(ancestor);
+    if (info.isSymbolicLink()) {
+      throw new Error("Symbolic links are not allowed in managed workspace paths");
+    }
     let realAncestor: string;
     try {
       realAncestor = await realpath(ancestor);

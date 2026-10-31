@@ -50,7 +50,9 @@ export function getWorkspaceOverview(index: WorkspaceIndex): {
     completed: tasks.filter((task) => task.metadata.status === "completed").length,
     documents: listDocuments(index).length,
     diagnostics: index.diagnostics.length,
-    recent: [...index.documents.values()].sort((left, right) => right.modifiedAt - left.modifiedAt).slice(0, 8),
+    recent: [...index.documents.values()]
+      .sort((left, right) => right.modifiedAt - left.modifiedAt)
+      .slice(0, 8),
   };
 }
 

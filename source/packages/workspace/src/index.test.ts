@@ -60,7 +60,7 @@ describe("workspace path safety", () => {
     );
 
     await expect(resolveSafeWorkspacePath(workspace, "tasks/dangling/new-file.md")).rejects.toThrow(
-      "Unable to resolve workspace path safely",
+      "Symbolic links are not allowed in managed workspace paths",
     );
   });
 

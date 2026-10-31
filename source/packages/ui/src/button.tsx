@@ -1,7 +1,7 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ButtonHTMLAttributes, JSX } from "react";
-import { cn } from "@task/ui/utils.tsx";
+import { cn } from "@task/ui/utils.ts";
 
 const buttonStyles = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
@@ -31,7 +31,13 @@ export interface ButtonProps
   asChild?: boolean;
 }
 
-export function Button({ asChild = false, className, size, variant, ...props }: ButtonProps): JSX.Element {
+export function Button({
+  asChild = false,
+  className,
+  size,
+  variant,
+  ...props
+}: ButtonProps): JSX.Element {
   const Component = asChild ? Slot : "button";
   return <Component className={cn(buttonStyles({ className, size, variant }))} {...props} />;
 }
