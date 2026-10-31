@@ -1,74 +1,95 @@
 # Task
 
-Task is a repository-native task and project management system built with Bun and TypeScript.
+Task is a local-first task and project management platform for individuals and organizations. It supports local repository work, optional cloud-connected workspaces, and cloud-native projects.
 
-The project is intended to provide three complementary interfaces over one shared task-management core:
-
-- **CLI** for developers and AI agents.
-- **Local dashboard** for visual project and Kanban management.
-- **Terminal interface** for interactive terminal workflows.
-
-The repository and each initialized project should keep task records and project knowledge versioned alongside the code. Markdown files and Git are the foundation; a hosted service or external database should not be required.
+The product includes a scriptable CLI, local Next.js dashboard, hosted Next.js website, NestJS API, Flutter mobile client, and OpenTUI terminal interface. The TypeScript applications and shared packages are managed by one root Bun workspace. Flutter remains on its native Dart toolchain and is exposed through root convenience scripts.
 
 ## Repository conventions
 
-### Source code
+- source/ contains application and package source code.
+- tasks/docs/ contains engineering documentation about the Task software project by convention.
+- The Task-managed workspace defaults to tasks/. Engineering docs in tasks/docs/ carry frontmatter so the local application can discover them; root README.md and AGENTS.md remain ordinary Markdown.
+- Only Markdown files inside the configured Task-managed workspace require Task YAML frontmatter.
+- Root/common Markdown files outside that workspace, such as this README, do not require Task frontmatter.
+- Root TODO.md, when introduced, is an overview/index rather than a second source of truth.
+- No generated SDK directory is planned.
 
-Application and package source code lives under `source/`:
+See [Repository documentation](tasks/docs/README.md), [Task workspace conventions](tasks/README.md), the [install-once, use-in-any-project guide](tasks/docs/guides/install-once-use-anywhere.md), [platform architecture](tasks/docs/architecture/platform-architecture.md), and [Decision 0011](tasks/decisions/0011-application-experience-tooling.md).
 
-```text
-source/
-├── apps/
-│   ├── cli/
-│   └── dashboard/
-└── packages/
-    ├── core/
-    └── workspace/
-```
+## Application experience
 
-This is the intended starting organization, not a claim that all directories already exist. Add packages when there is a concrete need; avoid empty or speculative packages. The core owns domain rules and task lifecycle behavior. Workspace concerns include reading and writing project files, Markdown/frontmatter, configuration, indexing, and Git integration. The CLI, dashboard, and terminal interface should use the same core rather than implementing separate business logic.
+- All websites and browser applications use Next.js App Router.
+- The advanced TUI uses OpenTUI with React bindings.
+- The CLI uses terminal-aware colour and Clack prompts, while preserving JSON output and script/agent compatibility.
+- task and tc invoke the same CLI.
+- The hosted API is a NestJS modular monolith; mobile is Flutter.
 
-There is no generated SDK directory in this repository. Internal schemas and contracts may live with the code that owns them.
+## Install and run
 
-### Project records and documentation
+Requirements: Bun 1.3.14 or later, Node.js 20.9 or later, and Flutter SDK on `PATH`.
 
-Use **`tasks/`** as the visible, repository-level workspace directory. Do not use `.tasks/` or `.task/` for this purpose.
+Install and configure dependencies for all Bun workspace projects and the separate Flutter mobile app from the repository root:
 
-```text
-tasks/
-├── config.yaml
-├── TASK-0001.md
-├── docs/
-│   ├── product/
-│   ├── architecture/
-│   ├── research/
-│   └── benchmarks/
-├── decisions/
-├── handoffs/
-├── state/
-└── archive/
-```
+    bun run setup
 
-This is the intended convention for this repository and for projects initialized by `task init`. The exact subdirectories can grow as real needs emerge.
+To also install checkout-only `taskcode-dev` and `tc-dev` commands in Bun's global executable directory, run `bun run setup --link-cli`. These commands run source from this checkout and do not replace published `taskcode`, `task`, or `tc` commands. The default setup only installs project dependencies.
 
-- Individual task and knowledge records are the source of truth.
-- Root-level `TODO.md` is a convenient overview/index, not a second source of truth.
-- Keep task records, project documentation, decisions, handoffs, and related records together under `tasks/`.
-- Prefer stable task identifiers so records can link to one another.
+For a new local project, install the published CLI once with `npm install --global taskcode` (or pnpm/Bun global install), enter the project, run `task init`, and start the local workspace dashboard with `task run`. The package exposes `taskcode`, `task`, and `tc` aliases. The CLI requires Bun 1.3.14 or later; `task run` also requires Node.js 20.9 or later for Next.js. The dashboard and a loopback-only Bun runtime use the workspace chosen by `task.yaml`, `TASK_WORKSPACE_ROOT`, or `--workspace`. Press Ctrl+C to stop both services. Use `task run --no-open` when the browser should not be opened automatically.
 
-### CLI names
+Start the complete local development stack:
 
-The product is named **Task**. The CLI should be available through both `task` and `tk`; both names invoke the same implementation and support the same commands.
+    bun dev
 
-## Development workflow
+This keeps the API, hosted site, local runtime, and local dashboard running together. The development URLs are API `http://127.0.0.1:3000` (OpenAPI at `/api/docs`), hosted site `http://127.0.0.1:5174`, and local dashboard `http://127.0.0.1:5173`; the local runtime listens on `127.0.0.1:4317`. Press Ctrl+C to stop the stack. If any service exits, the stack stops its peers.
 
-- `main` is the stable branch.
-- `develop` is the active integration branch.
-- Day-to-day implementation and feature work should happen on `develop`.
-- Promote reviewed, working changes from `develop` to `main` when ready for a stable milestone.
+Run individual applications or terminal tools separately:
 
-Keep changes focused and document meaningful architectural decisions in `tasks/decisions/`.
+    bun run dev:cli
+    bun run dev:local
+    bun run dev:site
+    bun run dev:api
+    bun run dev:tui
+    bun run dev:mobile
 
-## Current status
+The local command starts the loopback runtime and local Next.js dashboard together. The CLI and TUI run separately because the CLI is one-shot and the TUI needs an interactive terminal. Flutter commands are delegated to the Flutter SDK from the root scripts.
 
-This README records the initial project direction and repository conventions. The directory tree above is a proposed structure; it does not imply that the applications, packages, or workspace tooling have been implemented yet.
+## Quality gates
+
+Format source:
+
+    bun run format
+
+Run the complete validation pipeline:
+
+    bun run validate
+
+The validation command checks formatting, dependency advisories, Biome lint/security rules, TypeScript across all Bun workspaces, Bun tests, production builds for the API and both Next.js apps, and Flutter analysis/tests.
+
+Useful individual commands:
+
+    bun run format:check
+    bun run lint
+    bun run typecheck
+    bun run test
+    bun run audit
+    bun run security
+    bun run build
+    bun run mobile:analyze
+    bun run mobile:test
+
+Run flutter pub get through the root bridge before the first mobile validation:
+
+    bun run mobile:pub:get
+
+bun run validate is the single root quality gate. It requires installed Bun dependencies, a current Bun lockfile, Flutter SDK/dependencies, and network access for the dependency advisory audit.
+
+See [development setup](tasks/docs/development/setup.md) and [source layout](tasks/docs/architecture/source-layout.md).
+
+## Branch workflow
+
+- develop is the integration branch. Day-to-day work happens here.
+- main is the stable branch. Promote reviewed changes from develop when ready.
+
+## Project status
+
+The CLI provides local workspace discovery, task and document queries, validation, task/group updates, editor handoff, and group archive/restore through the shared `@task/workspace` engine. `task project inspect` statically reports repository facts, while `task setup` reviews and applies selected Task docs/rules and Codex, Claude, Copilot, Cursor, or portable Skill guidance adapters. It does not execute project code or launch agents. `task run` starts the packaged local dashboard and runtime. The TUI includes read-only Rules and Agent Profile views; agent orchestration, authentication, persistence, and cloud sync remain future work. CLI packages are configured for public publishing; registry publication still requires the repository owner’s registry access and release approval. Completed groups use `todo/_completed/YYYY/MM/`; explicitly archived tasks and groups use `todo/_archived/YYYY/MM/`. Setup guidance calls for an explicit choice before ignoring either folder. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries.

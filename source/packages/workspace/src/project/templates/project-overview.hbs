@@ -1,0 +1,12 @@
+# {{projectName}}
+
+This overview is generated from static repository inspection. Paths listed below are evidence; verify current behavior in source and project documentation.
+
+## Detected repository facts
+{{#each facts}}
+- **{{key}}:** {{value}}{{#if evidence.length}} — {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{/if}}
+{{/each}}
+
+## Guidance
+
+Keep this document aligned with the repository. Add architecture, setup, and operational details only after verifying them from source or project maintainers.

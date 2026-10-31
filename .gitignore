@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+
+# Test and coverage output
+coverage/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Tool and editor state
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Local Task workspace state
+.tasks-cache/
+.task-cli-release-build-*/
+
+# Next.js and frontend tooling
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Flutter / Dart generated state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
