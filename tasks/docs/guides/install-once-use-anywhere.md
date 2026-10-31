@@ -12,7 +12,7 @@ Task is designed to be a **single, machine-wide command-line tool** that can wor
 
 You install the Task executable once. You do not install a separate copy of Task inside every project. When you run it from a project directory, Task discovers that repository and reads that project's own configuration and managed workspace.
 
-> **Implementation status:** This document records the intended user experience and distribution architecture. The current repository has a minimal CLI shell; installers, release binaries, `task init`, workspace discovery, `task run`, and the dashboard are not implemented yet. Installation commands and package-manager names below are examples of the future experience, not working download instructions.
+> **Implementation status:** This document records the intended user experience and distribution architecture. The repository now has local workspace discovery and core task/document CLI commands. Installers, release binaries, `task init`, `task run`, and dashboard workspace workflows are not implemented yet. Installation commands and package-manager names below are examples of the future experience, not working download instructions.
 
 ## 1. The mental model
 
@@ -96,9 +96,9 @@ Task should resolve the current repository from the working directory, load its 
 The intended context-resolution behavior is:
 
 1. Find the Git repository containing the current working directory (or otherwise identify the supported project root).
-2. Read the repository's root `task.yaml`, if present.
-3. Resolve the configured Task workspace directory.
-4. If no configuration file or workspace setting exists, use the default `tasks/` directory.
+2. Check `--workspace`, then `TASK_WORKSPACE_ROOT` for an explicitly selected workspace directory.
+3. Otherwise, walk upward from the current directory to the nearest `task.yaml` and resolve its project-relative `workspace` directory (default `tasks/`).
+4. Without a configuration file, use the nearest ancestor's `tasks/` directory.
 5. Discover and validate the in-scope workspace documents using the shared metadata schemas.
 6. Perform the requested command against that repository only.
 
@@ -124,7 +124,7 @@ my-project/
     └── README.md
 ```
 
-The exact configuration key and complete `task.yaml` schema are still being designed. The workspace defaults to `tasks/`; a project may select another directory, for example `.tasks/` or `tasks/docs/`, through its configuration.
+The implemented resolver currently supports a repository-relative `workspace` key in `task.yaml`. The workspace defaults to `tasks/`; a project may select another directory, for example `.tasks/` or `tasks/docs/`, through its configuration.
 
 Initialization must respect existing files and directories. It should explain conflicts and ask before overwriting user content. It should not add Task frontmatter to unrelated repository Markdown.
 

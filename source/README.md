@@ -5,15 +5,15 @@ All application and package source code belongs under source/.
 ## Application foundations
 
 - api: NestJS hosted API with a health endpoint and controller smoke test.
-- apps/cli: coloured, scriptable CLI; task and tk share one entry point.
+- apps/cli: coloured, scriptable workspace CLI; task and tk share one entry point and use @task/workspace operations.
 - apps/local: Next.js dashboard plus a separate loopback-only local runtime. The dashboard checks runtime health server-side.
 - apps/site: hosted Next.js website starter; it checks the configured Task API health endpoint server-side.
 - apps/mobile: Flutter/Dart application with a widget smoke test.
 - apps/tui: OpenTUI + React interactive terminal navigation shell.
 - packages/contracts: shared TypeScript contracts and a runtime health-payload guard.
-- packages/workspace: lexical and symlink-aware workspace path preflight helpers with safety tests.
+- packages/workspace: workspace discovery, Markdown index/validation/search, task/group operations, and path preflight helpers with tests.
 
-These are starter foundations, not completed product capabilities. Workspace discovery and CRUD, safe file mutation primitives, local authorization, WebSocket reconciliation, API authentication/persistence, cloud sync and complete user workflows remain implementation work.
+The CLI and shared workspace engine implement the local task/document command foundation. Local browser workspace routes, local authorization, WebSocket reconciliation, API authentication/persistence, cloud sync and broader product workflows remain future work.
 
 ## Root Bun workspace
 
@@ -52,7 +52,7 @@ source/packages is the home for real reusable code shared across applications. A
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
-- @task/workspace: local workspace path primitives shared by local consumers. Lexical and symlink-aware path preflight is not a substitute for race-safe file operations.
+- @task/workspace: local workspace discovery, indexing, metadata validation, queries, and task/group operations shared by local consumers. Path preflight is not a substitute for race-safe file operations.
 
 Flutter/Dart cannot import TypeScript packages. Equivalent contracts must be generated from a language-neutral source or maintained/generated for Dart.
 

@@ -50,7 +50,7 @@ The metadata contract is strict and extensible:
 
 The repository-level `task.yaml` configures Task and selects the managed workspace. It is not the frontmatter block inside each Markdown file.
 
-The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document. See [Markdown metadata and schema architecture](../docs/architecture/markdown-metadata-schema.md) and [Decision 0003](decisions/0003-structured-frontmatter-schema.md).
+The frontmatter is the machine-readable contract used by validation and the Task UI. The Markdown body contains the human-readable document. See [Markdown metadata and schema architecture](docs/architecture/markdown-metadata-schema.md) and [Decision 0003](decisions/0003-structured-frontmatter-schema.md).
 
 ## Source of truth
 

@@ -78,7 +78,7 @@ See [Markdown metadata and schema architecture](markdown-metadata-schema.md).
 
 Local workspace files remain authoritative; Git is optional. Local operation does not require an account, network, or hosted API. Future Task Cloud synchronisation is two-way and supports multiple local replicas with independent device identities and progress. It requires stable IDs, revisions/cursors, idempotent retries, tombstones, conflict preservation, explicit initial reconciliation, revocation, and recovery. Git, local WebSocket updates, and cloud sync remain separate mechanisms.
 
-See [source layout](source-layout.md), [platform architecture](platform-architecture.md), and Decisions [0006](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md), [0007](../../tasks/decisions/0007-file-based-local-workspaces.md), [0008](../../tasks/decisions/0008-multi-device-two-way-sync.md), and [0009](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md).
+See [source layout](source-layout.md), [platform architecture](platform-architecture.md), and Decisions [0006](../../decisions/0006-local-and-hosted-application-boundaries.md), [0007](../../decisions/0007-file-based-local-workspaces.md), [0008](../../decisions/0008-multi-device-two-way-sync.md), and [0009](../../decisions/0009-bun-monorepo-and-shared-packages.md).
 
 ## Development workflow
 

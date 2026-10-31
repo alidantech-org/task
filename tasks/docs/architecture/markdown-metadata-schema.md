@@ -8,7 +8,7 @@ tags:
 
 # Markdown metadata and schema architecture
 
-This document defines the accepted design direction for metadata in Task-managed Markdown. It is a contract-design document; it does not claim that parsing, schemas, or validation have been implemented.
+This document describes the metadata contract used by the shared `@task/workspace` parser and validator. Schema evolution, versioning, and extensible type registration remain future design work.
 
 ## 1. Two different YAML roles
 
@@ -30,15 +30,15 @@ The frontmatter requirement applies only to Markdown files inside the configured
 - Every Markdown file inside the selected workspace follows the metadata contract.
 - Markdown outside the selected workspace, including root `README.md`, root `AGENTS.md`, while engineering documentation under `tasks/docs/` is managed and requires frontmatter.
 
-See [Decision 0002](../../tasks/decisions/0002-markdown-frontmatter-contract.md).
+See [Decision 0002](../../decisions/0002-markdown-frontmatter-contract.md).
 
 ## 3. Metadata contract
 
 The schema system has four layers:
 
 1. **Common identity fields:** required fields shared by every managed document: `id`, `name`, and `type`.
-2. **Common optional metadata:** reusable metadata fields that may apply across document types. The final list and constraints remain to be designed.
-3. **Type-specific metadata:** fields defined by the schema selected by `type`. Each type defines its own required and optional fields, data types, allowed values, and semantic constraints.
+2. **Common optional metadata:** `tags` is an optional sequence of unique, non-empty strings; `extra` is an optional mapping for supplemental data.
+3. **Type-specific metadata:** the parser supports task records, decisions, and general documents. Task status is `planned`, `in-progress`, `blocked`, or `completed`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
 4. **Explicit extension metadata:** the `extra` mapping for supplemental information that is not part of the common or type-specific contract.
 
 The contract is strict at the top level: an unknown field is an error unless the active schema or a supported workspace extension explicitly declares it. The `extra` mapping is the intentional extension point; it is not permission to add arbitrary top-level keys or bypass validation.
@@ -54,7 +54,7 @@ tags:
   - developer-experience
 ```
 
-The schema must validate that tags are a sequence of valid strings and must make them consistently available to search, filtering, grouping, and UI facets. Duplicate handling, case sensitivity, normalization, and exact naming constraints remain open schema-design decisions.
+The parser validates that tags are a sequence of unique, non-empty strings. Search and filter comparisons are case-insensitive; tags retain their authored casing.
 
 ## 5. Extra information
 
@@ -77,7 +77,7 @@ Requirements:
 - Values are data only and use safe YAML-compatible scalar, sequence, and mapping values.
 - It cannot override or shadow common or type-specific fields.
 - It does not disable validation of known metadata.
-- Parser safety, nesting depth, size limits, and any namespace conventions must be defined before implementation.
+- Explicit limits for document size and YAML nesting remain future hardening work.
 
 If a field becomes important to core behavior, filtering, relationships, or interoperability, it should graduate into a common or type-specific schema field rather than remain hidden in `extra`.
 
@@ -93,7 +93,7 @@ The `type` field selects a schema. A type schema defines:
 - Relationships and reference rules.
 - Fields available to search, filters, sorting, and UI presentation.
 
-Examples of potential document types include tasks, projects, decisions, handoffs, research, specifications, meeting notes, and milestones. This list is illustrative, not a finalized type catalogue.
+Other types such as projects, handoffs, research, specifications, meeting notes, and milestones currently use the general document fields. Dedicated schemas for them remain future work.
 
 A task schema may define status, priority, assignee, due date, estimate, parent, and dependencies. A decision schema may define status, date, scope, and decision references. Fields should not be assumed to apply to every type.
 
@@ -121,15 +121,17 @@ Schema versioning is required as a design concern. The exact representation, whe
 
 Changes to required fields, field meaning, allowed values, or relationship semantics must be deliberate and documented. Task should not silently reinterpret old documents.
 
-## 9. Illustrative document
+## 9. Task document
 
-The following demonstrates the intended shape only; it is not a finalized task schema:
+New task records created by the shared workspace engine use this shape (optional fields omitted):
 
 ```markdown
 ---
-id: TASK-0001
+id: TSK-012345ABCDEF
 name: Define the workspace metadata schema
 type: task
+status: planned
+priority: medium
 tags:
   - architecture
   - metadata
@@ -144,15 +146,14 @@ extra:
 Human-readable description, context, acceptance criteria, and notes belong in the Markdown body.
 ```
 
-## 10. Open design work
+## 10. Remaining schema design work
 
-Before implementation, define:
+Future work may define:
 
-- The complete common schema and optional fields.
-- The document type catalogue and each type's schema.
+- Additional common metadata and dedicated schemas for other document types.
 - The schema definition/registry format and ownership.
 - The custom field and custom document type extension mechanism.
-- Tag normalization and constraints.
+- Further tag normalization and constraints.
 - Safe `extra` value constraints and limits.
 - Schema version representation and migration policy.
 - Relationship syntax and validation.
@@ -160,5 +161,5 @@ Before implementation, define:
 
 ## Related decisions
 
-- [Decision 0002: Frontmatter applies only inside the configured Task workspace](../../tasks/decisions/0002-markdown-frontmatter-contract.md)
-- [Decision 0003: Structured and extensible Markdown frontmatter schema](../../tasks/decisions/0003-structured-frontmatter-schema.md)
+- [Decision 0002: Frontmatter applies only inside the configured Task workspace](../../decisions/0002-markdown-frontmatter-contract.md)
+- [Decision 0003: Structured and extensible Markdown frontmatter schema](../../decisions/0003-structured-frontmatter-schema.md)

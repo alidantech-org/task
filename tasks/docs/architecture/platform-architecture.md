@@ -23,14 +23,14 @@ The platform has separate product surfaces:
 
 ## Accepted architecture decisions
 
-- [0004 — Hybrid cloud platform](../../tasks/decisions/0004-hybrid-cloud-platform.md)
-- [0005 — Client, local runtime, and hosted API](../../tasks/decisions/0005-client-local-runtime-and-api-architecture.md)
-- [0006 — Separate local and hosted application boundaries](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md)
-- [0007 — File-based local workspaces and optional Git](../../tasks/decisions/0007-file-based-local-workspaces.md)
-- [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
-- [0009 — Bun monorepo, application scaffolds, and shared packages](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md)
-- [0010 — Shared local workspace engine for CLI and dashboard](../../tasks/decisions/0010-shared-local-workspace-engine.md)
-- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../tasks/decisions/0011-application-experience-tooling.md)
+- [0004 — Hybrid cloud platform](../../decisions/0004-hybrid-cloud-platform.md)
+- [0005 — Client, local runtime, and hosted API](../../decisions/0005-client-local-runtime-and-api-architecture.md)
+- [0006 — Separate local and hosted application boundaries](../../decisions/0006-local-and-hosted-application-boundaries.md)
+- [0007 — File-based local workspaces and optional Git](../../decisions/0007-file-based-local-workspaces.md)
+- [0008 — Two-way multi-device synchronization](../../decisions/0008-multi-device-two-way-sync.md)
+- [0009 — Bun monorepo, application scaffolds, and shared packages](../../decisions/0009-bun-monorepo-and-shared-packages.md)
+- [0010 — Shared local workspace engine for CLI and dashboard](../../decisions/0010-shared-local-workspace-engine.md)
+- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../decisions/0011-application-experience-tooling.md)
 - [Shared local workspace engine and CLI/dashboard collaboration](local-workspace-engine.md)
 
 ## Product and runtime boundaries
@@ -64,7 +64,7 @@ source/packages contains real reusable code, not empty placeholders. Initial pac
 
 Workspace records are stored in files; files are authoritative for local data. Git is optional and independent of Task Cloud sync. Root task.yaml selects the managed workspace boundary; the default is tasks/. Task Markdown frontmatter applies only inside the configured boundary. Ordinary Markdown elsewhere remains ordinary Markdown.
 
-The CLI performs ordinary local workspace operations directly and remains usable if the local app is stopped. The local application exposes shared operations to the browser through a restricted local HTTP API. The browser never receives arbitrary filesystem access.
+The CLI performs ordinary local workspace operations directly through `@task/workspace` and remains usable if the local app is stopped. The local application is intended to expose approved shared operations to the browser through a restricted local HTTP API. The browser never receives arbitrary filesystem access.
 
 The current local runtime scaffold binds to loopback and exposes only a health endpoint. Before exposing workspace data or mutations, implement workspace-scoped operations, symlink-aware path protections, origin/capability security, and managed-boundary validation. WebSocket live updates and CLI-managed process lifecycle are not implemented yet.
 
@@ -85,7 +85,7 @@ Never silently overwrite work or assume universal last-write-wins. Git history, 
 
 ## Implementation sequence
 
-1. Define workspace configuration, file/document contracts, stable IDs, discovery and validation; implement useful CLI operations.
+1. **Implemented foundation:** workspace selection, Markdown contracts, index/query/search/validation, task/group operations, and useful CLI commands in `@task/workspace` and the CLI.
 2. Implement shared local workspace operations.
 3. Implement local runtime security, HTTP/WebSocket contracts, filesystem reconciliation and CLI-managed lifecycle.
 4. Build the local Next.js dashboard against the local runtime and verify bidirectional updates, including external file edits.
@@ -98,6 +98,6 @@ Never silently overwrite work or assume universal last-write-wins. Git history, 
 
 ## Current implementation status
 
-Starter projects exist for the CLI, local application, hosted site, NestJS API, Flutter mobile app, TUI, and two shared TypeScript packages. They are scaffolds only. The local runtime currently has a health endpoint; the Next.js browser applications are starter screens; the API has no domain persistence or authentication; the CLI has a polished help surface but no full workspace commands; the TUI has an interactive navigation shell but no workspace integration; and sync is not implemented.
+Starter projects exist for the local application, hosted site, NestJS API, Flutter mobile app, TUI, and shared TypeScript packages. The CLI is connected to the shared local workspace engine for task/document commands, while the TUI remains a navigation shell. The local runtime currently has health endpoints and does not expose workspace data; the Next.js browser applications are service-status shells; the API has no domain persistence or authentication; and cloud sync is not implemented.
 
 Do not treat project setup as feature completion. See [source layout and implementation boundaries](source-layout.md) for the precise file inventory and current limitations.

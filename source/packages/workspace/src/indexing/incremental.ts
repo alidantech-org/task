@@ -57,6 +57,7 @@ async function scanWorkspaceIndex(
       diagnostics.push({
         path,
         message: error instanceof Error ? error.message : "Invalid metadata",
+        category: "metadata",
       });
     }
   }

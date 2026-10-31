@@ -13,12 +13,12 @@ tags:
 This document maps the accepted Task architecture to source-code ownership and distinguishes starter projects from completed capabilities. All application and package source code belongs under source/. Do not add a generated root sdk/ directory.
 
 Architecture decisions:
-- [0006 — Separate local and hosted application boundaries](../../tasks/decisions/0006-local-and-hosted-application-boundaries.md)
-- [0007 — File-based local workspaces and optional Git](../../tasks/decisions/0007-file-based-local-workspaces.md)
-- [0008 — Two-way multi-device synchronization](../../tasks/decisions/0008-multi-device-two-way-sync.md)
-- [0009 — Bun monorepo, application scaffolds, and shared packages](../../tasks/decisions/0009-bun-monorepo-and-shared-packages.md)
-- [0010 — Shared local workspace engine for CLI and dashboard](../../tasks/decisions/0010-shared-local-workspace-engine.md)
-- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../tasks/decisions/0011-application-experience-tooling.md)
+- [0006 — Separate local and hosted application boundaries](../../decisions/0006-local-and-hosted-application-boundaries.md)
+- [0007 — File-based local workspaces and optional Git](../../decisions/0007-file-based-local-workspaces.md)
+- [0008 — Two-way multi-device synchronization](../../decisions/0008-multi-device-two-way-sync.md)
+- [0009 — Bun monorepo, application scaffolds, and shared packages](../../decisions/0009-bun-monorepo-and-shared-packages.md)
+- [0010 — Shared local workspace engine for CLI and dashboard](../../decisions/0010-shared-local-workspace-engine.md)
+- [0011 — Next.js web applications, advanced TUI, and polished CLI](../../decisions/0011-application-experience-tooling.md)
 - [Shared local workspace engine and CLI/dashboard collaboration](local-workspace-engine.md)
 
 ## Source tree
@@ -78,16 +78,16 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 - **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tk, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
 - **Runtime:** Bun manages the TypeScript workspace. OpenTUI requires Bun 1.3.14 or later. Flutter remains on its independent Dart toolchain.
 
-## Current scaffold status
+## Current implementation status
 
-- The CLI has styled help, terminal-aware colours, task/tk aliases, JSON metadata, version output and a Bun-version doctor check. Full workspace commands are not implemented.
+- The CLI has task/tk aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, archive/restore, document commands, validation, index diagnostics, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime.
 - The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
 - The local application has a Next.js dashboard starter and a separate loopback-only HTTP runtime exposing only GET /health. It is not yet connected to workspace files, CLI lifecycle, or WebSocket updates.
 - The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.
 - The Flutter project has a minimal Material application and widget smoke test, with Flutter analyze/test wired into root scripts.
 - The TUI has an OpenTUI/React interactive navigation shell and navigation test. It does not yet read or mutate workspace files.
 - @task/contracts exports initial transport-neutral interfaces and a runtime health-payload guard.
-- @task/workspace exports lexical containment and an asynchronous symlink-aware path preflight, with traversal/symlink tests. This preflight is not a race-free filesystem operation; actual reads/writes must use safe file-handle strategies and repeat boundary checks at the operation boundary.
+- @task/workspace exports workspace resolution, shared Markdown indexing and body reads, task/document queries and search, metadata/reference/link/group validation, and task/group/document writes. Writes use exclusive creation, temporary replacement, hash conflict checks, and path checks; they are not claimed to be race-safe against hostile concurrent filesystem changes.
 
 A scaffold is not evidence that its product capabilities are implemented.
 
@@ -97,7 +97,7 @@ source/packages is the home for reusable code shared across applications. Extrac
 
 Initial packages:
 - @task/contracts: transport-neutral TypeScript contracts for Bun-managed applications.
-- @task/workspace: read-only in-memory Markdown summaries, reconciliation/watching, on-demand body reads, and path preflight shared by local consumers.
+- @task/workspace: workspace configuration/discovery, in-memory Markdown summaries and reconciliation, on-demand body reads, validation, queries/search, and local task/group operations shared by consumers.
 
 TypeScript packages are not directly consumable by Flutter/Dart. The mobile client must use generated or separately maintained Dart contracts from a language-neutral schema or API definition.
 
@@ -107,7 +107,7 @@ The hosted API's conceptual modules remain internal modules of one NestJS applic
 
 The CLI is the primary scriptable interface for people and AI agents. It must work without the local application running. Commands invoke workspace operations directly rather than routing every command through HTTP. Human-facing output should be polished and coloured; JSON output and exit codes remain stable for automation.
 
-The local application will expose approved capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. `@task/workspace` currently supplies a read-only summary index and explicit Markdown body reads; browser access remains gated on origin/capability authorization and safe operation-boundary filesystem protections.
+The local application is intended to expose approved capabilities to the browser through its restricted local HTTP API. CLI and local application must not implement competing task/document rules. `@task/workspace` supplies the local CLI's shared task/document operations; browser access remains gated on origin/capability authorization and safe operation-boundary filesystem protections.
 
 ## Local runtime security
 

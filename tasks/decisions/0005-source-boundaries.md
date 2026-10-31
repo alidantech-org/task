@@ -1,5 +1,5 @@
 ---
-id: DEC-0005
+id: DEC-0005-SOURCE-BOUNDARIES
 name: Source tree implementation boundaries
 type: decision
 status: accepted

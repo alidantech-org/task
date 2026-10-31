@@ -44,6 +44,17 @@ Run terminal tools separately: CLI commands are short-lived and the TUI needs it
     bun run dev:tui
     bun run dev:mobile
 
+The CLI and its `task`/`tk` aliases operate on workspace files directly through `@task/workspace`:
+
+    bun run dev:cli -- --help
+    bun run dev:cli -- info
+    bun run dev:cli -- group create --title "Workspace foundation"
+    bun run dev:cli -- create --group <group-id> --title "Add a task"
+    bun run dev:cli -- list --json
+    bun run dev:cli -- validate
+
+Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and diagnostics to stderr. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
+
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 
     bun run dev:local:runtime
@@ -121,4 +132,4 @@ Flutter/Dart does not import TypeScript package source. Cross-language contracts
 
 ## Current implementation scope
 
-These are starter foundations, not completed product capabilities. The local runtime exposes only a loopback health endpoint; the Next.js apps render starter screens; the CLI provides help, version, JSON metadata and a Bun environment check; the TUI has interactive keyboard navigation; and `@task/workspace` provides a read-only in-memory Markdown summary index with reconciliation and optional watching. Set `TASK_WORKSPACE_ROOT` to an already resolved workspace directory for the CLI doctor, TUI overview, or local runtime index. Workspace commands/CRUD, browser access to indexed content, safe mutations, authenticated local HTTP operations, WebSocket updates, API persistence/authentication, cloud sync, and complete user workflows remain future implementation work.
+The CLI and `@task/workspace` provide workspace discovery, task/document queries, metadata/body search, validation, task/group creation and updates, editor handoff, and group archive/restore. The local runtime still exposes only a loopback health endpoint; the Next.js apps render service-status shells; the TUI has interactive keyboard navigation but does not yet expose the CLI task workflows. Browser access to workspace content, runtime authorization and mutations, WebSocket updates, API persistence/authentication, cloud sync, and broader product workflows remain future work.

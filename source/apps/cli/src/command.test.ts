@@ -1,27 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { getCliMetadata, inspectWorkspace, resolveCommand } from "#/command";
+import { getCliMetadata, optionString, parseArgs } from "#/command";
 
 describe("CLI command metadata", () => {
   test("supports task and tk aliases", () => {
     expect(getCliMetadata("0.1.0").aliases).toEqual(["task", "tk"]);
   });
 
-  test("resolves the first positional command", () => {
-    expect(resolveCommand(["--json", "doctor"])).toBe("doctor");
-    expect(resolveCommand(["--help"])).toBeUndefined();
+  test("advertises the workspace command surface", () => {
+    expect(getCliMetadata("0.1.0").commands).toContain("group");
+    expect(getCliMetadata("0.1.0").commands).toContain("validate");
   });
 
-  test("doctor workspace inspection uses the shared index", async () => {
-    const root = await mkdtemp(join(tmpdir(), "task-cli-index-"));
-    try {
-      await mkdir(join(root, "tasks"));
-      await writeFile(join(root, "tasks", "one.md"), "---\nid: T-1\nname: One\ntype: task\n---\n");
-      expect(await inspectWorkspace(root)).toEqual({ documents: 1, invalid: 0 });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+  test("parses options, comma-separated values, and short help", () => {
+    const parsed = parseArgs([
+      "--json",
+      "--workspace",
+      "/tmp/tasks",
+      "create",
+      "--tag",
+      "a,b",
+      "-h",
+    ]);
+    expect(parsed.command).toBe("create");
+    expect(parsed.options.get("json")).toBe(true);
+    expect(optionString(parsed, "workspace")).toBe("/tmp/tasks");
+    expect(parsed.options.get("tag")).toBe("a,b");
+    expect(parsed.options.get("help")).toBe(true);
   });
 });

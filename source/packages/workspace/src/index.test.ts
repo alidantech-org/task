@@ -72,7 +72,7 @@ describe("workspace path safety", () => {
 });
 
 function markdown(id: string, name: string, type = "task"): string {
-  return `---\nid: ${id}\nname: ${name}\ntype: ${type}\ntags:\n  - foundation\nstatus: active\n---\n\n# ${name}\n`;
+  return `---\nid: ${id}\nname: ${name}\ntype: ${type}\ntags:\n  - foundation\n${type === "task" ? "status: planned\n" : ""}---\n\n# ${name}\n`;
 }
 
 describe("shared workspace index", () => {
@@ -103,7 +103,7 @@ describe("shared workspace index", () => {
       "document",
     );
     expect(index.documents.get("tasks/one.md")?.classification).toBe("task-record");
-    expect(index.documents.get("tasks/one.md")?.metadata.status).toBe("active");
+    expect(index.documents.get("tasks/one.md")?.metadata.status).toBe("planned");
     expect(index.diagnostics).toEqual([]);
   });
 

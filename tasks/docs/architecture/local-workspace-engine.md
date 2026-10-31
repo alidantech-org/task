@@ -235,14 +235,11 @@ Do not build a second task model in the runtime/dashboard, route ordinary CLI co
 
 ## 16. Current implementation status
 
-At the time of writing:
+The CLI resolves a local workspace from `--workspace`, `TASK_WORKSPACE_ROOT`, nearest `task.yaml`, or nearest `tasks/` directory. It uses `@task/workspace` for Markdown indexing, task/document queries, search, validation, safe task/group creation and updates, and group archive/restore. There is no persistent index cache. Full-text search reads document bodies at query time.
 
-- CLI is a starter entry point, not the complete workspace command set.
-- @task/workspace provides a read-only in-memory Markdown summary index, explicit body reads, incremental reconciliation, optional filesystem watching, and lexical/symlink-aware path preflight. Metadata validation currently covers common required fields and tags, not the complete future type-specific registry. There is no persistent cache or full-text search.
-- Local runtime is a starter HTTP server with a health endpoint only.
-- Local React dashboard is a starter screen, not connected to workspace operations.
-- Local workspace HTTP API, WebSocket protocol, filesystem reconciliation, and CLI-managed runtime lifecycle are not complete.
-- Concurrency/conflict handling and origin/capability/symlink protections are requirements, not completed features.
+Task groups use `todo/<slug>/plan.md` and numbered task records. The last completion archives a non-empty group under `archive/YYYY/MM/YYYY-MM-DD-<slug>/`; explicit archive checks eligibility and restore uses the stable group ID. CLI `edit` and `docs open` edit a temporary body copy and submit changes through the shared hash-checked write operation.
+
+The local runtime and dashboard still do not expose workspace content. Browser access remains gated on origin/capability authorization and safe operation-boundary protections. The TUI currently has a navigation shell and does not yet expose these CLI workflows. Shared path checks reduce common path mistakes but do not claim race-safe filesystem operations.
 
 ## 17. Shared Markdown index foundation
 
@@ -250,6 +247,6 @@ At the time of writing:
 
 Reconciliation inventories the filesystem and reuses cached summaries when file identity, size, modification time, and change time are unchanged. Changed files are read, hashed, and reparsed; deletions leave the in-memory index. The optional watcher coalesces hints and reconciles against disk. Missing filenames, watcher errors, and periodic checks trigger full snapshot reconciliation. Callers can also request reconciliation and must treat events as hints rather than a durable change log.
 
-The first consumers may use the shared index locally for diagnostics and a terminal summary. The local runtime may maintain an index when given `TASK_WORKSPACE_ROOT`, but the current health-only HTTP API does not expose its data. Persistent caching and content search should be considered only after startup and reconciliation timings are measured. Indexing does not make reads/writes race-safe; browser workspace routes remain gated on origin/capability authorization and safe operation-boundary filesystem protections.
+The CLI uses the shared index locally for summaries, queries, and validation. The local runtime's health-only HTTP API does not expose workspace data. Persistent caching remains deferred until startup and reconciliation measurements justify it. Indexing does not make reads/writes race-safe; browser workspace routes remain gated on origin/capability authorization and safe operation-boundary filesystem protections.
 
 Implement incrementally and keep this status accurate as capabilities land.
