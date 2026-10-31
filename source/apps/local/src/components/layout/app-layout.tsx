@@ -41,7 +41,6 @@ import {
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import {
   type PointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -52,6 +51,10 @@ import {
 } from "react";
 import { BoardTask, CalendarView, StatusDropZone } from "@/components/calendar";
 import { MarkdownBody } from "@/components/markdown-body";
+import { ShellFrame } from "@/components/layout/shell-frame";
+import { GlobalNavigation } from "@/components/layout/global-navigation";
+import { ContextualNavigation } from "@/components/layout/contextual-navigation";
+import { PromptBuilder } from "@/components/layout/prompt-builder";
 import { dateKey } from "@/lib/calendar";
 import { taskDropUpdate } from "@/lib/drop-mutation";
 import { listDocumentFolders, toggleMarkdownCheckbox } from "@/lib/markdown";
@@ -128,7 +131,13 @@ type Workspace = {
   diagnostics: Array<{ path: string; message: string; category?: string }>;
 };
 type TrustedProject = { path: string; addedAt: string; active?: boolean };
-type SearchResult = { path: string; id: string; name: string; type: string; snippet: string };
+type SearchResult = {
+  path: string;
+  id: string;
+  name: string;
+  type: string;
+  snippet: string;
+};
 type AppProps = {
   runtimeStatus: "connected" | "offline";
   workspace: Record<string, unknown> | null;
@@ -212,7 +221,10 @@ export function App({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<RecordItem | null>(null);
-  const [detail, setDetail] = useState<{ body: string; contentHash: string } | null>(null);
+  const [detail, setDetail] = useState<{
+    body: string;
+    contentHash: string;
+  } | null>(null);
   const [editingDocument, setEditingDocument] = useState(false);
   const [documentDraft, setDocumentDraft] = useState("");
   const [savingDocument, setSavingDocument] = useState(false);
@@ -556,7 +568,9 @@ export function App({
   }
   async function refresh(): Promise<void> {
     try {
-      const response = await fetch("/api/runtime/workspace/refresh", { method: "POST" });
+      const response = await fetch("/api/runtime/workspace/refresh", {
+        method: "POST",
+      });
       await acceptWorkspaceResponse(response);
       setConnectionStatus("connected");
       setNotice("Workspace index refreshed");
@@ -672,7 +686,9 @@ export function App({
   }
   async function validate(): Promise<void> {
     try {
-      const response = await fetch("/api/runtime/workspace/validate", { method: "POST" });
+      const response = await fetch("/api/runtime/workspace/validate", {
+        method: "POST",
+      });
       const result = (await response.json()) as {
         diagnostics?: Array<{ path: string; message: string }>;
         error?: { message?: string };
@@ -857,383 +873,6 @@ export function App({
     through.setDate(through.getDate() + 7);
     return task.due_at >= dateKey(today) && task.due_at <= dateKey(through);
   }).length;
-  const globalRail = (
-    <aside
-      data-slot="global-navigation"
-      className="hidden h-svh w-16 shrink-0 flex-col items-center border-r border-border/60 bg-muted/40 px-2 py-3 md:flex"
-    >
-      <span aria-label="Task" className="mb-5 grid size-10 place-items-center" role="img">
-        <Image src="/task-symbol.svg" alt="" width={36} height={36} priority />
-      </span>
-      <nav aria-label="Workspace navigation" className="flex w-full flex-col items-center gap-1">
-        {navigation.map(({ label, icon: Icon }) => (
-          <Button
-            key={label}
-            variant={section === label ? "secondary" : "ghost"}
-            size="icon"
-            title={label}
-            aria-label={label}
-            aria-current={section === label ? "page" : undefined}
-            onClick={() => selectSection(label)}
-            className="size-10"
-          >
-            <Icon className="size-4" />
-          </Button>
-        ))}
-      </nav>
-      <div className="mt-3 w-full border-t border-border/60 pt-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Create task"
-          aria-label="Create task"
-          onClick={() => openCreate()}
-          className="mx-auto flex size-10"
-        >
-          <Pencil className="size-4" />
-        </Button>
-      </div>
-      <div className="mt-auto relative" data-slot="project-switcher">
-        <Button
-          variant={projectSwitcherOpen ? "secondary" : "ghost"}
-          size="icon"
-          aria-label={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
-          aria-haspopup="menu"
-          aria-expanded={projectSwitcherOpen}
-          title={workspace?.projectName ?? "Project switcher"}
-          onClick={() => setProjectSwitcherOpen((open) => !open)}
-          className="size-10"
-        >
-          <FolderKanban className="size-4" />
-        </Button>
-        {projectSwitcherOpen && (
-          <div className="absolute bottom-0 left-12 z-50 w-[min(22rem,calc(100vw-5rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground">
-            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
-              <span className="text-xs font-medium">Trusted projects</span>
-            </div>
-            <form
-              className="space-y-2 border-b border-border/60 p-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
-              }}
-            >
-              <label htmlFor="trusted-project-path" className="text-[11px] text-muted-foreground">
-                Add a project folder
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="trusted-project-path"
-                  value={projectPathInput}
-                  onChange={(event) => setProjectPathInput(event.target.value)}
-                  placeholder="/path/to/project"
-                  className="h-9 min-w-0 text-xs"
-                />
-                <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
-                  Trust
-                </Button>
-              </div>
-            </form>
-            {workspace &&
-              !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
-                <button
-                  type="button"
-                  onClick={() => void trustProjectPath(workspace.projectRoot)}
-                  className="flex w-full items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left hover:bg-accent/60"
-                >
-                  <FolderKanban className="size-4" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">
-                      {workspace.projectName} · Current
-                    </span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      Trust this project
-                    </span>
-                  </span>
-                </button>
-              )}
-            <div className="max-h-72 overflow-y-auto">
-              {trustedProjects.map((project) => (
-                <div
-                  key={project.path}
-                  className="flex items-center gap-1 border-b border-border/50 px-2 last:border-0"
-                >
-                  <button
-                    type="button"
-                    disabled={project.active}
-                    onClick={() => void switchProject(project.path)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-1 py-2 text-left hover:bg-accent/50 disabled:opacity-70"
-                  >
-                    <Folder className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-xs">{project.path}</span>
-                    {project.active && <Check className="size-4 shrink-0 text-primary" />}
-                  </button>
-                  {!project.active && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Remove trust for ${project.path}`}
-                      title="Remove trust"
-                      onClick={() => void removeProjectTrust(project.path)}
-                      className="size-7"
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              {trustedProjects.length === 0 && !workspace && (
-                <p className="px-3 py-4 text-xs text-muted-foreground">No trusted projects yet.</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-  const contextualSidebar = (
-    <aside
-      data-slot="contextual-sidebar"
-      data-compact={sidebarCompact}
-      aria-label={`${section} navigation`}
-      className={`relative flex min-h-0 shrink-0 flex-col ${sidebarCompact ? "w-14 border-r-0 bg-background px-1.5" : "border-r border-border/60 bg-card/20 px-3"} transition-[width]`}
-      style={{
-        ...(sidebarVisible && !sidebarCompact ? { width: sidebarWidth } : {}),
-        ...(sidebarCompact ? { borderRightWidth: 0 } : {}),
-      }}
-    >
-      {sidebarVisible && (
-        <>
-          <div
-            className={`flex h-12 shrink-0 items-center border-b border-border/50 ${sidebarCompact ? "justify-center" : "justify-between px-1"}`}
-          >
-            {!sidebarCompact && (
-              <span className="truncate text-xs font-semibold">
-                {section === "Tasks" && taskFilter ? statusNames[taskFilter] : section}
-              </span>
-            )}
-            {!sidebarCompact && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label="Hide sidebar"
-                title="Hide sidebar"
-                onClick={() => setSidebarVisible(false)}
-              >
-                <PanelLeftClose className="size-4" />
-              </Button>
-            )}
-          </div>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3">
-            {section === "Tasks" && (
-              <nav aria-label="Task filters" className="space-y-1">
-                {[
-                  { id: null, label: "All tasks", icon: ListTodo, count: tasks.length },
-                  {
-                    id: "planned",
-                    label: "Planned",
-                    icon: CircleDot,
-                    count: tasks.filter((task) => task.status === "planned").length,
-                  },
-                  {
-                    id: "in-progress",
-                    label: "In progress",
-                    icon: CircleDot,
-                    count: tasks.filter((task) => task.status === "in-progress").length,
-                  },
-                  {
-                    id: "blocked",
-                    label: "Blocked",
-                    icon: AlertTriangle,
-                    count: tasks.filter((task) => task.status === "blocked").length,
-                  },
-                  { id: "due-soon", label: "Due soon", icon: Clock3, count: dueSoonCount },
-                  {
-                    id: "completed",
-                    label: "Completed",
-                    icon: Check,
-                    count: completedTasks.length,
-                  },
-                  { id: "archived", label: "Archived", icon: Folder, count: archivedTasks.length },
-                ].map(({ id, label, icon: Icon, count }) => (
-                  <button
-                    type="button"
-                    key={id ?? "all"}
-                    aria-current={(taskFilter ?? null) === id ? "page" : undefined}
-                    title={sidebarCompact ? label : undefined}
-                    onClick={() => (id ? selectSavedView(id) : selectSection("Tasks"))}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs ${sidebarCompact ? "justify-center px-1" : ""} ${(taskFilter ?? null) === id ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"}`}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    {!sidebarCompact && (
-                      <>
-                        <span className="min-w-0 flex-1 truncate">{label}</span>
-                        <span className="tabular-nums text-[10px]">{count}</span>
-                      </>
-                    )}
-                  </button>
-                ))}
-              </nav>
-            )}
-            {section === "Documents" && (
-              <nav aria-label="Managed document folders" className="space-y-0.5">
-                <button
-                  type="button"
-                  onClick={() => selectDocumentFolder("")}
-                  title={sidebarCompact ? "All documents" : undefined}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs ${sidebarCompact ? "justify-center px-1" : ""} ${!documentFolder ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
-                >
-                  <FileText className="size-4 shrink-0" />
-                  {!sidebarCompact && (
-                    <>
-                      <span className="flex-1">All documents</span>
-                      <span>{docs.length}</span>
-                    </>
-                  )}
-                </button>
-                {!sidebarCompact &&
-                  visibleDocumentFolders.map((folder) => {
-                    const expanded = !collapsedDocumentFolders.includes(folder.path);
-                    return (
-                      <div
-                        key={folder.path}
-                        className="flex items-center gap-0.5"
-                        style={{ paddingLeft: `${folder.depth * 10}px` }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => selectDocumentFolder(folder.path)}
-                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left text-xs ${documentFolder === folder.path ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
-                        >
-                          <Folder className="size-3.5 shrink-0" />
-                          <span className="truncate">{folder.name}</span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.name}`}
-                          aria-expanded={expanded}
-                          onClick={() =>
-                            setCollapsedDocumentFolders((current) =>
-                              expanded
-                                ? [...current, folder.path]
-                                : current.filter((path) => path !== folder.path),
-                            )
-                          }
-                          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent"
-                        >
-                          <ChevronDown className={`size-3.5 ${expanded ? "" : "-rotate-90"}`} />
-                        </button>
-                      </div>
-                    );
-                  })}
-              </nav>
-            )}
-            {section === "Groups" && (
-              <div className="space-y-4">
-                {(["Active groups", "Completed groups", "Archived groups"] as const).map(
-                  (heading, index) => {
-                    const items = (workspace?.groups ?? []).filter((item) =>
-                      index === 0
-                        ? !item.archived && !item.finished
-                        : index === 1
-                          ? item.finished
-                          : item.archived,
-                    );
-                    return (
-                      <section key={heading}>
-                        {!sidebarCompact && (
-                          <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            {heading}
-                          </p>
-                        )}
-                        {items.slice(0, sidebarCompact ? 6 : 30).map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            title={
-                              sidebarCompact ? `${item.name} · ${item.total} tasks` : undefined
-                            }
-                            onClick={() => selectSection("Groups")}
-                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 ${sidebarCompact ? "justify-center" : ""}`}
-                          >
-                            <FolderKanban className="size-4 shrink-0" />
-                            {!sidebarCompact && (
-                              <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                            )}
-                          </button>
-                        ))}
-                        {items.length === 0 && !sidebarCompact && (
-                          <p className="px-2 py-1 text-xs text-muted-foreground">None</p>
-                        )}
-                      </section>
-                    );
-                  },
-                )}
-              </div>
-            )}
-            {section === "Overview" && (
-              <nav aria-label="Overview shortcuts" className="space-y-1">
-                {[
-                  { label: "All tasks", section: "Tasks", icon: ListTodo },
-                  { label: "Recent changes", section: "Activity", icon: Activity },
-                  { label: "Workspace health", section: "Workspace health", icon: Gauge },
-                ].map(({ label, section: target, icon: Icon }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    title={sidebarCompact ? label : undefined}
-                    onClick={() => selectSection(target)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 ${sidebarCompact ? "justify-center px-1" : ""}`}
-                  >
-                    <Icon className="size-4" />
-                    {!sidebarCompact && label}
-                  </button>
-                ))}
-              </nav>
-            )}
-            <section className="mt-6 border-t border-border/50 pt-3">
-              {!sidebarCompact && (
-                <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Workspace
-                </p>
-              )}
-              {operations.map(({ label, icon: Icon }) => (
-                <button
-                  key={label}
-                  type="button"
-                  title={sidebarCompact ? label : undefined}
-                  aria-current={section === label ? "page" : undefined}
-                  onClick={() => selectSection(label)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs ${sidebarCompact ? "justify-center px-1" : ""} ${section === label ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  {!sidebarCompact && label}
-                </button>
-              ))}
-            </section>
-          </div>
-          {/* biome-ignore lint/a11y/useSemanticElements: A focusable vertical resize handle cannot be represented by an hr. */}
-          <div
-            role="separator"
-            aria-label="Resize contextual sidebar"
-            aria-orientation="vertical"
-            aria-valuemin={208}
-            aria-valuemax={360}
-            aria-valuenow={sidebarCompact ? 56 : sidebarWidth}
-            aria-valuetext={sidebarCompact ? "Compact" : `${sidebarWidth} pixels`}
-            tabIndex={0}
-            onPointerDown={resizeSidebar}
-            onPointerMove={resizeSidebar}
-            onPointerUp={resizeSidebar}
-            onPointerCancel={resizeSidebar}
-            onKeyDown={resizeSidebarByKeyboard}
-            className={`group absolute inset-y-0 -right-1 z-20 hidden h-full w-2 cursor-col-resize touch-none border-0 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:bg-transparent after:content-[''] md:block ${sidebarCompact ? "" : "hover:after:bg-border focus-visible:after:bg-ring"}`}
-          />
-        </>
-      )}
-    </aside>
-  );
   const mobileContextDrawer = mobileNav ? (
     <div className="fixed inset-0 z-50 bg-foreground/25 md:hidden">
       <button
@@ -1255,7 +894,29 @@ export function App({
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto py-3 [&_[data-slot=contextual-sidebar]]:!flex [&_[data-slot=contextual-sidebar]]:!w-full">
-          {contextualSidebar}
+          <ContextualNavigation
+            section={section}
+            taskFilter={taskFilter}
+            sidebarCompact={sidebarCompact}
+            sidebarVisible={sidebarVisible}
+            setSidebarVisible={setSidebarVisible}
+            sidebarWidth={sidebarWidth}
+            tasks={tasks}
+            completedTasks={completedTasks}
+            archivedTasks={archivedTasks}
+            dueSoonCount={dueSoonCount}
+            selectSavedView={selectSavedView}
+            selectSection={selectSection}
+            docs={docs}
+            documentFolder={documentFolder}
+            selectDocumentFolder={selectDocumentFolder}
+            visibleDocumentFolders={visibleDocumentFolders}
+            collapsedDocumentFolders={collapsedDocumentFolders}
+            setCollapsedDocumentFolders={setCollapsedDocumentFolders}
+            groups={workspace?.groups ?? []}
+            resizeSidebar={resizeSidebar}
+            resizeSidebarByKeyboard={resizeSidebarByKeyboard}
+          />
         </div>
         <button
           type="button"
@@ -1271,8 +932,7 @@ export function App({
 
   return (
     <DragDropProvider onDragEnd={(event) => void handleDrop(event)}>
-      <div
-        data-slot="task-app-shell"
+      <ShellFrame
         onPointerDownCapture={(event) => {
           const target = event.target;
           if (
@@ -1283,9 +943,21 @@ export function App({
             setProjectSwitcherOpen(false);
           }
         }}
-        className="relative flex h-svh w-full min-w-0 overflow-hidden bg-muted/40 text-foreground"
       >
-        {globalRail}
+        <GlobalNavigation
+          section={section}
+          selectSection={selectSection}
+          openCreate={openCreate}
+          workspace={workspace}
+          projectSwitcherOpen={projectSwitcherOpen}
+          setProjectSwitcherOpen={setProjectSwitcherOpen}
+          projectPathInput={projectPathInput}
+          setProjectPathInput={setProjectPathInput}
+          trustedProjects={trustedProjects}
+          trustProjectPath={trustProjectPath}
+          switchProject={switchProject}
+          removeProjectTrust={removeProjectTrust}
+        />
         <div className="relative m-2 ml-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background">
           {mobileContextDrawer}
           <header
@@ -1412,7 +1084,33 @@ export function App({
             </div>
           </header>
           <div className="flex min-h-0 flex-1">
-            {sidebarVisible && <div className="hidden md:flex">{contextualSidebar}</div>}
+            {sidebarVisible && (
+              <div className="hidden md:flex">
+                <ContextualNavigation
+                  section={section}
+                  taskFilter={taskFilter}
+                  sidebarCompact={sidebarCompact}
+                  sidebarVisible={sidebarVisible}
+                  setSidebarVisible={setSidebarVisible}
+                  sidebarWidth={sidebarWidth}
+                  tasks={tasks}
+                  completedTasks={completedTasks}
+                  archivedTasks={archivedTasks}
+                  dueSoonCount={dueSoonCount}
+                  selectSavedView={selectSavedView}
+                  selectSection={selectSection}
+                  docs={docs}
+                  documentFolder={documentFolder}
+                  selectDocumentFolder={selectDocumentFolder}
+                  visibleDocumentFolders={visibleDocumentFolders}
+                  collapsedDocumentFolders={collapsedDocumentFolders}
+                  setCollapsedDocumentFolders={setCollapsedDocumentFolders}
+                  groups={workspace?.groups ?? []}
+                  resizeSidebar={resizeSidebar}
+                  resizeSidebarByKeyboard={resizeSidebarByKeyboard}
+                />
+              </div>
+            )}
             <main
               data-slot="main-content"
               className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-16 md:pb-0"
@@ -2753,13 +2451,15 @@ export function App({
             </button>
           </div>
         )}
-      </div>
+      </ShellFrame>
     </DragDropProvider>
   );
 
   async function selectSearchResult(result: SearchResult): Promise<void> {
     try {
-      const response = await fetch("/api/runtime/workspace", { cache: "no-store" });
+      const response = await fetch("/api/runtime/workspace", {
+        cache: "no-store",
+      });
       const payload = (await response.json()) as {
         workspace?: Workspace;
         error?: { message?: string };
@@ -2779,98 +2479,4 @@ export function App({
       setNotice(error instanceof Error ? error.message : "Could not open this search result");
     }
   }
-}
-
-function PromptBuilder({
-  records,
-  workspace,
-  setNotice,
-}: {
-  records: RecordItem[];
-  workspace: Workspace | null;
-  setNotice(message: string): void;
-}) {
-  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState("");
-  function generate() {
-    const selected = records.filter((item) => selectedPaths.includes(item.path));
-    const paths = selected
-      .map((item) => `- ${item.id} — ${item.name}\n Path: ${item.path}`)
-      .join("\n");
-    setPrompt(
-      `You are working in the Task project at ${workspace?.projectRoot ?? "<project-root>"}.\n\nUse Task CLI commands (task or tk) to inspect or update managed files. Read the referenced files first and validate changes with task validate.\n\nSelected context:\n${paths || "- No files selected"}\n\nPlease review the repository and complete the requested work. Summarize changed files and verification performed.`,
-    );
-  }
-  return (
-    <>
-      <p className="text-sm text-muted-foreground">
-        Prepare reviewed workspace context for an agent.
-      </p>
-      <h1 className="mt-1 text-3xl font-semibold">Agent prompt builder</h1>
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Select records</CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-[60svh] space-y-2 overflow-auto">
-            {records.map((item) => (
-              <label
-                key={item.path}
-                className="flex items-center gap-2 rounded-lg p-2 text-sm hover:bg-accent"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPaths.includes(item.path)}
-                  onChange={(event) =>
-                    setSelectedPaths((current) =>
-                      event.target.checked
-                        ? [...current, item.path]
-                        : current.filter((path) => path !== item.path),
-                    )
-                  }
-                />
-                <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                <span className="text-xs text-muted-foreground">{item.id}</span>
-              </label>
-            ))}
-            <Button onClick={generate}>Generate prompt</Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Review prompt</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              className="min-h-72 w-full rounded-xl border bg-background p-3 font-mono text-xs"
-              placeholder="Generate a prompt to review it here."
-            />
-            <div className="mt-3 flex gap-2">
-              <Button
-                disabled={!prompt}
-                onClick={() => {
-                  void navigator.clipboard.writeText(prompt);
-                  setNotice("Prompt copied");
-                }}
-              >
-                Copy prompt
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!prompt}
-                onClick={() => {
-                  void navigator.clipboard.writeText(prompt);
-                  window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-                }}
-              >
-                Open ChatGPT
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </>
-  );
 }

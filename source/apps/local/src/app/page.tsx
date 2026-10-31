@@ -1,4 +1,4 @@
-import { App } from "@/components/app-shell";
+import { App } from "@/components/layout/app-layout";
 
 async function getRuntime(): Promise<{
   status: "connected" | "offline";

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "@/components/app-shell";
+import { App } from "@/components/layout/app-layout";
 
 describe("local dashboard", () => {
   test("renders the workspace shell, global search and simple toolbar", () => {
