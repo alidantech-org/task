@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
+    "dev:watch": "bun run src/watch.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },

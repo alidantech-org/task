@@ -38,6 +38,7 @@ The root supervisor prefixes service logs, keeps the processes attached to the t
 Run terminal tools separately: CLI commands are short-lived and the TUI needs its own interactive terminal.
 
     bun run dev:cli
+    bun run dev:cli:watch
     bun run dev:local
     bun run dev:site
     bun run dev:api
@@ -52,6 +53,12 @@ The CLI and its `task`/`tk` aliases operate on workspace files directly through 
     bun run dev:cli -- create --group <group-id> --title "Add a task"
     bun run dev:cli -- list --json
     bun run dev:cli -- validate
+
+To make `task` and `tk` available globally while pointing at this live checkout:
+
+    bun run cli:link
+
+Run `bun run cli:unlink` to remove those global links. Make sure `$(bun pm bin -g)` is on `PATH`. For a persistent live view during development, run `bun run dev:cli:watch -- info` (or replace `info` with the command you are working on); it reruns the selected CLI command when CLI or workspace source changes. Global commands also load the linked checkout each time, so ordinary `task`/`tk` invocations immediately use saved edits without keeping the watcher open.
 
 Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and diagnostics to stderr. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 
