@@ -79,6 +79,24 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 - **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tc, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
 - **Runtime:** Bun manages the TypeScript workspace. OpenTUI requires Bun 1.3.14 or later. Flutter remains on its independent Dart toolchain.
 
+### Preferred Next.js App Router layout
+
+Group browser-facing screens under `src/app/(app)/`. Put the persistent application frame in that route group's `layout.tsx`, including shared navigation, app bars, sidebars, and the stable main-content boundary. Section and detail pages render only their route content so client navigation does not remount shared chrome. Keep URL-changing context in the route or derive it directly from the current pathname to avoid a post-navigation flash.
+
+Keep API handlers outside the UI route group at `src/app/api/`. Route groups do not add URL segments, so this structure keeps public paths stable while making the UI/API boundary clear. Use explicit route pages for known sections; add dynamic segments only for resource detail or nested resource paths that need them.
+
+```text
+src/app/
+├── (app)/
+│   ├── layout.tsx       # Persistent UI frame
+│   ├── page.tsx         # /
+│   └── documents/[id]/page.tsx
+├── api/                 # Route handlers, outside the UI group
+└── layout.tsx           # HTML document and global providers
+```
+
+This is the preferred structure for both `apps/local` and `apps/site`. Keep app-specific navigation and runtime boundaries inside their own Next.js application.
+
 ## Current implementation status
 
 - The CLI has task/tc aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, completion storage under `todo/_completed/`, explicit archive/restore under `todo/_archived/`, document commands, validation, index diagnostics, static project inspection, reviewed setup plans, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime. Project setup is static, does not execute repository code, and does not launch agents; it should ask before recommending or applying Git ignore choices for completed/archive history.

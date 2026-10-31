@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import HomePage from "@/app/page";
+import { WorkspacePage } from "@/components/workspace-page";
 import { closeLocalWorkspace, configureWorkspace, createLocalServer } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
@@ -42,7 +42,7 @@ describe("local dashboard server rendering", () => {
     if (!address || typeof address === "string") throw new Error("Expected TCP address");
     process.env.TASK_LOCAL_PORT = String(address.port);
 
-    const markup = renderToStaticMarkup(await HomePage());
+    const markup = renderToStaticMarkup(await WorkspacePage({ initialPath: "/" }));
     expect(markup).toContain(root.split("/").at(-1) ?? "");
     expect(markup).toContain("Documents");
     expect(markup).toContain('data-slot="main-toolbar"');

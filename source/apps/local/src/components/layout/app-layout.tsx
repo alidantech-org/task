@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { usePathname, useRouter } from "next/navigation";
 import {
   type PointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -137,6 +138,7 @@ type AppProps = {
   runtimeStatus: "connected" | "offline";
   workspace: Record<string, unknown> | null;
   workspaceError?: string | null;
+  initialPath?: string;
 };
 type ThemeChoice = "system" | "light" | "dark";
 
@@ -159,6 +161,47 @@ const statusNames: Record<string, string> = {
   completed: "Completed",
   archived: "Archived",
 };
+
+function sectionFromPath(path: string): string {
+  const first = path.split("?")[0]?.split("/")[1] ?? "";
+  if (first === "tasks") return "Tasks";
+  if (first === "groups") return "Groups";
+  if (first === "documents") return "Documents";
+  if (first === "activity") return "Activity";
+  if (first === "prompts") return "Agent prompts";
+  if (first === "health") return "Workspace health";
+  return "Overview";
+}
+function sectionPath(label: string): string {
+  if (label === "Tasks") return "/tasks";
+  if (label === "Groups") return "/groups";
+  if (label === "Documents") return "/documents";
+  if (label === "Activity") return "/activity";
+  if (label === "Agent prompts") return "/prompts";
+  if (label === "Workspace health") return "/health";
+  return "/";
+}
+function documentIdFromPath(path: string): string | null {
+  const match = path.match(/^\/documents\/([^/]+)$/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+function folderFromPath(path: string): string {
+  const match = path.match(/^\/documents\/folder\/(.+)$/);
+  if (!match?.[1]) return "";
+  try {
+    return match[1].split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return "";
+  }
+}
+function encodePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
 
 function statusVariant(status?: string): "success" | "warning" | "destructive" | "secondary" {
   if (status === "completed") return "success";
@@ -206,10 +249,13 @@ export function App({
   runtimeStatus,
   workspace: rawWorkspace,
   workspaceError: initialWorkspaceError = null,
+  initialPath = "/",
 }: AppProps) {
+  const router = useRouter();
+  const pathname = usePathname() ?? initialPath;
   const [workspace, setWorkspace] = useState<Workspace | null>(rawWorkspace as Workspace | null);
   const [connectionStatus, setConnectionStatus] = useState(runtimeStatus);
-  const [section, setSection] = useState("Overview");
+  const section = sectionFromPath(pathname);
   const [taskView, setTaskView] = useState<"List" | "Board" | "Calendar">("List");
   const [taskFilter, setTaskFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -223,7 +269,7 @@ export function App({
   const [editingDocument, setEditingDocument] = useState(false);
   const [documentDraft, setDocumentDraft] = useState("");
   const [savingDocument, setSavingDocument] = useState(false);
-  const [documentFolder, setDocumentFolder] = useState("");
+  const [documentFolder, setDocumentFolder] = useState(() => folderFromPath(pathname));
   const [collapsedDocumentFolders, setCollapsedDocumentFolders] = useState<string[]>([]);
   const [sidebarCompact, setSidebarCompact] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -309,6 +355,11 @@ export function App({
     ];
   }, [recentCompletedTasks, tasks, taskFilter, visibleTasks]);
   const docs = records.filter((item) => item.type !== "task");
+  const routeDocumentId = documentIdFromPath(pathname);
+  const selectedFromRoute = routeDocumentId
+    ? records.find((item) => item.id === routeDocumentId) ?? null
+    : null;
+  const activeSelected = routeDocumentId ? selectedFromRoute : selected;
   const documentFolders = useMemo(() => listDocumentFolders(docs.map((item) => item.path)), [docs]);
   const visibleDocumentFolders = documentFolders.filter((folder) => {
     const segments = folder.path.split("/");
@@ -322,6 +373,20 @@ export function App({
   const visibleDocuments = documentFolder
     ? docs.filter((item) => item.path.startsWith(`${documentFolder}/`))
     : docs;
+
+  useEffect(() => {
+    const nextSection = sectionFromPath(pathname);
+    const nextFolder = folderFromPath(pathname);
+    setDocumentFolder(nextFolder);
+    const nextId = documentIdFromPath(pathname);
+    if (nextId) {
+      const match = records.find((item) => item.id === nextId);
+      if (match) setSelected(match);
+    } else {
+      if (nextSection !== "Tasks" || selected?.type !== "task") setSelected(null);
+      setEditingDocument(false);
+    }
+  }, [pathname, records, selected]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("task-theme");
@@ -453,14 +518,14 @@ export function App({
   }, []);
   useEffect(() => {
     let active = true;
-    if (!selected) {
+    if (!activeSelected) {
       setDetail(null);
       setEditingDocument(false);
       return;
     }
     setDetail(null);
     setEditingDocument(false);
-    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(selected.id)}`, {
+    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(activeSelected.id)}`, {
       cache: "no-store",
     })
       .then(async (response) => {
@@ -480,7 +545,7 @@ export function App({
     return () => {
       active = false;
     };
-  }, [selected]);
+  }, [activeSelected]);
 
   async function persistDocumentBody(
     body: string,
@@ -612,6 +677,7 @@ export function App({
         throw new Error(payload.error?.message ?? "Could not select project");
       setWorkspace(payload.workspace);
       setTrustedProjects(payload.projects ?? []);
+      router.push("/");
       setSelected(null);
       setDetail(null);
       setProjectSwitcherOpen(false);
@@ -693,21 +759,42 @@ export function App({
     }
   }
   function selectSection(label: string) {
-    setSection(label);
+    router.push(sectionPath(label));
     if (label === "Tasks") setTaskFilter(null);
     setSelected(null);
     setMobileNav(false);
     setPaletteOpen(false);
   }
   function selectSavedView(filter: string) {
+    router.push(`/tasks?view=${encodeURIComponent(filter)}`);
     setTaskFilter(filter);
-    setSection("Tasks");
     setSelected(null);
     setMobileNav(false);
   }
   function selectDocumentFolder(path: string) {
+    router.push(path ? `/documents/folder/${encodePath(path)}` : "/documents");
     setDocumentFolder(path);
     setSelected(null);
+    setEditingDocument(false);
+  }
+
+  function openRecord(item: RecordItem | null): void {
+    if (!item) {
+      router.push(
+        section === "Documents" && documentFolder
+          ? `/documents/folder/${encodePath(documentFolder)}`
+          : sectionPath(section),
+      );
+      setSelected(null);
+      return;
+    }
+    if (item.type === "task") {
+      router.push("/tasks");
+      setSelected(item);
+      return;
+    }
+    router.push(`/documents/${encodeURIComponent(item.id)}`);
+    setSelected(item);
     setEditingDocument(false);
   }
   function openCreate(date = "") {
@@ -1093,10 +1180,10 @@ export function App({
                   </div>
                 )}
                 <section
-                  className={`mx-auto w-full max-w-[1600px] px-4 xl:px-10 ${section === "Documents" && selected !== null && selected.type !== "task" ? "py-2 sm:px-7 sm:py-3" : "py-6 sm:px-7 sm:py-8"}`}
+                  className={`mx-auto w-full max-w-[1600px] px-4 xl:px-10 ${section === "Documents" && activeSelected !== null && activeSelected.type !== "task" ? "py-2 sm:px-7 sm:py-3" : "py-6 sm:px-7 sm:py-8"}`}
                 >
                   <div
-                    className={`grid gap-5 ${selected && !(section === "Documents" && selected.type !== "task") ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
+                    className={`grid gap-5 ${activeSelected && !(section === "Documents" && activeSelected.type !== "task") ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
                   >
                     <div className="min-w-0">
                       {section === "Overview" && (
@@ -1229,7 +1316,7 @@ export function App({
                                     <button
                                       type="button"
                                       key={item.path}
-                                      onClick={() => setSelected(item)}
+                                      onClick={() => openRecord(item)}
                                       className="flex w-full items-center gap-3 py-3 text-left"
                                     >
                                       <FileText className="size-4 text-muted-foreground" />
@@ -1339,7 +1426,7 @@ export function App({
                                       <div key={task.path} className="flex items-center gap-2 py-2">
                                         <button
                                           type="button"
-                                          onClick={() => setSelected(task)}
+                                          onClick={() => openRecord(task)}
                                           className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
                                         >
                                           <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
@@ -1398,7 +1485,7 @@ export function App({
                                     <button
                                       type="button"
                                       key={task.path}
-                                      onClick={() => setSelected(task)}
+                                      onClick={() => openRecord(task)}
                                       className="flex w-full items-center gap-3 py-3 text-left"
                                     >
                                       <Folder className="size-4 shrink-0 text-muted-foreground" />
@@ -1437,7 +1524,7 @@ export function App({
                                       <button
                                         type="button"
                                         key={task.id}
-                                        onClick={() => setSelected(task)}
+                                        onClick={() => openRecord(task)}
                                         className="flex w-full items-start gap-3 py-3 text-left"
                                       >
                                         <span className="mt-1.5 size-2 rounded-full bg-primary/70" />
@@ -1587,7 +1674,7 @@ export function App({
                                           >
                                             <button
                                               type="button"
-                                              onClick={() => setSelected(task)}
+                                              onClick={() => openRecord(task)}
                                               className="w-full text-left"
                                             >
                                               <p className="text-sm font-medium">{task.name}</p>
@@ -1601,7 +1688,7 @@ export function App({
                                                 <div className="mt-2">
                                                   <BoardTask
                                                     task={task}
-                                                    onSelect={() => setSelected(task)}
+                                                    onSelect={() => openRecord(task)}
                                                   />
                                                 </div>
                                               )}
@@ -1630,7 +1717,7 @@ export function App({
                               }))}
                               onCreate={openCreate}
                               onSelect={(task) =>
-                                setSelected(records.find((item) => item.id === task.id) ?? null)
+                                openRecord(records.find((item) => item.id === task.id) ?? null)
                               }
                             />
                           ) : (
@@ -1639,7 +1726,7 @@ export function App({
                                 <button
                                   type="button"
                                   key={item.path}
-                                  onClick={() => setSelected(item)}
+                                  onClick={() => openRecord(item)}
                                   className="flex w-full items-center gap-3 border-b p-3.5 text-left last:border-0 hover:bg-accent/50"
                                 >
                                   <span className="grid size-5 place-items-center rounded-full border">
@@ -1670,14 +1757,14 @@ export function App({
                       {section === "Documents" && (
                         <div className="mt-2 grid min-h-[calc(100svh-9rem)] grid-cols-1 gap-0">
                           <div className="min-w-0">
-                            {selected && selected.type !== "task" ? (
+                            {activeSelected && activeSelected.type !== "task" ? (
                               <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-8 sm:py-3">
                                 <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-3">
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => {
-                                      setSelected(null);
+                                      openRecord(null);
                                       setEditingDocument(false);
                                     }}
                                   >
@@ -1686,9 +1773,9 @@ export function App({
                                   </Button>
                                   <span
                                     className="min-w-0 max-w-[24ch] flex-1 truncate text-xs text-muted-foreground"
-                                    title={selected.id}
+                                    title={activeSelected.id}
                                   >
-                                    {selected.id}
+                                    {activeSelected.id}
                                   </span>
                                   {detail && !editingDocument && (
                                     <Button
@@ -1727,13 +1814,13 @@ export function App({
                                 </div>
                                 <header className="py-4">
                                   <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                                    {selected.name}
+                                    {activeSelected.name}
                                   </h1>
                                 </header>
                                 {detail ? (
                                   editingDocument ? (
                                     <MarkdownEditor
-                                      key={selected.id}
+                                      key={activeSelected.id}
                                       value={documentDraft}
                                       onChange={setDocumentDraft}
                                       onError={setNotice}
@@ -1776,7 +1863,7 @@ export function App({
                                       type="button"
                                       key={item.path}
                                       onClick={() => {
-                                        setSelected(item);
+                                        openRecord(item);
                                         setEditingDocument(false);
                                       }}
                                       className="flex w-full items-center gap-3 py-3.5 text-left hover:bg-accent/40"
@@ -1893,7 +1980,7 @@ export function App({
                                 <button
                                   type="button"
                                   key={item.path}
-                                  onClick={() => setSelected(item)}
+                                  onClick={() => openRecord(item)}
                                   className="flex w-full items-center gap-3 border-b border-border/70 px-3 py-3 text-left last:border-b-0 hover:bg-accent/30"
                                 >
                                   <Activity className="size-4 text-muted-foreground" />
@@ -1917,7 +2004,7 @@ export function App({
                               <p>
                                 Project:{" "}
                                 <code className="text-xs">
-                                  {workspace?.projectRoot ?? "Not selected"}
+                              {workspace?.projectRoot ?? "Not selected"}
                                 </code>
                               </p>
                               <p>
@@ -1949,73 +2036,73 @@ export function App({
                         </>
                       )}
                     </div>
-                    {selected && !(section === "Documents" && selected.type !== "task") && (
+                    {activeSelected && !(section === "Documents" && activeSelected.type !== "task") && (
                       <aside className="border-l border-border/60 bg-transparent p-5 xl:sticky xl:top-4 xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-xs text-muted-foreground">{selected.id}</p>
-                            <h2 className="mt-1 text-xl font-semibold">{selected.name}</h2>
+                            <p className="text-xs text-muted-foreground">{activeSelected.id}</p>
+                            <h2 className="mt-1 text-xl font-semibold">{activeSelected.name}</h2>
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
                             aria-label="Close details"
-                            onClick={() => setSelected(null)}
+                            onClick={() => openRecord(null)}
                           >
                             <X className="size-4" />
                           </Button>
                         </div>
                         <div className="mt-4 flex items-center gap-2">
-                          <Badge variant={statusVariant(selected.status)}>
-                            {statusNames[selected.status ?? ""] ?? "Document"}
+                          <Badge variant={statusVariant(activeSelected.status)}>
+                            {statusNames[activeSelected.status ?? ""] ?? "Document"}
                           </Badge>
-                          {selected.priority && (
-                            <Badge variant="outline">{selected.priority} priority</Badge>
+                          {activeSelected.priority && (
+                            <Badge variant="outline">{activeSelected.priority} priority</Badge>
                           )}
                         </div>
-                        {selected.type === "task" && (
+                        {activeSelected.type === "task" && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button
                               size="sm"
-                              variant={isArchivedTask(selected) ? "secondary" : "outline"}
+                              variant={isArchivedTask(activeSelected) ? "secondary" : "outline"}
                               onClick={() =>
-                                void setTaskArchived(selected, !isArchivedTask(selected))
+                                void setTaskArchived(activeSelected, !isArchivedTask(activeSelected))
                               }
                             >
                               <Folder className="size-4" />
-                              {isArchivedTask(selected)
-                                ? selected.extra?.archived_from
+                              {isArchivedTask(activeSelected)
+                                ? activeSelected.extra?.archived_from
                                   ? "Restore task"
                                   : "Restore group"
                                 : "Archive task"}
                             </Button>
-                            {selected.status === "completed" && !isArchivedTask(selected) && (
+                            {activeSelected.status === "completed" && !isArchivedTask(activeSelected) && (
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() =>
                                   void setCompletedHidden(
-                                    selected,
-                                    !selected.extra?.hidden_from_recent,
+                                    activeSelected,
+                                    !activeSelected.extra?.hidden_from_recent,
                                   )
                                 }
                               >
                                 <EyeOff className="size-4" />
-                                {selected.extra?.hidden_from_recent
+                                {activeSelected.extra?.hidden_from_recent
                                   ? "Show in recent"
                                   : "Hide in recent"}
                               </Button>
                             )}
                           </div>
                         )}
-                        {selected.type !== "task" && (
+                        {activeSelected.type !== "task" && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="mt-3"
                             onClick={() => {
-                              setDocumentFolder(selected.path.split("/").slice(0, -1).join("/"));
-                              setSection("Documents");
+                              setDocumentFolder(activeSelected.path.split("/").slice(0, -1).join("/"));
+                              router.push(`/documents/${encodeURIComponent(activeSelected.id)}`);
                             }}
                           >
                             Open full document
@@ -2026,23 +2113,23 @@ export function App({
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div>
                             <p className="text-muted-foreground">Start</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.start_at)}</p>
+                            <p className="mt-1 font-medium">{formatDate(activeSelected.start_at)}</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Due</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.due_at)}</p>
+                            <p className="mt-1 font-medium">{formatDate(activeSelected.due_at)}</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Created</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.created_at)}</p>
+                            <p className="mt-1 font-medium">{formatDate(activeSelected.created_at)}</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Updated</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.updated_at)}</p>
+                            <p className="mt-1 font-medium">{formatDate(activeSelected.updated_at)}</p>
                           </div>
                         </div>
                         <p className="mt-4 break-all text-xs text-muted-foreground">
-                          {selected.path}
+                          {activeSelected.path}
                         </p>
                         <Separator className="my-5" />
                         <div className="flex items-center justify-between gap-3">
@@ -2066,7 +2153,7 @@ export function App({
                           editingDocument ? (
                             <>
                               <MarkdownEditor
-                                key={selected.id}
+                                key={activeSelected.id}
                                 value={documentDraft}
                                 onChange={setDocumentDraft}
                                 onError={setNotice}
@@ -2438,10 +2525,9 @@ export function App({
         (item) => item.path === result.path || item.id === result.id,
       );
       if (!current) throw new Error("This result changed or was removed. Search again.");
-      setSelected(current);
+      openRecord(current);
       setQuery("");
       setPaletteOpen(false);
-      setSection(current.type === "task" ? "Tasks" : "Documents");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not open this search result");
     }

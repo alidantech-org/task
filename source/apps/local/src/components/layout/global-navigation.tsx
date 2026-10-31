@@ -15,7 +15,15 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import type { Dispatch, SetStateAction } from "react";
+import { createPortal } from "react-dom";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 type Project = { path: string; addedAt: string; active?: boolean };
 type WorkspaceProject = { projectName: string; projectRoot: string } | null;
@@ -60,6 +68,54 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     theme,
     toggleTheme,
   } = props;
+  const switcherRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!projectSwitcherOpen) {
+      setPopoverPosition(null);
+      return;
+    }
+    const updatePosition = () => {
+      const trigger = switcherRef.current?.querySelector("button");
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+      const bounds = trigger.getBoundingClientRect();
+      const width = popover.getBoundingClientRect().width;
+      const height = popover.getBoundingClientRect().height;
+      const left =
+        bounds.right + 8 + width <= window.innerWidth
+          ? bounds.right + 8
+          : Math.max(8, bounds.left - width - 8);
+      const top = Math.max(8, Math.min(bounds.bottom - height, window.innerHeight - height - 8));
+      setPopoverPosition({ top, left });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [projectSwitcherOpen]);
+
+  useEffect(() => {
+    if (!projectSwitcherOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !switcherRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
+        setProjectSwitcherOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [projectSwitcherOpen, setProjectSwitcherOpen]);
+
   return (
     <aside
       data-slot="global-navigation"
@@ -114,12 +170,12 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
           )}
         </Button>
       </div>
-      <div className="relative" data-slot="project-switcher">
+      <div ref={switcherRef} className="relative" data-slot="project-switcher">
         <Button
           variant={projectSwitcherOpen ? "secondary" : "ghost"}
           size="icon"
           aria-label={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
-          aria-haspopup="menu"
+          aria-haspopup="dialog"
           aria-expanded={projectSwitcherOpen}
           title={workspace?.projectName ?? "Project switcher"}
           onClick={() => setProjectSwitcherOpen((open) => !open)}
@@ -127,8 +183,20 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
         >
           <FolderKanban className="size-4" />
         </Button>
-        {projectSwitcherOpen && (
-          <div className="absolute bottom-0 left-12 z-50 w-[min(22rem,calc(100vw-5rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground">
+        {projectSwitcherOpen && typeof document !== "undefined" && createPortal(
+          <div
+            ref={popoverRef}
+            data-slot="project-switcher"
+            role="dialog"
+            aria-label="Trusted projects"
+            style={{
+              position: "fixed",
+              top: popoverPosition?.top ?? 8,
+              left: popoverPosition?.left ?? 64,
+              visibility: popoverPosition ? "visible" : "hidden",
+            }}
+            className="z-[100] max-h-[calc(100dvh-1rem)] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10"
+          >
             <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
               <span className="text-xs font-medium">Trusted projects</span>
             </div>
@@ -207,7 +275,8 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                 <p className="px-3 py-4 text-xs text-muted-foreground">No trusted projects yet.</p>
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </aside>

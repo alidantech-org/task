@@ -1,23 +1,25 @@
 import { App } from "@/components/layout/app-layout";
 
-async function getRuntime(): Promise<{
-  status: "connected" | "offline";
-  workspace: Record<string, unknown> | null;
-  workspaceError: string | null;
-}> {
+type WorkspacePageProps = {
+  initialPath: string;
+};
+
+export async function WorkspacePage({ initialPath }: WorkspacePageProps) {
   try {
     const port = process.env.TASK_LOCAL_PORT ?? "4317";
     const base = `http://127.0.0.1:${port}`;
     const ready = await fetch(`${base}/health/ready`, { cache: "no-store" });
-    if (!ready.ok) return { status: "offline", workspace: null, workspaceError: null };
+    if (!ready.ok) return <App runtimeStatus="offline" workspace={null} initialPath={initialPath} />;
     const state = (await ready.json()) as { workspace?: boolean; workspaceError?: string };
     if (!state.workspace) {
-      return {
-        status: "connected",
-        workspace: null,
-        workspaceError:
-          state.workspaceError ?? "No Task workspace was selected by the local runtime.",
-      };
+      return (
+        <App
+          runtimeStatus="connected"
+          workspace={null}
+          workspaceError={state.workspaceError ?? "No Task workspace was selected by the local runtime."}
+          initialPath={initialPath}
+        />
+      );
     }
     const session = await fetch(`${base}/internal/session`, { cache: "no-store" });
     if (!session.ok) throw new Error("Could not establish a local runtime session.");
@@ -33,20 +35,22 @@ async function getRuntime(): Promise<{
     if (!response.ok || !payload.workspace) {
       throw new Error(payload.error?.message ?? "Could not load the selected workspace.");
     }
-    return { status: "connected", workspace: payload.workspace, workspaceError: null };
+    return (
+      <App
+        runtimeStatus="connected"
+        workspace={payload.workspace}
+        initialPath={initialPath}
+      />
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Local workspace connection failed.";
-    return { status: "offline", workspace: null, workspaceError: message };
+    return (
+      <App
+        runtimeStatus="offline"
+        workspace={null}
+        workspaceError={message}
+        initialPath={initialPath}
+      />
+    );
   }
-}
-
-export default async function HomePage() {
-  const runtime = await getRuntime();
-  return (
-    <App
-      runtimeStatus={runtime.status}
-      workspace={runtime.workspace}
-      workspaceError={runtime.workspaceError}
-    />
-  );
 }
