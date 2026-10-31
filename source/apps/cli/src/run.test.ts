@@ -13,10 +13,12 @@ describe("local dashboard launcher", () => {
       await mkdir(join(dashboardRoot, ".next"), { recursive: true });
       await mkdir(join(packageRoot, "dist/assets"), { recursive: true });
       await writeFile(join(packageRoot, "package.json"), '{"name":"taskcode"}');
+      await writeFile(join(packageRoot, "dist/cli.js"), "");
+      await writeFile(join(packageRoot, "dist/package.json"), '{"name":"taskcode"}');
       await writeFile(join(dashboardRoot, ".next/BUILD_ID"), "build");
       await writeFile(join(packageRoot, "dist/assets/local-runtime.js"), "");
 
-      expect(resolveLocalAssets(join(packageRoot, "src"))).toEqual({
+      expect(resolveLocalAssets(join(packageRoot, "dist"))).toEqual({
         cliRoot: packageRoot,
         dashboardRoot,
         runtimeEntry: join(packageRoot, "dist/assets/local-runtime.js"),

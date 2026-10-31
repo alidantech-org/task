@@ -54,4 +54,6 @@ The TUI is a read-only browser; use CLI commands to change tasks. `task run` sta
 
 ## Release preparation status
 
-The repository has a package staging script and consumer smoke scripts. A prepared package is not a published release. Before publishing, build and inspect the package with its lifecycle scripts enabled, install it into a clean consumer project, verify all three executable aliases and the CLI/TUI/dashboard workflows, and confirm npm accepts the `taskcode` package name. Publication and registry credentials remain an explicit release action.
+The package staging script places the dashboard and runtime under `dist/assets`; it must not place a package manifest inside `dist`. The installed CLI locates its root package manifest above the `dist/` entrypoint, then resolves those bundled assets from that root. The regression test covers an older package layout that contains a duplicate `dist/package.json`.
+
+Version `0.1.0` was published with the duplicate-manifest issue, which prevents `task run` from locating the bundled dashboard. Version `0.1.1` is reserved for the packaging and path-resolution fix. Before publishing, rebuild and inspect the package with its lifecycle scripts enabled, install it into a clean consumer project, verify all three executable aliases and the CLI/TUI/dashboard workflows, and confirm npm accepts the package version. Publication and registry credentials remain an explicit release action.

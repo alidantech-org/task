@@ -10,13 +10,6 @@ const stagedRoot = join(buildRoot, "cli-dist");
 const assetRoot = join(stagedRoot, "assets");
 const buildLocalRoot = join(buildRoot, "source/apps/local");
 await mkdir(stagedRoot, { recursive: true });
-const packageManifest = JSON.parse(await Bun.file(join(cliRoot, "package.json")).text()) as {
-  dependencies: Record<string, string>;
-  bin?: Record<string, string>;
-  files?: string[];
-};
-
-await Bun.write(join(stagedRoot, "package.json"), JSON.stringify(packageManifest, null, 2));
 
 function run(label: string, command: string[], cwd = repositoryRoot): void {
   process.stdout.write(`\n› ${label}\n`);
@@ -113,13 +106,6 @@ try {
   const buildId = await Bun.file(join(dashboardRoot, ".next/BUILD_ID")).text();
   if (!buildId.trim()) throw new Error("Next.js production build did not produce a BUILD_ID");
 
-  packageManifest.bin = {
-    taskcode: "dist/cli.js",
-    task: "dist/cli.js",
-    tc: "dist/cli.js",
-  };
-  packageManifest.files = ["dist", "README.md"];
-  await Bun.write(join(stagedRoot, "package.json"), JSON.stringify(packageManifest, null, 2));
   await rm(join(cliRoot, "dist"), { recursive: true, force: true });
   await cp(stagedRoot, join(cliRoot, "dist"), { recursive: true });
   process.stdout.write("\nCLI release assets are ready in source/apps/cli/dist.\n");

@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WorkspaceError } from "@task/workspace";
 
@@ -22,7 +22,9 @@ interface LocalAssets {
 function packageRootFrom(moduleDirectory: string): string {
   let current = resolve(moduleDirectory);
   for (let depth = 0; depth < 8; depth += 1) {
-    if (existsSync(join(current, "package.json"))) return current;
+    if (basename(current) !== "dist" && existsSync(join(current, "package.json"))) {
+      return current;
+    }
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
