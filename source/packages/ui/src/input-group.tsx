@@ -1,11 +1,11 @@
-import type { HTMLAttributes, InputHTMLAttributes, JSX } from "react";
 import { cn } from "@task/ui/utils.ts";
+import type { HTMLAttributes, InputHTMLAttributes, JSX } from "react";
 
 export function InputGroup({ className, ...props }: HTMLAttributes<HTMLDivElement>): JSX.Element {
   return (
     <div
       className={cn(
-        "flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-muted-foreground transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+        "flex h-10 items-center gap-2 rounded-xl border border-input bg-background px-3 text-muted-foreground transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
         className,
       )}
       {...props}

@@ -1,4 +1,9 @@
-import type { DocumentMetadata, TaskPriority, TaskStatus } from "@task/workspace/indexing/types";
+import type {
+  DocumentMetadata,
+  TaskExtra,
+  TaskPriority,
+  TaskStatus,
+} from "@task/workspace/indexing/types";
 
 const taskStatuses = new Set<TaskStatus>(["planned", "in-progress", "blocked", "completed"]);
 const taskPriorities = new Set<TaskPriority>(["low", "medium", "high"]);
@@ -113,6 +118,31 @@ export function parseFrontmatter(content: string): {
     ) {
       throw new Error("depends_on must be a sequence of task IDs");
     }
+    const history = (extra as Record<string, unknown> | undefined)?.status_history;
+    if (history !== undefined) {
+      if (!Array.isArray(history)) throw new Error("extra.status_history must be a sequence");
+      let previous: TaskStatus | undefined;
+      for (const [index, item] of history.entries()) {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) {
+          throw new Error(`extra.status_history[${index}] must be a mapping`);
+        }
+        const event = item as Record<string, unknown>;
+        if (
+          Object.keys(event).some((key) => !["from", "to", "at"].includes(key)) ||
+          !taskStatuses.has(event.from as TaskStatus) ||
+          !taskStatuses.has(event.to as TaskStatus) ||
+          event.from === event.to ||
+          typeof event.at !== "string" ||
+          Number.isNaN(Date.parse(event.at))
+        ) {
+          throw new Error(`extra.status_history[${index}] is invalid`);
+        }
+        if (previous && event.from !== previous) {
+          throw new Error(`extra.status_history[${index}] does not continue the prior status`);
+        }
+        previous = event.to as TaskStatus;
+      }
+    }
   }
   const dates: Record<string, string> = {};
   for (const [key, value] of Object.entries(values)) {
@@ -151,7 +181,7 @@ export function parseFrontmatter(content: string): {
     ...(scalar("updated_at") ? { updated_at: scalar("updated_at") } : {}),
     ...(scalar("archived_at") ? { archived_at: scalar("archived_at") } : {}),
     ...(Array.isArray(values.depends_on) ? { depends_on: values.depends_on as string[] } : {}),
-    ...(extra !== undefined ? { extra: extra as Record<string, unknown> } : {}),
+    ...(extra !== undefined ? { extra: extra as TaskExtra } : {}),
     dates,
   };
   return { metadata, values, body: content.slice(match[0].length) };

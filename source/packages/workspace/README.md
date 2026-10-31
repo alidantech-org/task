@@ -14,7 +14,8 @@ src/
 ├── watching/watcher.ts    # Debounced watch events and recovery scans
 ├── documents/read.ts      # Safe on-demand body reads
 ├── documents/classify.ts  # Frontmatter type classification
-└── paths/safe-path.ts     # Lexical and symlink-aware path checks
+├── paths/safe-path.ts     # Lexical and symlink-aware path checks
+└── project/               # Static inspection, setup planning, and Handlebars templates
 ```
 
 There is intentionally no `cache.ts`: a persistent cache is deferred until startup measurements justify it. Internal module references use the package's explicit subpath exports so consumers can typecheck workspace modules without inheriting the consuming app's `#/` TypeScript path mapping.
@@ -23,7 +24,9 @@ There is intentionally no `cache.ts`: a persistent cache is deferred until start
 
 The scanner ignores `.git`, `.task`, `.tasks-cache`, `.cache`, `node_modules`, `vendor`, `build`, `dist`, `.next`, `.dart_tool`, `coverage`, `tmp`, and `temp` directories, and does not follow symlinks. Documents are classified by metadata `type`; documentation under `tasks/docs/` is included normally. The metadata reader validates common identity, tags/extra shape, task status and priority enums, task field types, and supported decision fields. Workspace validation also checks duplicate IDs, dependency references/cycles, group layout, and local Markdown links. Invalid Markdown remains visible through diagnostics and does not prevent other files from indexing.
 
-Task files are created as numbered Markdown records inside `todo/<group-slug>/`; `plan.md` carries the `GRP-` group ID. The final completed task archives a non-empty group under `archive/YYYY/MM/YYYY-MM-DD-<slug>/`. Explicit group archive requires all tasks to be complete; restore resolves by group ID and returns the group to its active slug. Updates preserve document bodies and use hash checks with temporary-file replacement. These checks reduce accidental overwrite and path escape risk but do not make filesystem operations race-safe.
+Task files are created as numbered Markdown records inside `todo/<group-slug>/`; `plan.md` carries the `GRP-` group ID. The final completed task archives a non-empty group under `todo/_archive/YYYY/MM/YYYY-MM-DD-<slug>/`. Explicit group archive requires all tasks to be complete; restore resolves by group ID and returns the group to its active slug. This new project layout does not support or migrate a workspace-root `archive/` directory. Updates preserve document bodies and use hash checks with temporary-file replacement. These checks reduce accidental overwrite and path escape risk but do not make filesystem operations race-safe.
+
+`inspectProject()` performs static file inspection only: it reads manifests and known configuration files, records evidence paths, skips common generated directories and `.gitignore` matches, and never runs project scripts or contacts services. `createProjectSetupPlan()` renders reviewed Markdown from built-in Handlebars templates, with optional user overrides in `tasks/agents/templates/`. `applyProjectSetupPlan()` constrains targets, rejects symlinked path components, preserves content outside managed sections, and reports existing unmarked generated files as conflicts rather than replacing them. Inspection and plan generation are read-only. No agent is launched and no Git setting or hook is changed.
 
 There is no persistent index cache. `index rebuild` performs an authoritative fresh scan, while `index verify` runs workspace validation. Search currently reads Markdown bodies on demand and is not backed by a content index. Browser-facing workspace access remains deferred until local-runtime origin/capability authorization and safe operation-boundary protections are complete.
 

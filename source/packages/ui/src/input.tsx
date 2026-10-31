@@ -1,5 +1,5 @@
-import type { InputHTMLAttributes, JSX } from "react";
 import { cn } from "@task/ui/utils.ts";
+import type { InputHTMLAttributes, JSX } from "react";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>): JSX.Element {
   return (

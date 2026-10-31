@@ -9,6 +9,7 @@ import type {
   DocumentSummary,
   TaskCreateInput,
   TaskGroup,
+  TaskStatus,
   TaskUpdateInput,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
@@ -222,6 +223,9 @@ export async function createTask(
 ): Promise<DocumentSummary> {
   const title = input.title.trim();
   if (!title) throw new WorkspaceError("invalid_input", "Task title is required");
+  if (input.extra && "status_history" in input.extra) {
+    throw new WorkspaceError("invalid_input", "Task status history is managed automatically");
+  }
   const group = await activeGroup(context, input.group);
   const taskId = id("TSK");
   const dependencies = input.dependsOn ?? [];
@@ -288,7 +292,7 @@ export async function updateTask(
   const task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
     throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
-  if (task.path.startsWith("archive/"))
+  if (task.path.startsWith("todo/_archive/"))
     throw new WorkspaceError(
       "invalid_input",
       "Restore the archived group before updating its tasks",
@@ -300,6 +304,7 @@ export async function updateTask(
   const content = await Bun.file(path).text();
   const parsed = parseFrontmatter(content);
   const values = { ...parsed.values };
+  const previousStatus = (values.status ?? "planned") as TaskStatus;
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new WorkspaceError("invalid_input", "Task title cannot be empty");
@@ -316,8 +321,25 @@ export async function updateTask(
     await validateDependencies(context, task.metadata.id, input.dependsOn);
     values.depends_on = [...input.dependsOn];
   }
-  if (input.extra !== undefined) values.extra = { ...input.extra };
-  values.updated_at = new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+  const existingExtra =
+    typeof values.extra === "object" && values.extra !== null && !Array.isArray(values.extra)
+      ? (values.extra as Record<string, unknown>)
+      : {};
+  const incomingExtra = input.extra ?? {};
+  if ("status_history" in incomingExtra) {
+    throw new WorkspaceError("invalid_input", "Task status history is managed automatically");
+  }
+  const nextExtra: Record<string, unknown> = { ...existingExtra, ...incomingExtra };
+  if (input.status !== undefined && input.status !== previousStatus) {
+    const history = Array.isArray(existingExtra.status_history) ? existingExtra.status_history : [];
+    nextExtra.status_history = [
+      ...history,
+      { from: previousStatus, to: input.status, at: updatedAt },
+    ];
+  }
+  if (Object.keys(nextExtra).length > 0) values.extra = nextExtra;
+  values.updated_at = updatedAt;
   const next = serializeMarkdown(values, parsed.body);
   try {
     parseFrontmatter(next);
@@ -410,7 +432,7 @@ export async function archiveGroup(
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
   const archivedAt = now.toISOString();
-  const destination = `archive/${day.slice(0, 4)}/${day.slice(5, 7)}/${day}-${group.slug}`;
+  const destination = `todo/_archive/${day.slice(0, 4)}/${day.slice(5, 7)}/${day}-${group.slug}`;
   const sourcePath = await resolveSafeWorkspacePath(context.root, group.path);
   const destinationPath = await resolveSafeWorkspacePath(context.root, destination);
   await mkdir(dirname(destinationPath), { recursive: true });

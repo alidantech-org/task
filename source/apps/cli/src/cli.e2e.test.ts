@@ -52,7 +52,7 @@ describe("workspace-connected CLI", () => {
     const completed = await cli(workspace, "update", task.id, "--status", "completed", "--json");
     expect(completed.exitCode).toBe(0);
     const completion = JSON.parse(completed.stdout.toString());
-    expect(completion.archivedGroup.path).toMatch(/^archive\//);
+    expect(completion.archivedGroup.path).toMatch(/^todo\/_archive\//);
     const archivedList = await cli(workspace, "list", "--archived", "--json");
     expect(JSON.parse(archivedList.stdout.toString())).toHaveLength(1);
     const restored = await cli(workspace, "restore", group.id, "--json");
@@ -165,5 +165,65 @@ describe("workspace-connected CLI", () => {
     const result = await cli(workspace, "-f");
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("requires an interactive terminal");
+  });
+
+  test("project inspection is read-only and setup emits an explicit JSON plan", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-setup-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    await Bun.write(join(root, "package.json"), JSON.stringify({ scripts: { test: "bun test" } }));
+    const inspection = await cli(workspace, "project", "inspect", "--json");
+    expect(inspection.exitCode).toBe(0);
+    expect(JSON.parse(inspection.stdout.toString()).facts).toContainEqual({
+      key: "manifest",
+      value: "package.json",
+      evidence: ["package.json"],
+    });
+    expect(await Bun.file(join(root, "AGENTS.md")).exists()).toBe(false);
+    const planResult = await cli(
+      workspace,
+      "setup",
+      "plan",
+      "--docs",
+      "repository-map",
+      "--rules",
+      "testing",
+      "--agents",
+      "codex",
+      "--json",
+    );
+    expect(planResult.exitCode).toBe(0);
+    const plan = JSON.parse(planResult.stdout.toString());
+    expect(plan.changes.map((change: { path: string }) => change.path)).toContain("AGENTS.md");
+    expect(await Bun.file(join(root, "AGENTS.md")).exists()).toBe(false);
+    const planPath = join(root, "setup-plan.json");
+    await Bun.write(planPath, JSON.stringify(plan));
+    const applied = await cli(workspace, "setup", "apply", "--path", planPath, "--json");
+    expect(applied.exitCode).toBe(0);
+    expect(JSON.parse(applied.stdout.toString()).written).toContain("AGENTS.md");
+    expect(await Bun.file(join(root, "AGENTS.md")).exists()).toBe(true);
+  });
+
+  test("setup refuses to place generated adapter Markdown inside a project-root workspace", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-root-setup-"));
+    await Bun.write(join(root, "package.json"), "{}");
+    const result = await Bun.spawnSync(
+      [
+        "bun",
+        "run",
+        join(import.meta.dir, "index.ts"),
+        "setup",
+        "plan",
+        "--workspace",
+        ".",
+        "--docs",
+        "repository-map",
+        "--json",
+      ],
+      { cwd: root, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("needs a nested Task workspace");
+    expect(await Bun.file(join(root, "README.md")).exists()).toBe(false);
   });
 });

@@ -1,0 +1,16 @@
+# {{projectName}} development setup
+
+Static inspection identified these setup references. It does not execute installation or project commands.
+
+## Manifests and lockfiles
+{{#each facts}}
+{{#if (eq key "manifest")}}- Manifest `{{value}}`: {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}{{#if (eq key "lockfile")}}- Lockfile `{{value}}`: {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}{{/each}}
+
+## Available scripts
+{{#each facts}}
+{{#if (eq key "script")}}- Check the `{{value}}` script in {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}.
+{{/if}}{{/each}}
+
+Verify exact commands and prerequisites from the project manifests before running them.

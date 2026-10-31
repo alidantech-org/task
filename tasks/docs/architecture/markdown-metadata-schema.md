@@ -38,7 +38,7 @@ The schema system has four layers:
 
 1. **Common identity fields:** required fields shared by every managed document: `id`, `name`, and `type`.
 2. **Common optional metadata:** `tags` is an optional sequence of unique, non-empty strings; `extra` is an optional mapping for supplemental data.
-3. **Type-specific metadata:** the parser supports task records, decisions, and general documents. Task status is `planned`, `in-progress`, `blocked`, or `completed`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
+3. **Type-specific metadata:** the parser supports task records, decisions, general documentation, rules, and agent profiles. `documentation`, `rule`, and `agent-profile` documents currently use the common fields plus optional `tags` and `extra`. Task status is `planned`, `in-progress`, `blocked`, or `completed`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
 4. **Explicit extension metadata:** the `extra` mapping for supplemental information that is not part of the common or type-specific contract.
 
 The contract is strict at the top level: an unknown field is an error unless the active schema or a supported workspace extension explicitly declares it. The `extra` mapping is the intentional extension point; it is not permission to add arbitrary top-level keys or bypass validation.
@@ -93,7 +93,7 @@ The `type` field selects a schema. A type schema defines:
 - Relationships and reference rules.
 - Fields available to search, filters, sorting, and UI presentation.
 
-Other types such as projects, handoffs, research, specifications, meeting notes, and milestones currently use the general document fields. Dedicated schemas for them remain future work.
+The `documentation`, `rule`, and `agent-profile` types currently use the common document fields plus `tags` and `extra`; their body carries human-readable guidance. Project setup stores generated adapter targets and evidence paths in `extra`. Other types such as projects, handoffs, research, specifications, meeting notes, and milestones currently use the general document fields. Dedicated schemas for them remain future work.
 
 A task schema may define status, priority, assignee, due date, estimate, parent, and dependencies. A decision schema may define status, date, scope, and decision references. Fields should not be assumed to apply to every type.
 

@@ -1,0 +1,14 @@
+# {{projectName}} repository map
+
+Static inspection found the following layout evidence. These entries identify paths only; confirm ownership and runtime behavior in the source before making assumptions.
+
+## Paths
+{{#each facts}}
+{{#if (eq key "source-layout")}}- `{{value}}/` — detected source path: {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}{{#if (eq key "manifest")}}- `{{value}}` — manifest: {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}{{#if (eq key "ci")}}- `{{value}}` — CI configuration
+{{/if}}{{/each}}
+
+## Maintenance
+
+Update this map when the repository structure changes. Add descriptions only after verifying them with project maintainers or source documentation.

@@ -1,0 +1,11 @@
+# {{projectName}} testing guide
+
+Static inspection found these testing references. No test command has been run by Task setup.
+
+## Test files and scripts
+{{#each facts}}
+{{#if (eq key "tests")}}- Test evidence: {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}{{#if (eq key "script")}}- Script `{{value}}` is declared in {{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}; verify its command before use.
+{{/if}}{{/each}}
+
+Describe required test suites, environments, and checks only after verifying them in source or with maintainers.

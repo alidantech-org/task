@@ -1,0 +1,14 @@
+# {{projectName}} guidance
+
+Task workspace is the source of truth for project guidance. Review applicable documents under `{{workspacePath}}/docs/` and rules under `{{workspacePath}}/rules/` before making changes.
+
+## Repository facts
+{{#each facts}}
+- {{key}}: {{value}}{{#if evidence.length}} ({{#each evidence}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}){{/if}}
+{{/each}}
+
+## Working behavior
+- Treat detected files as evidence; do not infer undocumented behavior.
+- Preserve unrelated user changes and ask before destructive or externally visible actions.
+- Do not claim checks passed unless they were run and their results were observed.
+- Follow project-specific guidance in the Task workspace.

@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, GripVertical, Plus } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/react";
 import { Button } from "@task/ui";
+import { ChevronLeft, ChevronRight, GripVertical, Plus } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
 
 export type CalendarTask = {
@@ -22,12 +22,13 @@ function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): 
   return (
     <div
       ref={ref}
-      className={`group flex min-w-0 items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-left text-[11px] shadow-sm ${isDragging ? "opacity-40" : ""}`}
+      className={`group flex min-w-0 items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-left text-[11px] ${isDragging ? "opacity-40" : ""}`}
     >
-      <button onClick={onSelect} className="min-w-0 flex-1 truncate text-left">
+      <button type="button" onClick={onSelect} className="min-w-0 flex-1 truncate text-left">
         {task.name}
       </button>
       <button
+        type="button"
         ref={handleRef}
         aria-label={`Drag ${task.name}`}
         className="cursor-grab rounded p-0.5 text-muted-foreground opacity-60 hover:opacity-100 active:cursor-grabbing"
@@ -56,9 +57,11 @@ function DateCell({
   const key = dateKey(date);
   const { ref, isDropTarget } = useDroppable({ id: `date:${key}`, data: { date: key } });
   return (
+    // biome-ignore lint/a11y/useSemanticElements: Grid cells are appropriate in the ARIA calendar grid.
     <div
       ref={ref}
       role="gridcell"
+      tabIndex={0}
       aria-label={date.toLocaleDateString(undefined, {
         weekday: "long",
         month: "long",
@@ -73,6 +76,7 @@ function DateCell({
           {date.getDate()}
         </span>
         <button
+          type="button"
           aria-label={`Create task on ${key}`}
           onClick={() => onCreate(key)}
           className="rounded p-1 text-muted-foreground opacity-50 hover:bg-accent hover:opacity-100"
@@ -126,7 +130,7 @@ export function CalendarView({
     <div
       className={`mt-5 grid gap-4 ${showPlanning ? "xl:grid-cols-[minmax(0,1fr)_250px]" : "grid-cols-1"}`}
     >
-      <section className="min-w-0 rounded-2xl border bg-card">
+      <section className="min-w-0 border-y border-border/70 bg-transparent">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3 sm:p-4">
           <div>
             <h2 className="font-semibold">
@@ -197,7 +201,7 @@ export function CalendarView({
           ))}
         </div>
       </section>
-      <aside className="rounded-2xl border bg-card p-4">
+      <aside className="border-l border-border/60 bg-transparent px-4 py-2">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-semibold">Planning</h3>
@@ -212,6 +216,7 @@ export function CalendarView({
             <div className="mt-4 grid grid-cols-7 gap-1">
               {monthGrid(cursor).map((date) => (
                 <button
+                  type="button"
                   key={dateKey(date)}
                   onClick={() => setCursor(date)}
                   className={`grid aspect-square place-items-center rounded text-[10px] hover:bg-accent ${date.getMonth() !== cursor.getMonth() ? "text-muted-foreground/40" : ""} ${dateKey(date) === dateKey(cursor) ? "bg-primary text-primary-foreground" : ""}`}
@@ -246,13 +251,12 @@ export function BoardTask({ task, onSelect }: { task: CalendarTask; onSelect(): 
 export function StatusDropZone({ status, children }: { status: string; children: ReactNode }) {
   const { ref, isDropTarget } = useDroppable({ id: `status:${status}`, data: { status } });
   return (
-    <div
+    <fieldset
       ref={ref}
-      role="group"
       aria-label={`Drop tasks in ${status}`}
       className={`min-h-40 space-y-2 rounded-xl p-1 transition-colors ${isDropTarget ? "bg-primary/10 ring-2 ring-primary/40" : ""}`}
     >
       {children}
-    </div>
+    </fieldset>
   );
 }

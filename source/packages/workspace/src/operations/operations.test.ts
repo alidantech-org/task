@@ -136,7 +136,46 @@ describe("task operations", () => {
       tags: ["engine"],
     });
     expect(updated.task.metadata.status).toBe("in-progress");
+    expect(updated.task.metadata.extra?.status_history).toEqual([
+      expect.objectContaining({ from: "planned", to: "in-progress" }),
+    ]);
     expect(await readWorkspaceDocument(context, task.path)).toContain("Keep the body");
+  });
+
+  test("records only real status transitions and validates the history shape", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Status history");
+    const task = await createTask(context, { group: group.id, title: "Track transitions" });
+    expect(task.metadata.extra?.status_history).toBeUndefined();
+    const started = await updateTask(context, task.metadata.id, { status: "in-progress" });
+    const unchanged = await updateTask(context, task.metadata.id, { status: "in-progress" });
+    expect(unchanged.task.metadata.extra?.status_history).toHaveLength(1);
+    const completed = await updateTask(context, task.metadata.id, { status: "completed" });
+    expect(completed.task.metadata.extra?.status_history).toHaveLength(2);
+    expect(completed.task.metadata.extra?.status_history?.[1]).toMatchObject({
+      from: "in-progress",
+      to: "completed",
+    });
+    expect(completed.task.metadata.extra?.status_history?.[1]?.at).toBeTruthy();
+    expect(started.task.metadata.extra?.status_history?.[0]?.at).toBeTruthy();
+    const restored = await restoreTaskGroup(context, group.id);
+    const restoredTask = (await buildWorkspaceIndex(context)).documents.get(
+      `${restored.path}/001-track-transitions.md`,
+    );
+    expect(restoredTask?.metadata.extra?.status_history).toHaveLength(2);
+
+    const taskPath = join(workspace, restoredTask?.path ?? "");
+    const content = await readFile(taskPath, "utf8");
+    await writeFile(
+      taskPath,
+      withMetadata(content, (values) => {
+        values.extra = { status_history: [{ from: "unknown", to: "completed", at: "yesterday" }] };
+      }),
+    );
+    expect(await validateWorkspace(context)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ category: "metadata" })]),
+    );
   });
 
   test("validates and persists explicit schedule dates", async () => {
@@ -174,7 +213,7 @@ describe("task operations", () => {
     const task = await createTask(context, { group: group.id, title: "Ship it" });
     const updated = await updateTask(context, task.metadata.id, { status: "completed" });
     expect(updated.archivedGroup?.path).toMatch(
-      /^archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
+      /^todo\/_archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
     );
     expect(updated.task.path).toBe(`${updated.archivedGroup?.path}/001-ship-it.md`);
     expect(updated.task.metadata.created_at).toBeTruthy();
@@ -182,7 +221,9 @@ describe("task operations", () => {
     const restored = await restoreTaskGroup(context, group.id);
     expect(restored.path).toBe("todo/release-prep");
     expect((await listTaskGroups(context))[0]?.archived).toBe(false);
-    const restoredTask = (await buildWorkspaceIndex(context)).documents.get("todo/release-prep/001-ship-it.md");
+    const restoredTask = (await buildWorkspaceIndex(context)).documents.get(
+      "todo/release-prep/001-ship-it.md",
+    );
     expect(restoredTask?.metadata.archived_at).toBeUndefined();
     expect(restoredTask?.metadata.created_at).toBe(updated.task.metadata.created_at);
     expect(restoredTask?.metadata.updated_at).toBe(updated.task.metadata.updated_at);

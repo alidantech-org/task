@@ -61,7 +61,8 @@ export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): Doc
     (document) => document.metadata.type === "task",
   );
   const filtered = tasks.filter((task) => {
-    const archived = task.path.startsWith(`archive${sep}`) || task.path.startsWith("archive/");
+    const archived =
+      task.path.startsWith(`todo${sep}_archive${sep}`) || task.path.startsWith("todo/_archive/");
     if (filters.archived !== undefined && archived !== filters.archived) return false;
     if (filters.status && task.metadata.status !== filters.status) return false;
     if (filters.priority && task.metadata.priority !== filters.priority) return false;
@@ -85,7 +86,7 @@ export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): Doc
       const taskGroupPath = dirname(task.path);
       const groupPath = groupDocument ? dirname(groupDocument.path) : undefined;
       const folderName = basename(taskGroupPath);
-      const groupSlug = task.path.startsWith("archive/")
+      const groupSlug = task.path.startsWith("todo/_archive/")
         ? folderName.replace(/^\d{4}-\d{2}-\d{2}-/, "")
         : folderName;
       if (
@@ -162,7 +163,8 @@ export async function listTaskGroups(context: WorkspaceContext): Promise<TaskGro
     (document) => document.metadata.id.startsWith("GRP-") && basename(document.path) === "plan.md",
   );
   return plans.map((plan) => {
-    const archived = plan.path.startsWith(`archive${sep}`) || plan.path.startsWith("archive/");
+    const archived =
+      plan.path.startsWith(`todo${sep}_archive${sep}`) || plan.path.startsWith("todo/_archive/");
     const groupPath = dirname(plan.path);
     const last = basename(groupPath);
     const slug = archived ? last.replace(/^\d{4}-\d{2}-\d{2}-/, "") : last;

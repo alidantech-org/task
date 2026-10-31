@@ -1,6 +1,6 @@
+import { cn } from "@task/ui/utils.ts";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { HTMLAttributes, JSX } from "react";
-import { cn } from "@task/ui/utils.ts";
 
 const badgeStyles = cva(
   "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium",

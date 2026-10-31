@@ -81,15 +81,19 @@ export async function validateWorkspace(
     const records = groups.get(groupPath) ?? [];
     records.push(task);
     groups.set(groupPath, records);
-    if (!/^(todo|archive)\//.test(task.path)) {
+    if (!/^todo\//.test(task.path)) {
       push(
         diagnostics,
         task.path,
-        "Task records must be inside a todo or archive work group",
+        "Task records must be inside todo/ (archived groups belong under todo/_archive/)",
         "group",
       );
     }
-    if (!/^(todo|archive)\/.*\/\d{3,}-[a-z0-9-]+\.md$/i.test(task.path)) {
+    if (
+      !/^todo\/(?:_archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[^/]+|[^/]+)\/\d{3,}-[a-z0-9-]+\.md$/i.test(
+        task.path,
+      )
+    ) {
       push(
         diagnostics,
         task.path,
@@ -116,6 +120,7 @@ export async function validateWorkspace(
     }
     if (
       groupPath.startsWith("todo/") &&
+      !groupPath.startsWith("todo/_archive/") &&
       groupTasks.length > 0 &&
       groupTasks.every((task) => task.metadata.status === "completed")
     ) {

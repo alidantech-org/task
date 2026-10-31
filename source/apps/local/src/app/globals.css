@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@source "../../../../packages/ui/src";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -79,6 +81,14 @@
   html {
     @apply font-sans;
   }
+}
+
+[data-slot="task-app-shell"] [data-slot="card"] {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

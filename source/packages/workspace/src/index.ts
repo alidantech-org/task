@@ -16,9 +16,11 @@ export type {
   DocumentSummary,
   ResolvedWorkspace,
   TaskCreateInput,
+  TaskExtra,
   TaskGroup,
   TaskPriority,
   TaskStatus,
+  TaskStatusChange,
   TaskUpdateInput,
   ValidationCategory,
   ValidationDiagnostic,
@@ -51,6 +53,19 @@ export {
 export type { ValidationScope } from "@task/workspace/operations/validate";
 export { validateWorkspace } from "@task/workspace/operations/validate";
 export { resolveSafeWorkspacePath, resolveWorkspacePath } from "@task/workspace/paths/safe-path";
+export type {
+  ProjectFact,
+  ProjectFinding,
+  ProjectInspection,
+  ProjectSetupPlan,
+  SetupChange,
+  SetupSelection,
+} from "@task/workspace/project/setup";
+export {
+  applyProjectSetupPlan,
+  createProjectSetupPlan,
+  inspectProject,
+} from "@task/workspace/project/setup";
 export type {
   IndexChange,
   IndexChangeListener,

@@ -25,6 +25,8 @@ type WorkspaceData = {
   context: WorkspaceContext;
   tasks: DocumentSummary[];
   documents: DocumentSummary[];
+  rules: DocumentSummary[];
+  agents: DocumentSummary[];
   groups: TaskGroup[];
 };
 
@@ -39,6 +41,10 @@ async function loadWorkspace(): Promise<WorkspaceData> {
     context,
     tasks: listTasks(index, { archived: false }),
     documents: listDocuments(index),
+    rules: [...index.documents.values()].filter((document) => document.metadata.type === "rule"),
+    agents: [...index.documents.values()].filter((document) =>
+      ["agent-profile", "agent-skill"].includes(document.metadata.type),
+    ),
     groups: await listTaskGroups(context),
   };
 }
@@ -181,6 +187,14 @@ function WorkspaceTui({
     () => filterGroups(workspaceData?.groups ?? [], query),
     [workspaceData, query],
   );
+  const visibleRules = useMemo(
+    () => filterByQuery(workspaceData?.rules ?? [], query),
+    [workspaceData, query],
+  );
+  const visibleAgents = useMemo(
+    () => filterByQuery(workspaceData?.agents ?? [], query),
+    [workspaceData, query],
+  );
   const selectedTask = visibleTasks[clampIndex(selectedIndex, visibleTasks.length)];
   const selectedDocument = visibleDocuments[clampIndex(selectedIndex, visibleDocuments.length)];
   const selectedGroup = visibleGroups[clampIndex(selectedIndex, visibleGroups.length)];
@@ -196,10 +210,21 @@ function WorkspaceTui({
             ? visibleGroups.length
             : section === "Docs"
               ? visibleDocuments.length
-              : 0,
+              : section === "Rules"
+                ? visibleRules.length
+                : section === "Agents"
+                  ? visibleAgents.length
+                  : 0,
       ),
     );
-  }, [section, visibleTasks.length, visibleGroups.length, visibleDocuments.length]);
+  }, [
+    section,
+    visibleTasks.length,
+    visibleGroups.length,
+    visibleDocuments.length,
+    visibleRules.length,
+    visibleAgents.length,
+  ]);
 
   useKeyboard((key) => {
     if (showHelp && (key.name === "escape" || key.name === "?")) {
@@ -278,7 +303,11 @@ function WorkspaceTui({
             ? visibleGroups.length
             : section === "Docs"
               ? visibleDocuments.length
-              : 0;
+              : section === "Rules"
+                ? visibleRules.length
+                : section === "Agents"
+                  ? visibleAgents.length
+                  : 0;
       setSelectedIndex((current) => Math.min(Math.max(0, length - 1), current + 1));
     }
   });
@@ -480,6 +509,58 @@ function WorkspaceTui({
     </box>
   );
 
+  const guidanceView = (title: string, items: DocumentSummary[]) => {
+    const selected = items[clampIndex(selectedIndex, items.length)];
+    return (
+      <box style={{ flexDirection: "row", flexGrow: 1, gap: 1 }}>
+        <box
+          title={`${title.toUpperCase()} · ${items.length}`}
+          style={{
+            width: wide ? 44 : "50%",
+            flexDirection: "column",
+            border: true,
+            borderColor: "#334155",
+            padding: 1,
+            gap: 1,
+          }}
+        >
+          {items.length ? (
+            sliceAroundSelection(items, selectedIndex, 18).map((item) => {
+              const index = items.findIndex((entry) => entry.metadata.id === item.metadata.id);
+              return (
+                <text key={item.metadata.id} fg={index === selectedIndex ? "#7DD3FC" : "#CBD5E1"}>
+                  {index === selectedIndex ? "› " : "  "}
+                  {item.metadata.name} · {item.metadata.type}
+                </text>
+              );
+            })
+          ) : (
+            <text fg="#94A3B8">
+              No {title.toLowerCase()} documents yet. Use `task setup` to prepare reviewed guidance.
+            </text>
+          )}
+        </box>
+        <box
+          title="PREVIEW"
+          style={{
+            flexGrow: 1,
+            border: true,
+            borderColor: "#334155",
+            flexDirection: "column",
+            padding: 1,
+            gap: 1,
+          }}
+        >
+          {workspaceData ? (
+            <DocumentDetails context={workspaceData.context} document={selected} />
+          ) : (
+            <text fg="#94A3B8">Workspace unavailable.</text>
+          )}
+        </box>
+      </box>
+    );
+  };
+
   const view =
     section === "Tasks" ? (
       tasksView
@@ -487,6 +568,10 @@ function WorkspaceTui({
       groupsView
     ) : section === "Docs" ? (
       docsView
+    ) : section === "Rules" ? (
+      guidanceView("Rules", visibleRules)
+    ) : section === "Agents" ? (
+      guidanceView("Agents", visibleAgents)
     ) : (
       <box
         title={section.toUpperCase()}
@@ -500,10 +585,7 @@ function WorkspaceTui({
         }}
       >
         <text fg="#F8FAFC">{section} is planned.</text>
-        <text fg="#94A3B8">
-          This section will appear when Task has a shared data source and supported operations for
-          it.
-        </text>
+        <text fg="#94A3B8">Workspace activity view is not implemented yet.</text>
       </box>
     );
 

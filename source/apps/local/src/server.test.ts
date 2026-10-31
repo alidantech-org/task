@@ -63,6 +63,8 @@ describe("local runtime HTTP boundary", () => {
       const address = currentServer.address();
       if (!address || typeof address === "string") throw new Error("Expected TCP address");
       const baseUrl = `http://127.0.0.1:${address.port}`;
+      const ready = await fetch(`${baseUrl}/health/ready`);
+      expect(await ready.json()).toMatchObject({ workspace: true });
       const session = await fetch(`${baseUrl}/internal/session`);
       const { capability } = (await session.json()) as { capability: string };
       const denied = await fetch(`${baseUrl}/workspace`, {
@@ -76,8 +78,41 @@ describe("local runtime HTTP boundary", () => {
       });
       expect(snapshot.status).toBe(200);
       expect(await snapshot.json()).toMatchObject({
-        workspace: { documents: [{ id: "T-1", name: "One" }] },
+        workspace: {
+          projectRoot: root,
+          workspaceRoot: join(root, "tasks"),
+          workspaceDirectory: "tasks",
+          documents: [{ id: "T-1", name: "One" }],
+        },
       });
+
+      const originalDocument = await fetch(`${baseUrl}/workspace/document/T-1`, {
+        headers: { "x-task-capability": capability },
+      });
+      const document = (await originalDocument.json()) as {
+        document: { contentHash: string };
+      };
+      const savedDocument = await fetch(`${baseUrl}/workspace/document/T-1`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({
+          body: "Updated from the dashboard.\n",
+          expectedHash: document.document.contentHash,
+        }),
+      });
+      expect(savedDocument.status).toBe(200);
+      expect(await savedDocument.json()).toMatchObject({
+        document: { body: "\nUpdated from the dashboard.\n" },
+      });
+      const staleDocument = await fetch(`${baseUrl}/workspace/document/T-1`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({
+          body: "Stale overwrite\n",
+          expectedHash: document.document.contentHash,
+        }),
+      });
+      expect(staleDocument.status).toBe(409);
 
       const createdGroup = await fetch(`${baseUrl}/workspace/task-groups`, {
         method: "POST",

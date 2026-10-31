@@ -40,6 +40,10 @@ The runtime is the controlled bridge between the browser and one selected worksp
 
 The dashboard reads and mutates data only through the local runtime API. It renders server-confirmed results and validation errors, subscribes to change notifications, and recovers from disconnects using an authoritative snapshot or supported cursor. It must not access arbitrary local files or implement independent authoritative task/document rules. Client validation may improve usability; shared engine validation remains authoritative.
 
+The dashboard server renders its initial project snapshot from the selected local runtime, then the browser uses the same-origin proxy for subsequent reads and writes. The runtime resolves a project root to its configured managed workspace before building the index. If discovery fails, readiness reports the error rather than presenting an empty project as if it were loaded.
+
+Shared task updates append actual status transitions to the task's `extra.status_history` metadata. Each entry records the previous status, new status, and an ISO timestamp. The shared metadata reader validates this structure. Older tasks have no history until a status changes; consumers must not infer earlier transitions from `updated_at` or filesystem timestamps.
+
 ### Other clients
 
 Agents use the CLI or a future supported machine interface. External editors may change workspace files and must be reconciled by the runtime. The TUI reuses the same engine rather than introducing another domain model.
@@ -237,7 +241,7 @@ Do not build a second task model in the runtime/dashboard, route ordinary CLI co
 
 The CLI resolves a local workspace from `--workspace`, `TASK_WORKSPACE_ROOT`, nearest `task.yaml`, or nearest `tasks/` directory. It uses `@task/workspace` for Markdown indexing, task/document queries, search, validation, safe task/group creation and updates, and group archive/restore. There is no persistent index cache. Full-text search reads document bodies at query time.
 
-Task groups use `todo/<slug>/plan.md` and numbered task records. The last completion archives a non-empty group under `archive/YYYY/MM/YYYY-MM-DD-<slug>/`; explicit archive checks eligibility and restore uses the stable group ID. CLI `edit` and `docs open` edit a temporary body copy and submit changes through the shared hash-checked write operation.
+Task groups use `todo/<slug>/plan.md` and numbered task records. The last completion archives a non-empty group under `todo/_archive/YYYY/MM/YYYY-MM-DD-<slug>/`; explicit archive checks eligibility and restore uses the stable group ID. This new project layout has no compatibility or migration behavior for workspace-root `archive/`. CLI `edit` and `docs open` edit a temporary body copy and submit changes through the shared hash-checked write operation.
 
 The local dashboard reads indexed summaries, document bodies, full-text search results, task groups, and validation diagnostics through the loopback runtime. The Next.js server proxies browser requests and stores the runtime capability in an HttpOnly, SameSite cookie; direct browser-origin requests to workspace routes are rejected, and mutating proxy requests require a same-origin Origin header. The dashboard creates task groups and tasks and updates task status/due dates through shared workspace operations. Updates include an expected content hash, use atomic replacement, reject symlink path segments, and recheck the target and parent before rename. This narrows filesystem races but is not a kernel-enforced directory-handle boundary against a hostile process concurrently replacing ancestors. The dashboard includes list/board/calendar views, workspace-wide Markdown search, and system/light/dark themes. The TUI currently has a navigation shell and does not yet expose these CLI workflows.
 

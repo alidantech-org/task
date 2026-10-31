@@ -26,11 +26,13 @@ See [Repository documentation](tasks/docs/README.md), [Task workspace convention
 
 ## Install and run
 
-Requirements: Bun 1.3.14 or later, and Flutter SDK for mobile validation/development.
+Requirements: Bun 1.3.14 or later, Node.js 20.9 or later, and Flutter SDK on `PATH`.
 
-From the repository root:
+Install and configure dependencies for all Bun workspace projects and the separate Flutter mobile app from the repository root:
 
-    bun install
+    bun run setup
+
+To also make `task` and `tk` available globally from this live checkout, run `bun run setup --link-cli`. This optional flag creates global Bun links; the default setup only installs project dependencies.
 
 Start the complete local development stack:
 
@@ -88,4 +90,4 @@ See [development setup](tasks/docs/development/setup.md) and [source layout](tas
 
 ## Project status
 
-The CLI now provides local workspace discovery, task and document queries, body search, validation, task/group creation and updates, group archive/restore, and editor handoff through the shared `@task/workspace` engine. The API and local runtime expose health endpoints; browser access to workspace data, authentication, persistence, collaboration, synchronization, and production distribution remain future work. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries.
+The CLI provides local workspace discovery, task and document queries, validation, task/group updates, editor handoff, and group archive/restore through the shared `@task/workspace` engine. `task project inspect` statically reports repository facts, while `task setup` reviews and applies selected Task docs/rules and Codex, Claude, Copilot, Cursor, or portable Skill guidance adapters. It does not execute project code or launch agents. The TUI includes read-only Rules and Agent Profile views; agent orchestration, authentication, persistence, cloud sync, and production distribution remain future work. Completed groups use `todo/_archive/YYYY/MM/`; no workspace-root archive migration is supported. Internal TS imports use #/ aliases in Bun projects and @/ aliases in Next.js apps, with package names across project boundaries.

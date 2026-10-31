@@ -12,6 +12,7 @@
     "source/packages/*"
   ],
   "scripts": {
+    "setup": "bun run scripts/setup.ts",
     "dev": "bun run dev:stack",
     "dev:stack": "concurrently --kill-others --names API,SITE,LOCAL-RUNTIME,LOCAL-WEB --prefix-colors blue,magenta,green,cyan \"bun run dev:api\" \"bun run dev:site\" \"bun run dev:local:runtime\" \"bun run dev:local:web\"",
     "dev:cli": "bun run --filter @task/cli dev",

@@ -1,22 +1,25 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { basename } from "node:path";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { basename } from "node:path";
 import {
   buildWorkspaceIndex,
-  getWorkspaceOverview,
-  resolveWorkspace,
-  searchWorkspace,
-  validateWorkspace,
-  getDocument,
-  listTaskGroups,
   createTask,
   createTaskGroup,
+  getDocument,
+  getWorkspaceOverview,
+  listTaskGroups,
+  replaceDocumentBody,
+  type ResolvedWorkspace,
+  resolveWorkspace,
+  searchWorkspace,
   updateTask,
+  validateWorkspace,
+  WorkspaceError,
   type WorkspaceIndex,
   type WorkspaceWatcher,
   watchWorkspaceIndex,
 } from "@task/workspace";
-import { WorkspaceError, type ResolvedWorkspace } from "@task/workspace";
+import { parseFrontmatter } from "@task/workspace/indexing/metadata";
 
 const host = "127.0.0.1";
 type RuntimeError = {
@@ -26,23 +29,30 @@ type RuntimeError = {
 type RuntimeState = {
   workspace?: ResolvedWorkspace;
   monitor?: Awaited<ReturnType<typeof monitorWorkspace>>;
+  workspaceError?: string;
   capability: string;
 };
 
 const runtimeState: RuntimeState = { capability: randomBytes(32).toString("hex") };
 const allowedOrigins = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
 
-export async function configureWorkspace(root: string): Promise<void> {
-  const selected = await resolveWorkspace({ workspaceOverride: root });
+export async function configureWorkspace(projectRoot: string): Promise<void> {
+  const selected = await resolveWorkspace({ cwd: projectRoot });
+  await configureResolvedWorkspace(selected);
+}
+
+async function configureResolvedWorkspace(selected: ResolvedWorkspace): Promise<void> {
   if (runtimeState.monitor) runtimeState.monitor.watcher.close();
   runtimeState.workspace = selected;
   runtimeState.monitor = await monitorWorkspace(selected.root);
+  runtimeState.workspaceError = undefined;
 }
 
 export function closeLocalWorkspace(): void {
   runtimeState.monitor?.watcher.close();
   runtimeState.monitor = undefined;
   runtimeState.workspace = undefined;
+  runtimeState.workspaceError = undefined;
 }
 
 function authorized(
@@ -130,6 +140,7 @@ async function snapshot(index: WorkspaceIndex): Promise<object> {
       updated_at: document.metadata.updated_at,
       archived_at: document.metadata.archived_at,
       depends_on: document.metadata.depends_on,
+      extra: document.metadata.extra,
       size: document.size,
       modifiedAt: document.modifiedAt,
       contentHash: document.contentHash,
@@ -172,7 +183,13 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
     send(
       response,
       200,
-      { status: "ok", service: "task-local", workspace: !!runtimeState.workspace, requestId },
+      {
+        status: "ok",
+        service: "task-local",
+        workspace: !!runtimeState.workspace,
+        workspaceError: runtimeState.workspaceError,
+        requestId,
+      },
       requestId,
     );
     return;
@@ -254,9 +271,40 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         send(response, 200, { diagnostics: result, requestId }, requestId);
         return;
       }
+      if (path.startsWith("/workspace/document/") && method === "PATCH") {
+        const input = await readJson(request);
+        assertKeys(input, ["body", "expectedHash"]);
+        if (typeof input.body !== "string") throw new Error("body must be a string");
+        const identifier = decodeURIComponent(path.slice("/workspace/document/".length));
+        const document = await replaceDocumentBody(
+          workspace,
+          identifier,
+          input.body,
+          stringField(input, "expectedHash"),
+        );
+        await monitor.watcher.reconcile();
+        const result = await getDocument(workspace, identifier);
+        const parsed = parseFrontmatter(result.body);
+        send(
+          response,
+          200,
+          {
+            document: {
+              path: document.path,
+              contentHash: document.contentHash,
+              body: parsed.body,
+            },
+            workspace: await snapshot(monitor.index),
+            requestId,
+          },
+          requestId,
+        );
+        return;
+      }
       if (path.startsWith("/workspace/document/") && method === "GET") {
         const identifier = decodeURIComponent(path.slice("/workspace/document/".length));
         const result = await getDocument(workspace, identifier);
+        const parsed = parseFrontmatter(result.body);
         send(
           response,
           200,
@@ -264,7 +312,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
             document: {
               path: result.summary.path,
               contentHash: result.summary.contentHash,
-              body: result.body,
+              body: parsed.body,
             },
             requestId,
           },
@@ -438,14 +486,19 @@ if (import.meta.main) {
     throw new Error("TASK_LOCAL_PORT must be an integer between 1 and 65535");
   }
   const workspaceRoot = process.env.TASK_WORKSPACE_ROOT;
-  if (workspaceRoot) await configureWorkspace(workspaceRoot);
-  else {
-    try {
+  try {
+    if (workspaceRoot) {
+      await configureResolvedWorkspace(
+        await resolveWorkspace({ workspaceOverride: workspaceRoot }),
+      );
+    } else {
       const selected = await resolveWorkspace();
-      await configureWorkspace(selected.projectRoot);
-    } catch {
-      // The runtime remains available for health checks when started outside a project.
+      await configureResolvedWorkspace(selected);
     }
+  } catch (error) {
+    runtimeState.workspaceError =
+      error instanceof Error ? error.message : "Workspace discovery failed";
+    process.stderr.write(`Task local workspace discovery failed: ${runtimeState.workspaceError}\n`);
   }
   const workspaceMonitor = runtimeState.monitor;
   const server = createLocalServer();

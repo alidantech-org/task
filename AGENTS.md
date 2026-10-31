@@ -60,4 +60,6 @@ See Decision 0011 and tasks/docs/architecture/source-layout.md for the accepted 
 - The validator and UI must share the same schema definitions and document interpretation.
 - Update tasks/docs/ when engineering setup, architecture, or implementation behavior changes.
 - Use the managed workspace's decisions/ and handoffs/ areas for meaningful decisions and agent handoffs.
+- Project guidance setup is static and review-driven: do not execute scanned project code, silently select policy, modify Git configuration, or launch agents.
+- The current workspace archive layout is todo/_archive/YYYY/MM/YYYY-MM-DD-<slug>/; it is intentionally new-only and has no workspace-root archive compatibility or migration path.
 - Keep root README.md concise and aligned with the actual repository state.

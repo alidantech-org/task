@@ -1,10 +1,11 @@
-import type { HTMLAttributes, JSX } from "react";
 import { cn } from "@task/ui/utils.ts";
+import type { HTMLAttributes, JSX } from "react";
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>): JSX.Element {
   return (
     <section
-      className={cn("rounded-xl border bg-card text-card-foreground", className)}
+      data-slot="card"
+      className={cn("rounded-2xl border border-border/80 bg-card text-card-foreground", className)}
       {...props}
     />
   );

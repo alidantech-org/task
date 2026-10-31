@@ -17,15 +17,17 @@ tags:
 
 ## Install dependencies
 
-From the repository root:
+From the repository root, install all Bun workspace dependencies and resolve the separate Flutter app's dependencies with one command:
 
-    bun install
+    bun run setup
 
-This resolves the root Bun workspace, including the CLI, local runtime/dashboard, hosted Next.js site, NestJS API, TUI, shared packages, and Biome. It also refreshes bun.lock when workspace manifests change. Commit the resulting lockfile so frozen installs use the same dependency graph.
+This resolves the root Bun workspace, including the CLI, local runtime/dashboard, hosted Next.js site, NestJS API, TUI, shared packages, and Biome, then runs Flutter `pub get` through the root bridge. It refreshes `bun.lock` and `source/apps/mobile/pubspec.lock` when manifests or SDK resolution require it. Flutter must already be installed and available on `PATH`; setup reports that prerequisite clearly.
 
-Flutter remains outside the Bun workspace. Before the first mobile build, analysis, or test:
+Flutter remains outside the Bun workspace. To also make `task` and `tk` available globally from this checkout, opt in to Bun's global links:
 
-    bun run mobile:pub:get
+    bun run setup --link-cli
+
+The global CLI link is optional; ordinary repository commands work without it.
 
 ## Run applications
 
@@ -141,4 +143,4 @@ Flutter/Dart does not import TypeScript package source. Cross-language contracts
 
 ## Current implementation scope
 
-The CLI and `@task/workspace` provide workspace discovery, task/document queries, metadata/body search, validation, task/group creation and updates, editor handoff, and group archive/restore. The local runtime still exposes only a loopback health endpoint; the Next.js apps render service-status shells; the TUI has interactive keyboard navigation but does not yet expose the CLI task workflows. Browser access to workspace content, runtime authorization and mutations, WebSocket updates, API persistence/authentication, cloud sync, and broader product workflows remain future work.
+The CLI and `@task/workspace` provide workspace discovery, task/document queries, metadata/body search, validation, task/group creation and updates, editor handoff, and group archive/restore. `task project inspect` performs static repository inspection; `task setup` reviews and applies selected Task documents, rules, and native agent guidance adapters. The inspector never executes project code. The TUI provides read-only Rules and Agent Profile browsing; launching and orchestrating agents remain out of scope. The local runtime still exposes only a loopback health endpoint; browser access to workspace content, runtime authorization and mutations, WebSocket updates, API persistence/authentication, cloud sync, and broader product workflows remain future work.

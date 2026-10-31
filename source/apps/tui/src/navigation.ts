@@ -1,4 +1,11 @@
-export const navigationSections = ["Tasks", "Groups", "Docs", "Agents", "Activity"] as const;
+export const navigationSections = [
+  "Tasks",
+  "Groups",
+  "Docs",
+  "Rules",
+  "Agents",
+  "Activity",
+] as const;
 
 export type NavigationSection = (typeof navigationSections)[number];
 

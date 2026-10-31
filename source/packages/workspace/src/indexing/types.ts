@@ -3,7 +3,11 @@ export type WorkspaceContext = {
   projectRoot?: string;
 };
 export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed";
+export type TaskStatusChange = { from: TaskStatus; to: TaskStatus; at: string };
 export type TaskPriority = "low" | "medium" | "high";
+export type TaskExtra = Readonly<
+  Record<string, unknown> & { status_history?: readonly TaskStatusChange[] }
+>;
 export type DocumentMetadata = {
   id: string;
   name: string;
@@ -19,7 +23,7 @@ export type DocumentMetadata = {
   updated_at?: string;
   archived_at?: string;
   depends_on?: readonly string[];
-  extra?: Readonly<Record<string, unknown>>;
+  extra?: TaskExtra;
   dates: Readonly<Record<string, string>>;
 };
 export type DocumentSummary = {

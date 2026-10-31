@@ -15,6 +15,7 @@ Use this directory for durable repository-level documentation such as:
 
 - Architecture and system design.
 - Development setup and contributor guidance.
+- Static project inspection, reviewed setup plans, and agent guidance adapters.
 - Engineering conventions and implementation guides.
 - CLI, dashboard, workspace, and agent integration behavior.
 - Release, packaging, and operational guides.

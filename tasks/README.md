@@ -14,8 +14,9 @@ Use it for work and project context that the Task tool manages:
 - Engineering documentation under `docs/`, product requirements, research, and project notes under `docs/`.
 - Architecture and product decisions under `decisions/`.
 - Agent and contributor handoffs under `handoffs/`.
+- Project agent profiles under `agents/` and reusable project rules under `rules/`.
 - Small, explicitly managed workspace state under `state/`.
-- Historical records under `archive/` and completed-task organization as the lifecycle is defined.
+- Completed task groups under `todo/_archive/YYYY/MM/YYYY-MM-DD-<group-slug>/`.
 
 A possible shape as records are added:
 
@@ -29,12 +30,17 @@ tasks/
 │   ├── research/
 │   └── benchmarks/
 ├── decisions/
+├── agents/
+│   └── templates/          # Optional project-specific Handlebars overrides
 ├── handoffs/
+├── rules/
 ├── state/
-└── archive/
+└── todo/
+    └── _archive/
+        └── YYYY/MM/YYYY-MM-DD-<group-slug>/
 ```
 
-Do not create empty folders just to match this illustration. Add structure as the product's workspace model and real records require it.
+Create these areas as real records are added; do not add empty placeholders. This is a new workspace layout: archive operations use `todo/_archive/` exclusively and intentionally do not read or migrate a workspace-root `archive/` directory.
 
 ## Markdown frontmatter
 

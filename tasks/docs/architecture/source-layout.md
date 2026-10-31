@@ -81,12 +81,12 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 
 ## Current implementation status
 
-- The CLI has task/tk aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, archive/restore, document commands, validation, index diagnostics, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime.
+- The CLI has task/tk aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, archive/restore under `todo/_archive/`, document commands, validation, index diagnostics, static project inspection, reviewed setup plans, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime. Project setup is static, does not execute repository code, and does not launch agents.
 - The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
 - The local application has a Next.js dashboard with overview, task list/board/calendar, document browsing, detail panels, prompt generation, global full-text search, and workspace diagnostics. Its loopback runtime exposes capability-protected read/query/validation/refresh and task create/update routes through a same-origin Next.js proxy. Writes use shared operations with hash conflicts, symlink rejection, and atomic file replacement; they recheck directory and file identity before replacement but do not use kernel-enforced directory handles against a hostile concurrent filesystem actor. Trusted project switching, Markdown source editing, and WebSocket updates are not implemented.
 - The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.
 - The Flutter project has a minimal Material application and widget smoke test, with Flutter analyze/test wired into root scripts.
-- The TUI has an OpenTUI/React interactive navigation shell and navigation test. It does not yet read or mutate workspace files.
+- The TUI has an OpenTUI/React interactive navigation shell with task, group, document, Rules, and Agent Profile browsing. Reads and previews use `@task/workspace`; it remains read-only.
 - @task/contracts exports initial transport-neutral interfaces and a runtime health-payload guard.
 - @task/workspace exports workspace resolution, shared Markdown indexing and body reads, task/document queries and search, metadata/reference/link/group validation, and task/group/document writes. Writes use exclusive creation, temporary replacement, hash conflict checks, and path checks; they are not claimed to be race-safe against hostile concurrent filesystem changes.
 

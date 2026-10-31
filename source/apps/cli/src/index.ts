@@ -3,17 +3,20 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { isCancel, outro, select } from "@clack/prompts";
-import type { DocumentSummary } from "@task/workspace";
+import { join, resolve } from "node:path";
+import { confirm, isCancel, multiselect, outro, select } from "@clack/prompts";
+import type { DocumentSummary, SetupSelection } from "@task/workspace";
 import {
+  applyProjectSetupPlan,
   archiveTaskGroup,
   createDocument,
+  createProjectSetupPlan,
   createTask,
   createTaskGroup,
   findDocument,
   getDocument,
   initializeWorkspace,
+  inspectProject,
   listDocuments,
   listTaskGroups,
   listTasks,
@@ -91,6 +94,10 @@ function printHelp(): void {
     "Commands:",
     "  (no command)           Workspace overview",
     "  init [--workspace <path>]  Initialize this project for Task",
+    "  project inspect       Inspect repository and suggest guidance (read-only)",
+    "  setup                 Review and apply project documentation and agent guidance",
+    "  setup plan --json     Emit a reviewed setup plan without writing files",
+    "  setup apply --path    Apply a saved JSON setup plan",
     "  tui | -f               Open the full-screen workspace interface",
     "  doctor                 Check Bun and workspace health",
     "  info | status | stats  Workspace information and counts",
@@ -108,6 +115,7 @@ function printHelp(): void {
     "  docs list|show|search|tree|open|create",
     "  index status|rebuild|verify",
     "",
+    "Setup options: --docs project-overview,repository-map,development-setup,testing-guide --rules coding,testing,security,git --agents codex,claude,copilot,cursor,skill",
     "Options: --workspace <path> --json --plain --no-color --quiet --verbose -f/--full-screen --help --version",
     "Task fields: --title --group --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
   ];
@@ -208,6 +216,101 @@ async function editDocumentBody(
   }
 }
 
+async function selectSetupItems<T extends string>(
+  message: string,
+  options: readonly { value: T; label: string; hint?: string }[],
+): Promise<T[]> {
+  const result = await multiselect<string>({
+    message,
+    options: options.map(({ value, label, hint }) => ({ value, label, hint })),
+  });
+  if (isCancel(result)) {
+    emitError(outputContext, "Cancelled · no files changed", false);
+    process.exit(130);
+  }
+  return result as T[];
+}
+
+async function runInteractiveSetup(context: { root: string; projectRoot: string }): Promise<void> {
+  const inspection = await inspectProject(context.projectRoot);
+  for (const fact of inspection.facts) {
+    const evidence = fact.evidence.slice(0, 4);
+    const more =
+      fact.evidence.length > evidence.length
+        ? `, +${fact.evidence.length - evidence.length} more`
+        : "";
+    line(
+      `${stdoutStyle.accent(fact.key)}  ${fact.value}${evidence.length ? `  ${stdoutStyle.muted(`${evidence.join(", ")}${more}`)}` : ""}`,
+      "requested",
+    );
+  }
+  if (inspection.findings.length) {
+    line("\nSuggested additions:", "requested");
+    for (const finding of inspection.findings)
+      line(`  · ${finding.title} — ${finding.reason}`, "requested");
+  }
+  const documentation = await selectSetupItems("Choose Task workspace documents", [
+    { value: "project-overview", label: "Project overview", hint: "Verified repository facts" },
+    {
+      value: "repository-map",
+      label: "Repository map",
+      hint: "Detected source and tooling layout",
+    },
+    {
+      value: "development-setup",
+      label: "Development setup",
+      hint: "Manifests, lockfiles, declared scripts",
+    },
+    { value: "testing-guide", label: "Testing guide", hint: "Detected tests and declared scripts" },
+  ]);
+  const rules = await selectSetupItems("Choose project rules", [
+    { value: "coding", label: "Coding and collaboration" },
+    { value: "testing", label: "Testing and verification" },
+    { value: "security", label: "Security boundaries" },
+    { value: "git", label: "Git behavior", hint: "Guidance only; no git config/hooks" },
+  ]);
+  const agents = await selectSetupItems("Choose agent adapters", [
+    { value: "codex", label: "Codex / AGENTS.md" },
+    { value: "claude", label: "Claude Code / CLAUDE.md" },
+    { value: "copilot", label: "GitHub Copilot instructions" },
+    { value: "cursor", label: "Cursor rule (.mdc)" },
+    { value: "skill", label: "Portable Agent Skill" },
+  ]);
+  const gitGuidance = rules.includes("git")
+    ? await promptText(
+        "Describe the Git behavior agents should follow",
+        "existing branch, commit, and review conventions",
+      )
+    : undefined;
+  const plan = await createProjectSetupPlan(context, { documentation, rules, agents, gitGuidance });
+  if (!plan.changes.length) {
+    line("Nothing selected; no files changed.", "requested");
+    return;
+  }
+  line("\nReview plan:", "requested");
+  for (const change of plan.changes) {
+    line(`\n${stdoutStyle.accent(change.path)} · ${change.purpose}`, "requested");
+    line(
+      change.content
+        .split("\n")
+        .slice(0, 8)
+        .map((row) => `  ${row}`)
+        .join("\n"),
+      "requested",
+    );
+    if (change.content.split("\n").length > 8) line("  …", "requested");
+  }
+  const accepted = await confirm({ message: `Apply ${plan.changes.length} reviewed change(s)?` });
+  if (isCancel(accepted) || !accepted) {
+    outro("No files changed.");
+    return;
+  }
+  const result = await applyProjectSetupPlan(plan);
+  for (const path of result.written) line(`${stdoutSymbols.success} ${path}`, "requested");
+  for (const path of result.conflicts)
+    line(`${stdoutSymbols.warning} Skipped existing unmarked file ${path}`, "requested");
+}
+
 async function main(): Promise<void> {
   if (args.options.has("help") || args.command === "help") return printHelp();
   if (args.options.has("version") || args.command === "version")
@@ -236,13 +339,73 @@ async function main(): Promise<void> {
     }
     return;
   }
+  if (args.command === "project" && args.positionals[0] === "inspect") {
+    const inspection = await inspectProject(process.cwd());
+    if (json) output(inspection);
+    else {
+      line(`Project · ${inspection.projectRoot}`, "requested");
+      line("\nDetected facts", "requested");
+      for (const fact of inspection.facts)
+        line(
+          `  ${fact.key.padEnd(18)} ${fact.value}${fact.evidence.length ? ` · ${stdoutStyle.muted(`${fact.evidence.slice(0, 4).join(", ")}${fact.evidence.length > 4 ? `, +${fact.evidence.length - 4} more` : ""}`)}` : ""}`,
+          "requested",
+        );
+      line("\nSuggestions", "requested");
+      if (!inspection.findings.length) line("  No additional guidance suggestions.", "requested");
+      for (const finding of inspection.findings)
+        line(`  ${finding.title} · ${finding.reason}`, "requested");
+    }
+    return;
+  }
   const workspaceOverride = optionString(args, "workspace");
   const selected = await resolveWorkspace({
     workspaceOverride,
     environmentWorkspaceRoot: process.env.TASK_WORKSPACE_ROOT,
   });
-  const context = { root: selected.root, projectRoot: selected.projectRoot };
+  const context = {
+    root: selected.root,
+    projectRoot:
+      resolve(selected.root) === resolve(process.cwd()) ? selected.root : selected.projectRoot,
+  };
   const command = args.command;
+
+  if (command === "setup") {
+    const action = args.positionals[0];
+    if (action === "apply") {
+      const planPath = requiredOption("path");
+      const plan = JSON.parse(
+        await Bun.file(resolve(planPath)).text(),
+      ) as import("@task/workspace").ProjectSetupPlan;
+      if (
+        plan.projectRoot !== resolve(selected.projectRoot) ||
+        plan.workspaceRoot !== resolve(selected.root)
+      )
+        throw new WorkspaceError(
+          "invalid_input",
+          "Setup plan project/workspace does not match the selected workspace",
+        );
+      const result = await applyProjectSetupPlan(plan);
+      if (json) output(result);
+      else {
+        for (const path of result.written) line(`${stdoutSymbols.success} ${path}`, "requested");
+        for (const path of result.conflicts)
+          line(`${stdoutSymbols.warning} Skipped existing unmarked file ${path}`, "requested");
+      }
+      if (result.conflicts.length) process.exitCode = 2;
+      return;
+    }
+    if (action && action !== "plan")
+      throw new WorkspaceError("invalid_input", "Use task setup [plan|apply --path <file>]");
+    if (isInteractive() && !json && action !== "plan") return runInteractiveSetup(context);
+    const selection: SetupSelection = {
+      documentation: optionList(args, "docs"),
+      rules: optionList(args, "rules"),
+      agents: optionList(args, "agents"),
+    };
+    const plan = await createProjectSetupPlan(context, selection);
+    output(plan);
+    return;
+  }
 
   if (args.options.has("full-screen") || command === "tui") {
     if (command && command !== "tui")
@@ -677,7 +840,7 @@ async function main(): Promise<void> {
     }
     if (action === "tree") {
       const tree = await listWorkspaceTree(context);
-      const docs = tree.filter((path) => !path.startsWith("todo/") && !path.startsWith("archive/"));
+      const docs = tree.filter((path) => !path.startsWith("todo/"));
       if (json) output(docs);
       else for (const path of docs) line(path);
       return;

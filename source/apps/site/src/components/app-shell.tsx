@@ -1,6 +1,6 @@
+import { Badge, Card, CardDescription, CardHeader, CardTitle, Separator } from "@task/ui";
 import { Cloud, LockKeyhole, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
-import { Badge, Card, CardDescription, CardHeader, CardTitle, Separator } from "@task/ui";
 
 interface AppProps {
   apiStatus: "connected" | "offline";

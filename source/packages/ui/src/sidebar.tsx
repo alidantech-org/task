@@ -1,5 +1,5 @@
-import type { HTMLAttributes, JSX } from "react";
 import { cn } from "@task/ui/utils.ts";
+import type { HTMLAttributes, JSX } from "react";
 
 export function Sidebar({ className, ...props }: HTMLAttributes<HTMLElement>): JSX.Element {
   return (

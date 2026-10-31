@@ -24,6 +24,8 @@ export function getCliMetadata(version: string): CliMetadata {
     status: "workspace-connected",
     commands: [
       "init",
+      "setup",
+      "project inspect",
       "tui",
       "doctor",
       "info",
@@ -87,6 +89,10 @@ const valueOptions = new Set([
   "type",
   "editor",
   "extra",
+  "plan",
+  "docs",
+  "rules",
+  "agents",
 ]);
 
 export function parseArgs(args: readonly string[]): ParsedArgs {
