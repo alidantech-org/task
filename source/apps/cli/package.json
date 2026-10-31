@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "dev:watch": "bun run src/watch.ts",
-    "prepack": "bun run ../../scripts/package-cli.ts",
+    "prepack": "bun run ../../../scripts/package-cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },
