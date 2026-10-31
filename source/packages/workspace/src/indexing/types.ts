@@ -13,9 +13,11 @@ export type DocumentMetadata = {
   priority?: TaskPriority;
   assignee?: string;
   project?: string;
+  start_at?: string;
   due_at?: string;
   created_at?: string;
   updated_at?: string;
+  archived_at?: string;
   depends_on?: readonly string[];
   extra?: Readonly<Record<string, unknown>>;
   dates: Readonly<Record<string, string>>;
@@ -70,6 +72,7 @@ export type TaskCreateInput = {
   priority?: TaskPriority;
   assignee?: string;
   project?: string;
+  startAt?: string;
   dueAt?: string;
   tags?: readonly string[];
   dependsOn?: readonly string[];

@@ -215,6 +215,7 @@ export async function createTask(
     ...(input.tags?.length ? { tags: [...input.tags] } : {}),
     ...(input.assignee ? { assignee: input.assignee } : {}),
     ...(input.project ? { project: input.project } : {}),
+    ...(input.startAt ? { start_at: input.startAt } : {}),
     ...(input.dueAt ? { due_at: input.dueAt } : {}),
     ...(dependencies.length ? { depends_on: [...dependencies] } : {}),
     ...(input.extra ? { extra: { ...input.extra } } : {}),
@@ -273,6 +274,7 @@ export async function updateTask(
   if (input.priority !== undefined) values.priority = input.priority;
   if (input.assignee !== undefined) values.assignee = input.assignee;
   if (input.project !== undefined) values.project = input.project;
+  if (input.startAt !== undefined) values.start_at = input.startAt;
   if (input.dueAt !== undefined) values.due_at = input.dueAt;
   if (input.tags !== undefined) values.tags = [...input.tags];
   if (input.dependsOn !== undefined) {
@@ -282,6 +284,11 @@ export async function updateTask(
   if (input.extra !== undefined) values.extra = { ...input.extra };
   values.updated_at = new Date().toISOString();
   const next = serializeMarkdown(values, parsed.body);
+  try {
+    parseFrontmatter(next);
+  } catch (error) {
+    throw new WorkspaceError("validation_failed", error instanceof Error ? error.message : "Invalid task metadata", { cause: error });
+  }
   await replaceFile(context, task.path, next, task.contentHash);
   const updatedIndex = await buildWorkspaceIndex(context);
   let updatedTask = findDocument(updatedIndex, task.metadata.id);
@@ -363,6 +370,7 @@ export async function archiveGroup(
   }
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
+  const archivedAt = now.toISOString();
   const destination = `archive/${day.slice(0, 4)}/${day.slice(5, 7)}/${day}-${group.slug}`;
   const sourcePath = await resolveSafeWorkspacePath(context.root, group.path);
   const destinationPath = await resolveSafeWorkspacePath(context.root, destination);
@@ -377,6 +385,14 @@ export async function archiveGroup(
   } catch (error) {
     if (error instanceof WorkspaceError) throw error;
     if (errorCode(error) !== "ENOENT") throw error;
+  }
+  const index = await buildWorkspaceIndex(context);
+  for (const task of index.documents.values()) {
+    if (task.metadata.type !== "task" || !task.path.startsWith(`${group.path}/`)) continue;
+    const path = await resolveSafeWorkspacePath(context.root, task.path);
+    const parsed = parseFrontmatter(await Bun.file(path).text());
+    parsed.values.archived_at = archivedAt;
+    await replaceFile(context, task.path, serializeMarkdown(parsed.values, parsed.body), task.contentHash);
   }
   await rename(sourcePath, destinationPath);
   return { ...group, path: destination, archived: true };
@@ -399,6 +415,14 @@ export async function restoreGroup(
   } catch (error) {
     if (error instanceof WorkspaceError) throw error;
     if (errorCode(error) !== "ENOENT") throw error;
+  }
+  const index = await buildWorkspaceIndex(context);
+  for (const task of index.documents.values()) {
+    if (task.metadata.type !== "task" || !task.path.startsWith(`${group.path}/`)) continue;
+    const path = await resolveSafeWorkspacePath(context.root, task.path);
+    const parsed = parseFrontmatter(await Bun.file(path).text());
+    delete parsed.values.archived_at;
+    await replaceFile(context, task.path, serializeMarkdown(parsed.values, parsed.body), task.contentHash);
   }
   await rename(sourcePath, destinationPath);
   return { ...group, path: destination, archived: false };

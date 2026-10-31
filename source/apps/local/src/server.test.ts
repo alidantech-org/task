@@ -2,17 +2,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocalServer, monitorWorkspace } from "@/server";
+import { closeLocalWorkspace, configureWorkspace, createLocalServer, monitorWorkspace } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
 
 afterEach(async () => {
   const currentServer = server;
   server = undefined;
-  if (!currentServer?.listening) return;
-  await new Promise<void>((resolve, reject) => {
-    currentServer.close((error) => (error ? reject(error) : resolve()));
-  });
+  if (currentServer?.listening) {
+    await new Promise<void>((resolve, reject) => {
+      currentServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+  closeLocalWorkspace();
 });
 
 describe("local runtime HTTP boundary", () => {
@@ -40,14 +42,31 @@ describe("local runtime HTTP boundary", () => {
     expect(wrongMethod.status).toBe(405);
   });
 
-  test("runtime can maintain the shared index without exposing it through HTTP", async () => {
+  test("serves authorized workspace snapshots and rejects browser-origin access", async () => {
     const root = await mkdtemp(join(tmpdir(), "task-runtime-index-"));
     try {
       await mkdir(join(root, "tasks"), { recursive: true });
       await writeFile(join(root, "tasks", "one.md"), "---\nid: T-1\nname: One\ntype: task\n---\n");
+      await configureWorkspace(root);
       const monitor = await monitorWorkspace(root);
       expect(monitor.index.documents.size).toBe(1);
       monitor.watcher.close();
+
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const session = await fetch(`${baseUrl}/internal/session`);
+      const { capability } = (await session.json()) as { capability: string };
+      const denied = await fetch(`${baseUrl}/workspace`, { headers: { origin: "https://evil.example", "x-task-capability": capability } });
+      expect(denied.status).toBe(403);
+      const unauthorized = await fetch(`${baseUrl}/workspace`);
+      expect(unauthorized.status).toBe(401);
+      const snapshot = await fetch(`${baseUrl}/workspace`, { headers: { "x-task-capability": capability } });
+      expect(snapshot.status).toBe(200);
+      expect(await snapshot.json()).toMatchObject({ workspace: { documents: [{ id: "T-1", name: "One" }] } });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

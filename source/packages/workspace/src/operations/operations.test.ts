@@ -108,6 +108,23 @@ describe("task operations", () => {
     expect(await readWorkspaceDocument(context, task.path)).toContain("Keep the body");
   });
 
+  test("validates and persists explicit schedule dates", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Schedule fixture");
+    const task = await createTask(context, {
+      group: group.id,
+      title: "Plan milestone",
+      startAt: "2026-11-01",
+      dueAt: "2026-11-07",
+    });
+    expect(task.metadata.start_at).toBe("2026-11-01");
+    expect(task.metadata.due_at).toBe("2026-11-07");
+    await expect(updateTask(context, task.metadata.id, { startAt: "2026-11-10" })).rejects.toThrow(
+      "start_at must not be after due_at",
+    );
+  });
+
   test("archives a completed group and restores it by group ID", async () => {
     const { workspace } = await project();
     const context = { root: workspace };
@@ -118,9 +135,15 @@ describe("task operations", () => {
       /^archive\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
     );
     expect(updated.task.path).toBe(`${updated.archivedGroup?.path}/001-ship-it.md`);
+    expect(updated.task.metadata.created_at).toBeTruthy();
+    expect(updated.task.metadata.archived_at).toBeTruthy();
     const restored = await restoreTaskGroup(context, group.id);
     expect(restored.path).toBe("todo/release-prep");
     expect((await listTaskGroups(context))[0]?.archived).toBe(false);
+    const restoredTask = (await buildWorkspaceIndex(context)).documents.get("todo/release-prep/001-ship-it.md");
+    expect(restoredTask?.metadata.archived_at).toBeUndefined();
+    expect(restoredTask?.metadata.created_at).toBe(updated.task.metadata.created_at);
+    expect(restoredTask?.metadata.updated_at).toBe(updated.task.metadata.updated_at);
   });
 
   test("searches document bodies, detects references, and protects explicit reads", async () => {

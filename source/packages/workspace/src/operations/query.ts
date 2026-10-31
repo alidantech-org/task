@@ -31,6 +31,29 @@ export function listDocuments(index: WorkspaceIndex): DocumentSummary[] {
   return [...index.documents.values()].filter((document) => document.metadata.type !== "task");
 }
 
+export function getWorkspaceOverview(index: WorkspaceIndex): {
+  tasks: number;
+  planned: number;
+  inProgress: number;
+  blocked: number;
+  completed: number;
+  documents: number;
+  diagnostics: number;
+  recent: DocumentSummary[];
+} {
+  const tasks = listTasks(index, { archived: false });
+  return {
+    tasks: tasks.length,
+    planned: tasks.filter((task) => task.metadata.status === "planned").length,
+    inProgress: tasks.filter((task) => task.metadata.status === "in-progress").length,
+    blocked: tasks.filter((task) => task.metadata.status === "blocked").length,
+    completed: tasks.filter((task) => task.metadata.status === "completed").length,
+    documents: listDocuments(index).length,
+    diagnostics: index.diagnostics.length,
+    recent: [...index.documents.values()].sort((left, right) => right.modifiedAt - left.modifiedAt).slice(0, 8),
+  };
+}
+
 export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): DocumentSummary[] {
   const tasks = [...index.documents.values()].filter(
     (document) => document.metadata.type === "task",

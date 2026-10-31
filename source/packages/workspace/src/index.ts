@@ -35,6 +35,7 @@ export {
   findDocument,
   findGroup,
   getDocument,
+  getWorkspaceOverview,
   listDocuments,
   listTaskGroups,
   listTasks,

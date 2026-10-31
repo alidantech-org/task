@@ -44,9 +44,11 @@ export function parseFrontmatter(content: string): {
           "priority",
           "assignee",
           "project",
+          "start_at",
           "due_at",
           "created_at",
           "updated_at",
+          "archived_at",
           "depends_on",
           "extra",
         ]
@@ -71,19 +73,25 @@ export function parseFrontmatter(content: string): {
     if (values.priority !== undefined && !taskPriorities.has(values.priority as TaskPriority)) {
       throw new Error("Task priority must be low, medium, or high");
     }
-    for (const key of ["assignee", "project", "due_at", "created_at", "updated_at"] as const) {
+    for (const key of ["assignee", "project", "start_at", "due_at", "created_at", "updated_at", "archived_at"] as const) {
       if (values[key] !== undefined && typeof values[key] !== "string") {
         throw new Error(`${key} must be a string`);
       }
     }
-    if (typeof values.due_at === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(values.due_at)) {
-      throw new Error("due_at must use YYYY-MM-DD format");
-    }
-    if (typeof values.due_at === "string") {
-      const date = new Date(`${values.due_at}T00:00:00.000Z`);
-      if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== values.due_at) {
-        throw new Error("due_at must be a valid calendar date");
+    for (const key of ["start_at", "due_at"] as const) {
+      const value = values[key];
+      if (typeof value === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new Error(`${key} must use YYYY-MM-DD format`);
       }
+      if (typeof value === "string") {
+        const date = new Date(`${value}T00:00:00.000Z`);
+        if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value) {
+          throw new Error(`${key} must be a valid calendar date`);
+        }
+      }
+    }
+    if (typeof values.start_at === "string" && typeof values.due_at === "string" && values.start_at > values.due_at) {
+      throw new Error("start_at must not be after due_at");
     }
     if (
       values.depends_on !== undefined &&
@@ -125,9 +133,11 @@ export function parseFrontmatter(content: string): {
         : {}),
     ...(scalar("assignee") ? { assignee: scalar("assignee") } : {}),
     ...(scalar("project") ? { project: scalar("project") } : {}),
+    ...(scalar("start_at") ? { start_at: scalar("start_at") } : {}),
     ...(scalar("due_at") ? { due_at: scalar("due_at") } : {}),
     ...(scalar("created_at") ? { created_at: scalar("created_at") } : {}),
     ...(scalar("updated_at") ? { updated_at: scalar("updated_at") } : {}),
+    ...(scalar("archived_at") ? { archived_at: scalar("archived_at") } : {}),
     ...(Array.isArray(values.depends_on) ? { depends_on: values.depends_on as string[] } : {}),
     ...(extra !== undefined ? { extra: extra as Record<string, unknown> } : {}),
     dates,
