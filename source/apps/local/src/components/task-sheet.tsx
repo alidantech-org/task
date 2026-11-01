@@ -21,7 +21,6 @@ import {
   MoreHorizontal,
   Paperclip,
   Pencil,
-  Save,
   ShieldCheck,
   Trash2,
   X,
@@ -30,10 +29,9 @@ import { useRouter } from "next/navigation";
 import { Dialog, DropdownMenu } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { ChangeViewer, type ViewerTarget } from "@/components/change-viewer";
-import { useDialogs } from "@/components/dialogs";
+import { DocumentEditorSheet } from "@/components/document-editor-sheet";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { TaskActivity } from "@/components/task-activity";
 import { TaskChanges } from "@/components/task-changes";
 import { TaskComments } from "@/components/task-comments";
@@ -67,6 +65,8 @@ const tabs = [
   ["quality", "Quality", ShieldCheck],
 ] as const;
 type TabId = (typeof tabs)[number][0];
+/** The tabs always on the bar; the rest live in the More menu. */
+const mainTabs: readonly TabId[] = ["overview", "details", "subtasks", "comments"];
 
 /** Below these sheet widths the date/status editors, then the tabs, collapse to icons. */
 const compactEditorsBelow = 720;
@@ -140,13 +140,13 @@ export function TaskSheet() {
     setNotice,
   } = useWorkspaceApp();
   const router = useRouter();
-  const { confirm } = useDialogs();
   const [tab, setTab] = useState<TabId>("overview");
   const [width, setWidth] = useState(defaultSheetWidth);
   const [resizing, setResizing] = useState<"idle" | "drag" | "hide">("idle");
   const widthBeforeDrag = useRef(defaultSheetWidth);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [viewer, setViewer] = useState<ViewerTarget | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
@@ -161,7 +161,11 @@ export function TaskSheet() {
   useEffect(() => {
     setTab("overview");
     setViewer(null);
+    setEditorOpen(false);
   }, [taskId]);
+  useEffect(() => {
+    if (tab === "edit") setEditorOpen(true);
+  }, [tab]);
   useEffect(() => setDraft(detail?.body ?? ""), [detail?.body]);
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth);
@@ -207,18 +211,7 @@ export function TaskSheet() {
     };
   }, [taskId, segmentCount, contentHash, tab === "changes"]);
 
-  async function closeSheet() {
-    if (
-      tab === "edit" &&
-      draft !== (detail?.body ?? "") &&
-      !(await confirm({
-        title: "Discard unsaved changes?",
-        message: "Your edits to this task have not been saved.",
-        confirmLabel: "Discard",
-        danger: true,
-      }))
-    )
-      return;
+  function closeSheet() {
     openRecord(null);
   }
   const expanded = width > 800;
@@ -283,7 +276,10 @@ export function TaskSheet() {
   async function save() {
     setSaving(true);
     try {
-      if (await saveBody(draft)) setTab("details");
+      if (await saveBody(draft)) {
+        setEditorOpen(false);
+        setTab("details");
+      }
     } finally {
       setSaving(false);
     }
@@ -315,6 +311,7 @@ export function TaskSheet() {
     comments: task.commentCount ?? 0,
     files: attachmentList.length,
   };
+  const moreBadge = changeCount + findings.length + (counts.files ?? 0);
   const checklistChange = (selector: ChecklistSelector, checked: boolean) =>
     void setChecklist(task, selector, checked);
 
@@ -474,39 +471,77 @@ export function TaskSheet() {
               </header>
               <div className="task-sheet-subhead">
                 <fieldset className="seg task-sheet-tabs" aria-label="Task sections">
-                  {tabs.map(([id, label, Icon]) => (
-                    <button
-                      type="button"
-                      key={id}
-                      className={tab === id ? "on" : ""}
-                      aria-pressed={tab === id}
-                      aria-label={compact ? label : undefined}
-                      title={compact ? label : undefined}
-                      onClick={() => setTab(id)}
-                    >
-                      {compact ? <Icon className="size-4" /> : label}
-                      {id === "quality" && findings.length > 0 ? (
-                        <b className="tab-badge" title="Things to fix">
-                          {findings.length}
-                        </b>
-                      ) : null}
-                      {counts[id] ? (
-                        <b className="tab-count" title="Items">
-                          {counts[id]}
-                        </b>
-                      ) : null}
-                      {id === "overview" && remainingSteps > 0 ? (
-                        <b className="tab-count" title="Steps not done">
-                          {remainingSteps}
-                        </b>
-                      ) : null}
-                      {id === "changes" && changeCount > 0 ? (
-                        <b className="tab-count" title="Files changed">
-                          {changeCount}
-                        </b>
-                      ) : null}
-                    </button>
-                  ))}
+                  {tabs
+                    .filter(([id]) => mainTabs.includes(id))
+                    .map(([id, label, Icon]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        className={tab === id ? "on" : ""}
+                        aria-pressed={tab === id}
+                        aria-label={compact ? label : undefined}
+                        title={compact ? label : undefined}
+                        onClick={() => setTab(id)}
+                      >
+                        {compact ? <Icon className="size-4" /> : label}
+                        {counts[id] ? (
+                          <b className="tab-count" title="Items">
+                            {counts[id]}
+                          </b>
+                        ) : null}
+                        {id === "overview" && remainingSteps > 0 ? (
+                          <b className="tab-count" title="Steps not done">
+                            {remainingSteps}
+                          </b>
+                        ) : null}
+                      </button>
+                    ))}
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        className={mainTabs.includes(tab) ? "" : "on"}
+                        aria-label="More sections"
+                        title="More sections"
+                      >
+                        {mainTabs.includes(tab) || compact
+                          ? null
+                          : tabs.find(([id]) => id === tab)?.[1]}
+                        <MoreHorizontal className="size-4" />
+                        {mainTabs.includes(tab) && moreBadge > 0 ? (
+                          <b className="tab-count">{moreBadge}</b>
+                        ) : null}
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="task-sheet-menu"
+                        align="start"
+                        sideOffset={6}
+                      >
+                        {tabs
+                          .filter(([id]) => !mainTabs.includes(id))
+                          .map(([id, label, Icon]) => {
+                            const badge =
+                              id === "quality"
+                                ? findings.length
+                                : id === "changes"
+                                  ? changeCount
+                                  : (counts[id] ?? 0);
+                            return (
+                              <DropdownMenu.Item
+                                key={id}
+                                className={tab === id ? "is-current" : ""}
+                                onSelect={() => setTab(id)}
+                              >
+                                <Icon className="size-4" /> {label}
+                                {badge > 0 ? <b className="tab-count">{badge}</b> : null}
+                              </DropdownMenu.Item>
+                            );
+                          })}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
                 </fieldset>
                 <div className="task-sheet-edit">
                   <DatePicker
@@ -611,33 +646,12 @@ export function TaskSheet() {
                   />
                 )}
                 {tab === "edit" && (
-                  <>
-                    <div className="task-edit-bar">
-                      <Button
-                        variant="outline"
-                        className="btn2"
-                        onClick={() => {
-                          setDraft(body);
-                          setTab("details");
-                        }}
-                      >
-                        <X className="size-4" /> Cancel
-                      </Button>
-                      <Button
-                        className="btn2 pr"
-                        disabled={saving || draft === body}
-                        onClick={() => void save()}
-                      >
-                        <Save className="size-4" /> {saving ? "Saving…" : "Save"}
-                      </Button>
-                    </div>
-                    <MarkdownEditor
-                      key={`${task.id}:${detail.contentHash}`}
-                      value={draft}
-                      onError={setNotice}
-                      onChange={setDraft}
-                    />
-                  </>
+                  <div className="task-edit-launch">
+                    <p className="sub">The editor opens in its own full-height sheet.</p>
+                    <Button className="btn2 pr" onClick={() => setEditorOpen(true)}>
+                      <Pencil className="size-4" /> Open editor
+                    </Button>
+                  </div>
                 )}
                 {tab === "docs" && (
                   <div className="task-docs">
@@ -741,6 +755,30 @@ export function TaskSheet() {
                 )}
               </div>
             </>
+          )}
+          {editorOpen && (
+            <DocumentEditorSheet
+              title={task.name}
+              path={task.path}
+              value={draft}
+              savedValue={body}
+              onChange={setDraft}
+              onSave={save}
+              onError={setNotice}
+              saving={saving}
+              onClose={() => {
+                setEditorOpen(false);
+                if (tab === "edit") setTab("details");
+              }}
+              preview={
+                <MarkdownBody
+                  body={draft}
+                  className="mdb"
+                  linkContext={linkContext}
+                  onNavigate={openHref}
+                />
+              }
+            />
           )}
         </Dialog.Content>
       </Dialog.Portal>

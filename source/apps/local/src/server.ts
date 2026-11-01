@@ -28,8 +28,10 @@ import {
   getTaskFileDiff,
   getWorkspaceOverview,
   type IndexChange,
+  listDocuments,
   listTaskComments,
   listTaskGroups,
+  listTasks,
   listTemplates,
   listTrash,
   migrateLegacyGroups,
@@ -79,8 +81,19 @@ type RuntimeState = {
   maintenance?: Promise<void>;
 };
 
-type TrustedProject = { path: string; addedAt: string };
-type TrustedProjectRegistry = { version: 1; projects: TrustedProject[] };
+type TrustedProject = {
+  path: string;
+  addedAt: string;
+  /** A display name; the folder name is used when it is not set. */
+  name?: string;
+  /** An emoji or short text shown as the project's icon. */
+  icon?: string;
+  /** A hue (0-359) for the project's icon background. */
+  color?: number;
+};
+/** Repositories that belong to one product, for example a backend and a frontend. */
+type ProjectGroup = { id: string; name: string; icon?: string; paths: string[] };
+type TrustedProjectRegistry = { version: 1; projects: TrustedProject[]; groups?: ProjectGroup[] };
 
 const runtimeState: RuntimeState = { capability: randomBytes(32).toString("hex") };
 const allowedOrigins = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
@@ -132,6 +145,14 @@ function trustedRegistryPath(): string {
 }
 
 async function readTrustedProjects(): Promise<TrustedProject[]> {
+  return (await readRegistry()).projects;
+}
+
+async function readProjectGroups(): Promise<ProjectGroup[]> {
+  return (await readRegistry()).groups;
+}
+
+async function readRegistry(): Promise<{ projects: TrustedProject[]; groups: ProjectGroup[] }> {
   try {
     const registryPath = trustedRegistryPath();
     const stat = await lstat(registryPath);
@@ -151,19 +172,24 @@ async function readTrustedProjects(): Promise<TrustedProject[]> {
       )
     )
       throw new Error("Trusted project registry has an unsupported format");
-    return parsed.projects;
+    return { projects: parsed.projects, groups: Array.isArray(parsed.groups) ? parsed.groups : [] };
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return { projects: [], groups: [] };
     throw error;
   }
 }
 
 async function writeTrustedProjects(projects: TrustedProject[]): Promise<void> {
+  await writeRegistry(projects, await readProjectGroups());
+}
+
+async function writeRegistry(projects: TrustedProject[], groups: ProjectGroup[]): Promise<void> {
   const path = trustedRegistryPath();
   const directory = resolve(path, "..");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify({ version: 1, projects }, null, 2)}\n`, {
+  await writeFile(temporary, `${JSON.stringify({ version: 1, projects, groups }, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600,
     flag: "wx",
@@ -190,6 +216,120 @@ async function trustProject(pathInput: string): Promise<TrustedProject> {
   const result = trusted ?? { path: projectRoot, addedAt: new Date().toISOString() };
   if (!trusted) await writeTrustedProjects([...projects, result]);
   return result;
+}
+
+async function describeProject(project: TrustedProject): Promise<object> {
+  return { ...project, active: project.path === runtimeState.workspace?.projectRoot };
+}
+
+async function updateProjectLook(pathInput: string, input: Record<string, unknown>): Promise<void> {
+  assertKeys(input, ["name", "icon", "color"]);
+  const projectRoot = resolve(pathInput);
+  const projects = await readTrustedProjects();
+  const project = projects.find((entry) => entry.path === projectRoot);
+  if (!project)
+    throw new WorkspaceError("workspace_not_found", "Project is not in the trusted registry");
+  const text = (key: string, max: number): string | undefined | null => {
+    const value = input[key];
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+    if (typeof value !== "string" || value.length > max)
+      throw new Error(`${key} must be text of at most ${max} characters`);
+    return value.trim();
+  };
+  const name = text("name", 60);
+  const icon = text("icon", 8);
+  const next: TrustedProject = { ...project };
+  if (name === null) delete next.name;
+  else if (name !== undefined) next.name = name;
+  if (icon === null) delete next.icon;
+  else if (icon !== undefined) next.icon = icon;
+  if (input.color !== undefined) {
+    if (input.color === null) delete next.color;
+    else if (typeof input.color === "number" && input.color >= 0 && input.color < 360)
+      next.color = Math.round(input.color);
+    else throw new Error("color must be a hue between 0 and 359");
+  }
+  await writeTrustedProjects(projects.map((entry) => (entry.path === projectRoot ? next : entry)));
+}
+
+async function saveProjectGroup(
+  id: string | undefined,
+  input: Record<string, unknown>,
+): Promise<ProjectGroup> {
+  assertKeys(input, ["name", "icon", "paths"]);
+  const projects = await readTrustedProjects();
+  const groups = await readProjectGroups();
+  const existing = id ? groups.find((group) => group.id === id) : undefined;
+  if (id && !existing) throw new WorkspaceError("workspace_not_found", "Project group not found");
+  const name = input.name === undefined ? existing?.name : stringField(input, "name").trim();
+  if (!name) throw new Error("name must be a non-empty string");
+  const paths =
+    input.paths === undefined
+      ? (existing?.paths ?? [])
+      : (stringArrayField(input, "paths") ?? []).map((path) => resolve(path));
+  const known = new Set(projects.map((project) => project.path));
+  if (paths.some((path) => !known.has(path)))
+    throw new WorkspaceError("invalid_input", "Every linked project must be trusted first");
+  const icon = optionalString(input, "icon") ?? existing?.icon;
+  const group: ProjectGroup = {
+    id: existing?.id ?? randomUUID().slice(0, 8),
+    name,
+    paths: [...new Set(paths)],
+    ...(icon ? { icon } : {}),
+  };
+  await writeRegistry(
+    projects,
+    existing ? groups.map((entry) => (entry.id === group.id ? group : entry)) : [...groups, group],
+  );
+  return group;
+}
+
+/** Counts and open tasks for every repository in a group, read from each one's own workspace. */
+async function summarizeProjectGroup(group: ProjectGroup): Promise<object> {
+  const projects = await readTrustedProjects();
+  const today = new Date().toISOString().slice(0, 10);
+  const members = await Promise.all(
+    group.paths.map(async (path) => {
+      const project = projects.find((entry) => entry.path === path);
+      try {
+        const selected = await resolveWorkspace({ cwd: path });
+        const index = await buildWorkspaceIndex({ root: selected.root });
+        const tasks = listTasks(index, { archived: false });
+        const open = tasks.filter((task) => task.metadata.status !== "completed");
+        return {
+          path,
+          name: project?.name ?? basename(path),
+          icon: project?.icon,
+          color: project?.color,
+          active: path === runtimeState.workspace?.projectRoot,
+          counts: {
+            planned: tasks.filter((task) => task.metadata.status === "planned").length,
+            inProgress: tasks.filter((task) => task.metadata.status === "in-progress").length,
+            blocked: tasks.filter((task) => task.metadata.status === "blocked").length,
+            completed: tasks.length - open.length,
+            overdue: open.filter((task) => task.metadata.due_at && task.metadata.due_at < today)
+              .length,
+            documents: listDocuments(index).length,
+          },
+          tasks: open.slice(0, 30).map((task) => ({
+            id: task.metadata.id,
+            name: task.metadata.name,
+            status: task.metadata.status,
+            priority: task.metadata.priority,
+            due_at: task.metadata.due_at,
+          })),
+        };
+      } catch (error) {
+        return {
+          path,
+          name: project?.name ?? basename(path),
+          error: error instanceof Error ? error.message : "Could not read this project",
+        };
+      }
+    }),
+  );
+  return { ...group, members };
 }
 
 async function selectTrustedProject(pathInput: string): Promise<void> {
@@ -440,10 +580,50 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
           response,
           200,
           {
-            projects: projects.map((project) => ({
-              ...project,
-              active: project.path === runtimeState.workspace?.projectRoot,
-            })),
+            projects: await Promise.all(projects.map(describeProject)),
+            groups: await readProjectGroups(),
+            requestId,
+          },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/projects/groups" && method === "POST") {
+        const group = await saveProjectGroup(undefined, await readJson(request));
+        send(response, 201, { group, requestId }, requestId);
+        return;
+      }
+      if (path.startsWith("/projects/groups/")) {
+        const [groupId, action] = path.slice("/projects/groups/".length).split("/");
+        const groups = await readProjectGroups();
+        const group = groups.find((entry) => entry.id === groupId);
+        if (!group) throw new WorkspaceError("workspace_not_found", "Project group not found");
+        if (action === "summary" && method === "GET") {
+          send(response, 200, { group: await summarizeProjectGroup(group), requestId }, requestId);
+          return;
+        }
+        if (!action && method === "PATCH") {
+          const updated = await saveProjectGroup(group.id, await readJson(request));
+          send(response, 200, { group: updated, requestId }, requestId);
+          return;
+        }
+        if (!action && method === "DELETE") {
+          await writeRegistry(
+            await readTrustedProjects(),
+            groups.filter((entry) => entry.id !== group.id),
+          );
+          send(response, 200, { groups: await readProjectGroups(), requestId }, requestId);
+          return;
+        }
+      }
+      if (path.startsWith("/projects/trusted/") && method === "PATCH") {
+        const projectRoot = decodeURIComponent(path.slice("/projects/trusted/".length));
+        await updateProjectLook(projectRoot, await readJson(request));
+        send(
+          response,
+          200,
+          {
+            projects: await Promise.all((await readTrustedProjects()).map(describeProject)),
             requestId,
           },
           requestId,
@@ -466,8 +646,22 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         if (!projects.some((project) => project.path === projectRoot)) {
           throw new WorkspaceError("workspace_not_found", "Project is not in the trusted registry");
         }
-        await writeTrustedProjects(projects.filter((project) => project.path !== projectRoot));
-        send(response, 200, { projects: await readTrustedProjects(), requestId }, requestId);
+        await writeRegistry(
+          projects.filter((project) => project.path !== projectRoot),
+          (await readProjectGroups()).map((group) => ({
+            ...group,
+            paths: group.paths.filter((path) => path !== projectRoot),
+          })),
+        );
+        send(
+          response,
+          200,
+          {
+            projects: await Promise.all((await readTrustedProjects()).map(describeProject)),
+            requestId,
+          },
+          requestId,
+        );
         return;
       }
       if (path === "/projects/select" && method === "POST") {

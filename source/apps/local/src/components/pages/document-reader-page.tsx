@@ -2,13 +2,13 @@
 
 import { Button } from "@task/ui";
 import { resolveLink } from "@task/workspace/links/resolve";
-import { ArrowLeft, RotateCcw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { DocumentEditorSheet } from "@/components/document-editor-sheet";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
-import { MarkdownEditor } from "@/components/markdown-editor";
 import { detailRows } from "@/lib/document-details";
 import { restartSectionEntrance } from "@/lib/entrance";
 import { buildLinkContext, internalHref } from "@/lib/link-context";
@@ -45,12 +45,12 @@ export function DocumentReaderPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
-  const [mode, setMode] = useState<"read" | "edit" | "split">("read");
+  const [editorOpen, setEditorOpen] = useState(false);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the entrance when the document view changes.
   useEffect(() => {
     restartSectionEntrance(document.querySelector<HTMLElement>(".body"));
-  }, [mode]);
+  }, [editorOpen]);
   useEffect(() => {
     let active = true;
     setLinkedIds([]);
@@ -77,7 +77,6 @@ export function DocumentReaderPage() {
   const bodyText = detail?.body ?? "";
   // biome-ignore lint/correctness/useExhaustiveDependencies: Follow the reading position of the open document.
   useEffect(() => {
-    if (mode !== "read") return;
     const root = document.querySelector<HTMLElement>(".body");
     const ids = headingEntries(bodyText)
       .filter((heading) => heading.level > 1 && heading.level < 4)
@@ -95,7 +94,7 @@ export function DocumentReaderPage() {
     update();
     root.addEventListener("scroll", update, { passive: true });
     return () => root.removeEventListener("scroll", update);
-  }, [bodyText, mode, activeSelected?.id]);
+  }, [bodyText, activeSelected?.id]);
   function goToHeading(id: string) {
     const element = document.getElementById(id);
     if (!element) return;
@@ -118,7 +117,10 @@ export function DocumentReaderPage() {
   async function save() {
     setSaving(true);
     try {
-      if (await saveBody(draft)) setEditing(false);
+      if (await saveBody(draft)) {
+        setEditing(false);
+        setEditorOpen(false);
+      }
     } finally {
       setSaving(false);
     }
@@ -142,10 +144,61 @@ export function DocumentReaderPage() {
     .filter((record): record is NonNullable<typeof record> =>
       Boolean(record && record.id !== documentId),
     );
-  function changeMode(nextMode: "read" | "edit" | "split") {
-    setMode(nextMode);
-    setEditing(nextMode !== "read" || dirty);
+  function openEditor() {
+    setEditing(true);
+    setEditorOpen(true);
   }
+  function closeEditor() {
+    setEditorOpen(false);
+    setEditing(false);
+  }
+  const conflictBanner = documentConflict && (
+    <section className="document-conflict" role="alert">
+      <div>
+        <strong>This document changed on disk while you were editing.</strong>
+        <p>
+          Reload the new version, keep your draft against the latest file, or compare both versions.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            resolveDocumentConflict("reload");
+            setShowDiff(false);
+          }}
+        >
+          Reload
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            resolveDocumentConflict("keep");
+            setShowDiff(false);
+          }}
+        >
+          Keep mine
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setShowDiff((value) => !value)}>
+          {showDiff ? "Hide diff" : "View diff"}
+        </Button>
+      </div>
+      {showDiff && (
+        <div className="document-diff">
+          <section>
+            <b>Your draft</b>
+            <pre>{draft}</pre>
+          </section>
+          <section>
+            <b>File on disk</b>
+            <pre>{documentConflict.body}</pre>
+          </section>
+        </div>
+      )}
+    </section>
+  );
   return (
     <article className="doc-reader-match">
       <header className="dh2">
@@ -173,86 +226,12 @@ export function DocumentReaderPage() {
           >
             <Trash2 className="size-4" /> Delete
           </Button>
-          {mode !== "read" && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!dirty}
-                onClick={() => {
-                  setDraft(detail.body);
-                  setEditing(false);
-                }}
-              >
-                <RotateCcw className="size-4" /> Revert
-              </Button>
-              <Button size="sm" disabled={saving || !dirty} onClick={() => void save()}>
-                <Save className="size-4" /> {saving ? "Saving…" : "Save"}
-              </Button>
-            </>
-          )}
-          <fieldset className="seg" aria-label="Document view">
-            {(["read", "edit", "split"] as const).map((view) => (
-              <button
-                type="button"
-                key={view}
-                className={mode === view ? "on" : ""}
-                onClick={() => changeMode(view)}
-              >
-                {view === "read" ? "Read" : view === "edit" ? "Edit" : "Split"}
-              </button>
-            ))}
-          </fieldset>
+          <Button size="sm" onClick={openEditor}>
+            <Pencil className="size-4" /> Edit
+          </Button>
         </div>
       </header>
-      {documentConflict && (
-        <section className="document-conflict" role="alert">
-          <div>
-            <strong>This document changed on disk while you were editing.</strong>
-            <p>
-              Reload the new version, keep your draft against the latest file, or compare both
-              versions.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                resolveDocumentConflict("reload");
-                setShowDiff(false);
-              }}
-            >
-              Reload
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                resolveDocumentConflict("keep");
-                setShowDiff(false);
-              }}
-            >
-              Keep mine
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowDiff((value) => !value)}>
-              {showDiff ? "Hide diff" : "View diff"}
-            </Button>
-          </div>
-          {showDiff && (
-            <div className="document-diff">
-              <section>
-                <b>Your draft</b>
-                <pre>{draft}</pre>
-              </section>
-              <section>
-                <b>File on disk</b>
-                <pre>{documentConflict.body}</pre>
-              </section>
-            </div>
-          )}
-        </section>
-      )}
+      {!editorOpen && conflictBanner}
       <h1 className="document-title">{activeSelected.name}</h1>
       <div className="document-meta dh2">
         <span className="pill">{activeSelected.type}</span>
@@ -266,19 +245,8 @@ export function DocumentReaderPage() {
           words · {Math.max(1, Math.round(wordCount(draft) / 200))} min read
         </small>
       </div>
-      <div className={`edwrap ${mode === "split" ? "split" : ""}`}>
-        {mode !== "read" && (
-          <MarkdownEditor
-            key={`${activeSelected.id}:${detail.contentHash}`}
-            value={draft}
-            onError={setNotice}
-            onChange={(body) => {
-              setDraft(body);
-              setEditing(body !== detail.body);
-            }}
-          />
-        )}
-        {mode === "read" ? (
+      <div className="edwrap">
+        {
           <div className="dwrap">
             <div className="document-content">
               <MarkdownBody
@@ -383,33 +351,37 @@ export function DocumentReaderPage() {
               </dl>
             </aside>
           </div>
-        ) : (
-          <>
-            {mode === "split" && (
-              <div className="document-preview mdb">
-                <MarkdownBody
-                  body={draft}
-                  className="mdb"
-                  headingAnchors
-                  linkContext={linkContext}
-                  onNavigate={(href) => router.push(href)}
-                  knownWikiLinks={records.map((record) => record.id)}
-                  onWikiLink={(id) => {
-                    const record = records.find((item) => item.id === id);
-                    if (record) openRecord(record);
-                    else setNotice(`No file named ${id}`);
-                  }}
-                />
-              </div>
-            )}
-            {mode === "edit" && headings.length > 0 && (
-              <div className="sr-only" aria-live="polite">
-                {headings.length} document sections
-              </div>
-            )}
-          </>
-        )}
+        }
       </div>
+      {editorOpen && (
+        <DocumentEditorSheet
+          title={activeSelected.name}
+          path={activeSelected.path}
+          value={draft}
+          savedValue={detail.body}
+          onChange={setDraft}
+          onSave={save}
+          onError={setNotice}
+          saving={saving}
+          banner={conflictBanner}
+          onClose={closeEditor}
+          preview={
+            <MarkdownBody
+              body={draft}
+              className="mdb"
+              headingAnchors
+              linkContext={linkContext}
+              onNavigate={(href) => router.push(href)}
+              knownWikiLinks={records.map((record) => record.id)}
+              onWikiLink={(id) => {
+                const record = records.find((item) => item.id === id);
+                if (record) openRecord(record);
+                else setNotice(`No file named ${id}`);
+              }}
+            />
+          }
+        />
+      )}
     </article>
   );
 }

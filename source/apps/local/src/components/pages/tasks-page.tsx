@@ -121,17 +121,6 @@ export function TasksPageContent() {
             <h1>Tasks</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={`btn2 ${selecting ? "on" : ""}`}
-              aria-pressed={selecting}
-              onClick={() => {
-                setSelecting(!selecting);
-                setPicked([]);
-              }}
-            >
-              {selecting ? "Cancel selection" : "Select"}
-            </button>
             <fieldset className="seg" aria-label="Task view">
               {(["Board", "List"] as const).map((view) => (
                 <button
@@ -159,6 +148,11 @@ export function TasksPageContent() {
           onGroup={setGroupFilter}
           archived={taskFilter === "archived"}
           onArchived={(archived) => setTaskFilter(archived ? "archived" : null)}
+          selecting={selecting}
+          onSelecting={(next) => {
+            setSelecting(next);
+            setPicked([]);
+          }}
           matching={displayed.length}
         />
         {selecting && (

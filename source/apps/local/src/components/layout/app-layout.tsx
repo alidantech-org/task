@@ -7,10 +7,8 @@ import { Command as CommandMenu } from "cmdk";
 import {
   AlertTriangle,
   Calendar,
-  Check,
   type CircleDot,
   File,
-  Folder,
   Folder as FolderIcon,
   LayoutGrid,
   ListChecks,
@@ -36,6 +34,7 @@ import {
 } from "react";
 import { useDialogs } from "@/components/dialogs";
 import { GlobalNavigation } from "@/components/layout/global-navigation";
+import { ProjectList, type SwitcherProject } from "@/components/layout/project-switcher";
 import { ShellFrame } from "@/components/layout/shell-frame";
 import { CustomSelect } from "@/components/ui/select";
 import { dateKey } from "@/lib/calendar";
@@ -139,7 +138,7 @@ type Workspace = {
   documents: RecordItem[];
   diagnostics: Array<{ path: string; message: string; category?: string }>;
 };
-type TrustedProject = { path: string; addedAt: string; active?: boolean };
+type TrustedProject = SwitcherProject;
 type SearchResult = {
   path: string;
   id: string;
@@ -157,6 +156,7 @@ type AppProps = {
   children?: ReactNode;
 };
 type WorkspaceAppContextValue = {
+  switchProject(path: string): Promise<void>;
   workspace: Workspace | null;
   records: RecordItem[];
   tasks: RecordItem[];
@@ -1668,6 +1668,7 @@ export function App({
           createSubtask,
           setChecklist,
           saveBody: persistDocumentBody,
+          switchProject,
           setNotice,
           refresh,
           validate,
@@ -1697,6 +1698,8 @@ export function App({
             projectPathInput={projectPathInput}
             setProjectPathInput={setProjectPathInput}
             trustedProjects={trustedProjects}
+            setTrustedProjects={setTrustedProjects}
+            setNotice={setNotice}
             trustProjectPath={trustProjectPath}
             switchProject={switchProject}
             removeProjectTrust={removeProjectTrust}
@@ -1862,68 +1865,15 @@ export function App({
                     <X className="size-4" />
                   </Button>
                 </div>
-                {trustedProjects.map((project) => (
-                  <button
-                    key={project.path}
-                    type="button"
-                    disabled={project.active}
-                    onClick={() => void switchProject(project.path)}
-                    className="flex w-full items-center gap-3 border-b border-border/60 py-3 text-left disabled:opacity-70"
-                  >
-                    <Folder className="size-4" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{project.path}</span>
-                    {project.active && <Check className="size-4 text-primary" />}
-                  </button>
-                ))}
-                {workspace &&
-                  !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
-                    <Button
-                      className="mt-3 w-full"
-                      variant="outline"
-                      onClick={() => void trustProjectPath(workspace.projectRoot)}
-                    >
-                      Trust current project
-                    </Button>
-                  )}
-                <form
-                  className="mt-4 space-y-2 border-y border-border/60 py-3"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
-                  }}
-                >
-                  <label
-                    htmlFor="mobile-trusted-project-path"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Add a project folder
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="mobile-trusted-project-path"
-                      value={projectPathInput}
-                      onChange={(event) => setProjectPathInput(event.target.value)}
-                      placeholder="/path/to/project"
-                      className="h-9 min-w-0 text-xs"
-                    />
-                    <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
-                      Trust
-                    </Button>
-                  </div>
-                </form>
-                {trustedProjects
-                  .filter((project) => !project.active)
-                  .map((project) => (
-                    <Button
-                      key={`remove:${project.path}`}
-                      className="mt-2 w-full justify-start"
-                      variant="ghost"
-                      onClick={() => void removeProjectTrust(project.path)}
-                    >
-                      <X className="size-4" />
-                      Remove trust · {project.path}
-                    </Button>
-                  ))}
+                <ProjectList
+                  projects={trustedProjects}
+                  onProjects={setTrustedProjects}
+                  switchProject={switchProject}
+                  removeProjectTrust={removeProjectTrust}
+                  trustProjectPath={trustProjectPath}
+                  onNotice={setNotice}
+                  onNavigate={() => setMobileProjectOpen(false)}
+                />
               </section>
             </div>
           )}
