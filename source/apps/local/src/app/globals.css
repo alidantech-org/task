@@ -2578,3 +2578,38 @@ button.more:hover {
 .md-source .cm-editor { height: 100%; }
 .md-source { padding: 0; }
 .md-split { overflow: hidden; }
+
+/* Document header and richer Markdown display. */
+.doc-head { align-items: center; gap: 12px; }
+.doc-where { display: grid; min-width: 0; gap: 2px; }
+.doc-where code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font: 12px ui-monospace, Menlo, monospace; }
+.doc-where small { color: var(--mut); font-size: 11.5px; }
+.doc-icon-btn { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border: 1px solid var(--ln); border-radius: 10px; background: var(--soft); color: var(--ink); cursor: pointer; }
+.doc-icon-btn:hover { border-color: var(--acc); color: var(--acc); }
+.task-sheet-menu [role="menuitem"].danger { color: var(--bl); }
+.doc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--ln); }
+.doc-tags .dchip { height: 24px; padding: 0 10px; font-size: 12px; }
+
+.mdb.task-markdown :not(pre) > code.md-code,
+.mdb.task-markdown :not(pre) > code {
+  border: 0;
+  border-radius: 6px;
+  padding: 0.12em 0.45em;
+  background: color-mix(in oklch, oklch(0.7 0.14 40) 14%, transparent);
+  color: oklch(0.55 0.15 40);
+  font: 500 0.86em ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html[data-theme="dark"] .mdb.task-markdown :not(pre) > code { color: oklch(0.8 0.12 60); }
+.mdb.task-markdown a code { color: inherit; }
+.mdb .code-block { margin: 1em 0; overflow: hidden; border: 1px solid var(--ln); border-radius: 12px; background: var(--soft); }
+.mdb .code-block figcaption { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid var(--ln); color: var(--mut); font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: 0.04em; text-transform: uppercase; }
+.mdb .code-block figcaption button { border: 0; background: transparent; color: var(--mut); font: inherit; cursor: pointer; text-transform: none; }
+.mdb .code-block figcaption button:hover { color: var(--acc); }
+.mdb .code-block .code-viewer { border: 0; border-radius: 0; margin: 0; }
+.doc-reader-match .mdb.task-markdown pre { background: transparent; }
+.doc-reader-match .mdb.task-markdown tbody tr:nth-child(even) { background: color-mix(in srgb, var(--soft) 55%, transparent); }
+.doc-reader-match .mdb.task-markdown h2:hover, .doc-reader-match .mdb.task-markdown h3:hover { scroll-margin-top: 12px; }
+.doc-reader-match .mdb.task-markdown li::marker { color: var(--acc); }
+.doc-reader-match .mdb.task-markdown img { max-width: 100%; border-radius: 10px; }
+.doc-reader-match .mdb.task-markdown a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.doc-reader-match .mdb.task-markdown strong { font-weight: 650; }

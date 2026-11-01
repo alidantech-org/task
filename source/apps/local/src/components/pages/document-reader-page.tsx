@@ -2,9 +2,10 @@
 
 import { Button } from "@task/ui";
 import { resolveLink } from "@task/workspace/links/resolve";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { DropdownMenu } from "radix-ui";
 import { useEffect, useState } from "react";
 import { DocumentEditorSheet } from "@/components/document-editor-sheet";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
@@ -15,6 +16,12 @@ import { buildLinkContext, internalHref } from "@/lib/link-context";
 import { extractLinks, headingEntries, toggleMarkdownCheckbox } from "@/lib/markdown";
 
 type LinkedSearchResult = { id: string };
+
+function tagHue(tag: string): number {
+  let hash = 0;
+  for (const char of tag) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  return hash;
+}
 
 function wordCount(body: string): number {
   return (body.match(/\S+/g) ?? []).length;
@@ -122,7 +129,6 @@ export function DocumentReaderPage() {
     const next = toggleMarkdownCheckbox(current.body, index, checked);
     if (next !== current.body) await saveBody(next);
   }
-  const dirty = draft !== detail.body;
   const headings = headingEntries(detail.body).filter(
     (heading) => heading.level > 1 && heading.level < 4,
   );
@@ -192,50 +198,55 @@ export function DocumentReaderPage() {
   );
   return (
     <article className="doc-reader-match">
-      <header className="dh2">
+      <header className="dh2 doc-head">
         <Button asChild variant="ghost" size="sm" className="btn2">
           <Link href="/documents">
             <ArrowLeft className="size-4" />
             Documents
           </Link>
         </Button>
-        <small className="sub min-w-0 truncate">{activeSelected.path}</small>
-        <span className="gap" />
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {dirty && <span className="pill document-dirty">Unsaved</span>}
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="Delete document"
-            onClick={() =>
-              void deleteRecord({ id: documentId, name: activeSelected.name }, "document").then(
-                (deleted) => {
-                  if (deleted) router.push("/documents");
-                },
-              )
-            }
-          >
-            <Trash2 className="size-4" /> Delete
-          </Button>
-          <Button size="sm" onClick={openEditor}>
-            <Pencil className="size-4" /> Edit
-          </Button>
+        <div className="doc-where">
+          <code title={activeSelected.path}>{activeSelected.path}</code>
+          <small>
+            {activeSelected.type} · Updated {formattedDate(activeSelected.modifiedAt)} ·{" "}
+            {Math.max(1, Math.round(wordCount(detail.body) / 200))} min read
+          </small>
         </div>
+        <span className="gap" />
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button type="button" className="doc-icon-btn" aria-label="More actions">
+              <MoreHorizontal className="size-4" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="task-sheet-menu" align="end" sideOffset={6}>
+              <DropdownMenu.Item
+                className="danger"
+                onSelect={() =>
+                  void deleteRecord({ id: documentId, name: activeSelected.name }, "document").then(
+                    (deleted) => {
+                      if (deleted) router.push("/documents");
+                    },
+                  )
+                }
+              >
+                <Trash2 className="size-4" /> Delete document
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+        <button
+          type="button"
+          className="doc-icon-btn"
+          aria-label="Edit document"
+          title="Edit document"
+          onClick={openEditor}
+        >
+          <SquarePen className="size-4" />
+        </button>
       </header>
       {!editorOpen && conflictBanner}
-      <h1 className="document-title">{activeSelected.name}</h1>
-      <div className="document-meta dh2">
-        <span className="pill">{activeSelected.type}</span>
-        {activeSelected.tags.map((tag) => (
-          <span className="tag" key={tag}>
-            #{tag}
-          </span>
-        ))}
-        <small className="sub">
-          Updated {formattedDate(activeSelected.modifiedAt)} · {wordCount(draft)}
-          words · {Math.max(1, Math.round(wordCount(draft) / 200))} min read
-        </small>
-      </div>
       <div className="edwrap">
         {
           <div className="dwrap">
@@ -255,6 +266,19 @@ export function DocumentReaderPage() {
                 onToggleTask={(index, checked) => void toggle(index, checked)}
                 taskUpdatesDisabled={editorOpen}
               />
+              {activeSelected.tags.length > 0 && (
+                <footer className="doc-tags">
+                  {activeSelected.tags.map((tag) => (
+                    <span
+                      className="dchip tag"
+                      key={tag}
+                      style={{ "--h": tagHue(tag) } as React.CSSProperties}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </footer>
+              )}
             </div>
             <aside className="toc">
               {headings.length > 0 && <h4>On this page</h4>}

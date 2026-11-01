@@ -1,7 +1,7 @@
 "use client";
 
 import { type LinkContext, resolveLink } from "@task/workspace/links/resolve";
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, type ReactNode, useState } from "react";
 import ReactMarkdown, { type Components, defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeViewer } from "@/components/code-viewer";
@@ -28,6 +28,27 @@ function headingText(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(headingText).join("");
   if (isValidElement<{ children?: ReactNode }>(node)) return headingText(node.props.children);
   return "";
+}
+
+function CopyCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="Copy code"
+      onClick={() => {
+        void navigator.clipboard
+          .writeText(code)
+          .then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => undefined);
+      }}
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
 }
 
 export function MarkdownBody({
@@ -128,16 +149,24 @@ export function MarkdownBody({
         </a>
       );
     },
+    code: ({ className, children, node: _node, ...props }) => (
+      <code className={["md-code", className].filter(Boolean).join(" ")} {...props}>
+        {children}
+      </code>
+    ),
     pre: ({ children, node: _node, ...props }) => {
       const child = Children.toArray(children)[0];
       if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
         const language = /language-([\w+-]+)/.exec(child.props.className ?? "")?.[1] ?? "text";
+        const code = headingText(child.props.children).replace(/\n$/, "");
         return (
-          <CodeViewer
-            code={headingText(child.props.children).replace(/\n$/, "")}
-            language={language}
-            compact
-          />
+          <figure className="code-block">
+            <figcaption>
+              <span>{language === "text" ? "plain text" : language}</span>
+              <CopyCode code={code} />
+            </figcaption>
+            <CodeViewer code={code} language={language} compact />
+          </figure>
         );
       }
       return <pre {...props}>{children}</pre>;
