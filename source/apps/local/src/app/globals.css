@@ -1681,3 +1681,36 @@ html[data-theme="dark"] .code-token,
   background: var(--pn);
   color: var(--acc);
 }
+
+/* Drag and drop: lifted preview, dashed placeholder, target highlight */
+.card-preview {
+  width: 100%;
+  cursor: grabbing;
+  transform: scale(1.03) rotate(1.5deg);
+  box-shadow: 0 18px 38px -12px rgb(0 0 0 / 0.45);
+  border: 1px solid var(--acc);
+  pointer-events: none;
+}
+.card-shell.is-dragging .card {
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+  outline: 2px dashed var(--acc);
+  outline-offset: -2px;
+}
+.card-shell.is-target .card {
+  box-shadow: 0 0 0 2px var(--acc);
+}
+.col.over {
+  background: var(--accs);
+}
+.card-shell {
+  transition: transform 0.18s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-shell,
+  .card-preview {
+    transition: none;
+    transform: none;
+  }
+}

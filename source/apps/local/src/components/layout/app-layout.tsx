@@ -1,6 +1,7 @@
 "use client";
 
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortable } from "@dnd-kit/react/sortable";
 import { Button, Input } from "@task/ui";
 import { Command as CommandMenu } from "cmdk";
 import {
@@ -185,6 +186,12 @@ type WorkspaceAppContextValue = {
     kind: "task" | "document" | "task-group",
   ): Promise<boolean>;
   undoDelete(): Promise<void>;
+  /** Applies a board drop: optionally a new status, then a position next to a neighbour. */
+  moveOnBoard(
+    task: RecordItem,
+    status: string | undefined,
+    plan: { before: string } | { after: string } | null,
+  ): Promise<void>;
   setChecklist(
     task: RecordItem,
     selector: { items?: readonly number[]; section?: string; all?: boolean },
@@ -1021,6 +1028,36 @@ export function App({
       return false;
     }
   }
+  async function moveOnBoard(
+    task: RecordItem,
+    status: string | undefined,
+    plan: { before: string } | { after: string } | null,
+  ): Promise<void> {
+    try {
+      if (status) {
+        const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status, expectedHash: task.contentHash }),
+        });
+        await acceptWorkspaceResponse(response);
+      }
+      if (plan) {
+        const response = await fetch(
+          `/api/runtime/workspace/task/${encodeURIComponent(task.id)}/reorder`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(plan),
+          },
+        );
+        await acceptWorkspaceResponse(response);
+      }
+      setNotice(status ? `Moved to ${statusNames[status] ?? status}` : "Order saved");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not move the task");
+    }
+  }
   async function setChecklist(
     task: RecordItem,
     selector: { items?: readonly number[]; section?: string; all?: boolean },
@@ -1379,6 +1416,7 @@ export function App({
     const source = operation.source;
     const target = operation.target;
     const taskId = source?.data.taskId;
+    if (source && isSortable(source)) return;
     const targetDate =
       typeof target?.data.date === "string"
         ? target.data.date
@@ -1529,6 +1567,7 @@ export function App({
           setTaskArchived,
           deleteRecord,
           undoDelete,
+          moveOnBoard,
           setChecklist,
           saveBody: persistDocumentBody,
           setNotice,

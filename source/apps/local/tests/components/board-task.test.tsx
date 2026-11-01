@@ -17,7 +17,7 @@ const task = {
 function render(overrides = {}) {
   return renderToStaticMarkup(
     <DragDropProvider>
-      <BoardTask task={{ ...task, ...overrides }} onSelect={() => undefined} />
+      <BoardTask task={{ ...task, ...overrides }} index={0} onSelect={() => undefined} />
     </DragDropProvider>,
   );
 }

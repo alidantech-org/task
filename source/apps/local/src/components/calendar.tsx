@@ -255,7 +255,13 @@ export function CalendarView({
 }
 
 export function StatusDropZone({ status, children }: { status: string; children: ReactNode }) {
-  const { ref, isDropTarget } = useDroppable({ id: `status:${status}`, data: { status } });
+  const { ref, isDropTarget } = useDroppable({
+    id: `status:${status}`,
+    type: "column",
+    accept: "task",
+    collisionPriority: 1,
+    data: { status },
+  });
   return (
     <fieldset
       ref={ref}
