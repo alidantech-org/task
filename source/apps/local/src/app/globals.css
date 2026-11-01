@@ -2613,3 +2613,6 @@ html[data-theme="dark"] .mdb.task-markdown :not(pre) > code { color: oklch(0.8 0
 .doc-reader-match .mdb.task-markdown img { max-width: 100%; border-radius: 10px; }
 .doc-reader-match .mdb.task-markdown a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .doc-reader-match .mdb.task-markdown strong { font-weight: 650; }
+.doc-where { display: flex; align-items: center; gap: 12px; flex: 0 1 auto; }
+.doc-where code { flex: 0 1 auto; min-width: 0; padding: 2px 8px; border-radius: 6px; background: var(--soft); font-size: 12px; }
+.doc-where small { flex: none; white-space: nowrap; }
