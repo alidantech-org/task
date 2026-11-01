@@ -41,7 +41,7 @@ import { CustomSelect } from "@/components/ui/select";
 import { dateKey } from "@/lib/calendar";
 import { taskDropUpdate } from "@/lib/drop-mutation";
 import { restartSectionEntrance } from "@/lib/entrance";
-import { groupLabel } from "@/lib/group";
+import { groupForTask, groupLabel } from "@/lib/group";
 import {
   clampSidebarWidth,
   isArchivedTask,
@@ -72,6 +72,16 @@ export type RecordItem = {
   depends_on?: string[];
   groupName?: string;
   estimate?: number;
+  links?: { type: string; task: string }[];
+  recurrence?: { every: string; interval: number; until?: string };
+  attachments?: {
+    kind: "file" | "link";
+    name: string;
+    url?: string;
+    size?: number;
+    added_at: string;
+    added_by?: string;
+  }[];
   order?: number;
   parent?: string;
   watchers?: string[];
@@ -191,6 +201,10 @@ type WorkspaceAppContextValue = {
     kind: "task" | "document" | "task-group",
   ): Promise<boolean>;
   undoDelete(): Promise<void>;
+  /** Saves any task fields (assignee, tags, estimate, parent, links, group, …) with the stale-edit check. */
+  updateTaskFields(task: RecordItem, patch: Record<string, unknown>): Promise<boolean>;
+  /** Adds a subtask in the same group as its parent. */
+  createSubtask(parent: RecordItem, title: string): Promise<boolean>;
   /** Applies a board drop: optionally a new status, then a position next to a neighbour. */
   moveOnBoard(
     task: RecordItem,
@@ -1033,6 +1047,40 @@ export function App({
       return false;
     }
   }
+  async function updateTaskFields(
+    task: RecordItem,
+    patch: Record<string, unknown>,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...patch, expectedHash: task.contentHash }),
+      });
+      await acceptWorkspaceResponse(response);
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not save the change");
+      return false;
+    }
+  }
+  async function createSubtask(parent: RecordItem, title: string): Promise<boolean> {
+    try {
+      const group = groupForTask(parent, workspace?.groups ?? []);
+      if (!group) throw new Error("This task is not in a group");
+      const response = await fetch("/api/runtime/workspace/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, group: group.id, parent: parent.id }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice("Subtask added");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not add the subtask");
+      return false;
+    }
+  }
   async function moveOnBoard(
     task: RecordItem,
     status: string | undefined,
@@ -1573,6 +1621,8 @@ export function App({
           deleteRecord,
           undoDelete,
           moveOnBoard,
+          updateTaskFields,
+          createSubtask,
           setChecklist,
           saveBody: persistDocumentBody,
           setNotice,

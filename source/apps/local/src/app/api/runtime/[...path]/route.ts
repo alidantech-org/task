@@ -63,7 +63,10 @@ async function forward(
   const responseHeaders = new Headers({
     "content-type": response.headers.get("content-type") ?? "application/json",
     "cache-control": response.headers.get("cache-control") ?? "no-store",
+    "x-content-type-options": "nosniff",
   });
+  const disposition = response.headers.get("content-disposition");
+  if (disposition) responseHeaders.set("content-disposition", disposition);
   const isEventStream = response.headers.get("content-type")?.startsWith("text/event-stream");
   if (isEventStream) {
     responseHeaders.set("connection", "keep-alive");

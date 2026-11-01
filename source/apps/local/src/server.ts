@@ -1062,6 +1062,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
           "watchers",
           "recurrence",
           "group",
+          "dependsOn",
           "expectedHash",
         ]);
         for (const key of ["order", "estimate"] as const)
@@ -1120,6 +1121,9 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
               ? { hiddenFromRecent: input.hiddenFromRecent }
               : {}),
             ...(input.track === true ? { track: true } : {}),
+            ...(stringArrayField(input, "dependsOn")
+              ? { dependsOn: stringArrayField(input, "dependsOn") }
+              : {}),
             ...(input.order !== undefined ? { order: input.order as number | null } : {}),
             ...(input.estimate !== undefined ? { estimate: input.estimate as number | null } : {}),
             ...(input.parent !== undefined ? { parent: input.parent as string | null } : {}),
