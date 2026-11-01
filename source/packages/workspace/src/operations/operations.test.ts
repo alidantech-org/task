@@ -248,8 +248,11 @@ describe("task operations", () => {
     const migratedTask = [...index.documents.values()].find(
       (document) => document.metadata.id === task.metadata.id,
     );
-    expect(migratedTask?.metadata.id).toBe(task.metadata.id);
-    expect(await readWorkspaceDocument(context, migratedTask!.path)).toBe(originalBody);
+    if (!migratedTask) {
+      throw new Error(`Migrated task ${task.metadata.id} was not found`);
+    }
+    expect(migratedTask.metadata.id).toBe(task.metadata.id);
+    expect(await readWorkspaceDocument(context, migratedTask.path)).toBe(originalBody);
   });
 
   test("creates numbered tasks with defaults, filters and body preserving updates", async () => {
