@@ -19,6 +19,20 @@ export type TrackingSegment = {
   summary?: TrackingSummary;
 };
 export type TaskTracking = { segments: readonly TrackingSegment[] };
+export type TaskLinkType = "blocks" | "relates" | "duplicates";
+export type TaskLink = { type: TaskLinkType; task: string };
+export type Attachment = {
+  kind: "file" | "link";
+  name: string;
+  /** Workspace-relative path of an uploaded file. */
+  path?: string;
+  /** http or https address of a link attachment. */
+  url?: string;
+  size?: number;
+  added_at: string;
+  added_by?: string;
+};
+export type Recurrence = { every: "day" | "week" | "month"; interval: number; until?: string };
 export type TaskExtra = Readonly<
   Record<string, unknown> & {
     status_history?: readonly TaskStatusChange[];
@@ -41,6 +55,13 @@ export type DocumentMetadata = {
   updated_at?: string;
   archived_at?: string;
   depends_on?: readonly string[];
+  order?: number;
+  parent?: string;
+  estimate?: number;
+  links?: readonly TaskLink[];
+  watchers?: readonly string[];
+  attachments?: readonly Attachment[];
+  recurrence?: Recurrence;
   extra?: TaskExtra;
   dates: Readonly<Record<string, string>>;
 };
@@ -87,11 +108,13 @@ export type QualityConfig = {
   minGroupDocWords?: number;
 };
 export type TrackingConfig = { enabled?: boolean };
+export type IdentityConfig = { name?: string };
 export type WorkspaceConfig = {
   workspace: string;
   organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
   quality?: QualityConfig;
   tracking?: TrackingConfig;
+  identity?: IdentityConfig;
 };
 export type ResolvedWorkspace = {
   root: string;
@@ -127,13 +150,27 @@ export type TaskCreateInput = {
   dueAt?: string;
   tags?: readonly string[];
   dependsOn?: readonly string[];
+  order?: number;
+  parent?: string;
+  estimate?: number;
+  links?: readonly TaskLink[];
+  watchers?: readonly string[];
+  recurrence?: Recurrence;
   extra?: Readonly<Record<string, unknown>>;
 };
 export type TaskUpdateInput = Partial<
-  Omit<TaskCreateInput, "group" | "description" | "body" | "dueAt">
+  Omit<
+    TaskCreateInput,
+    "group" | "description" | "body" | "dueAt" | "order" | "parent" | "estimate" | "recurrence"
+  >
 > & {
   title?: string;
   dueAt?: string | null;
+  /** `null` clears the field. */
+  order?: number | null;
+  parent?: string | null;
+  estimate?: number | null;
+  recurrence?: Recurrence | null;
   hiddenFromRecent?: boolean;
   /** Record git snapshots while the task is in progress (requires a git repository). */
   track?: boolean;

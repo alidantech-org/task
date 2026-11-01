@@ -62,6 +62,36 @@ export async function validateWorkspace(
         push(diagnostics, task.path, `Unknown dependency task ID: ${dependency}`, "reference");
       }
     }
+    const parent = task.metadata.parent;
+    if (parent !== undefined) {
+      if (parent === task.metadata.id)
+        push(diagnostics, task.path, "A task cannot be its own parent", "reference");
+      else if (!taskIds.has(parent))
+        push(diagnostics, task.path, `Unknown parent task ID: ${parent}`, "reference");
+      else {
+        const seen = new Set([task.metadata.id]);
+        for (let ancestor: string | undefined = parent; ancestor; ) {
+          if (seen.has(ancestor)) {
+            push(diagnostics, task.path, "Task parents form a cycle", "dependency");
+            break;
+          }
+          seen.add(ancestor);
+          ancestor = taskIds.get(ancestor)?.metadata.parent;
+        }
+      }
+    }
+    for (const link of task.metadata.links ?? []) {
+      if (!taskIds.has(link.task))
+        push(diagnostics, task.path, `Unknown linked task ID: ${link.task}`, "reference");
+    }
+    for (const attachment of task.metadata.attachments ?? []) {
+      if (attachment.kind !== "file" || !attachment.path) continue;
+      try {
+        await access(resolve(context.root, attachment.path));
+      } catch {
+        push(diagnostics, task.path, `Attachment file is missing: ${attachment.path}`, "reference");
+      }
+    }
   }
   const visitState = new Map<string, "visiting" | "visited">();
   const visit = (taskId: string, stack: string[]): void => {

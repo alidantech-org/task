@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@task/ui";
-import type { ChecklistSelector } from "@task/workspace/documents/checklist";
+import { type ChecklistSelector, checklistProgress } from "@task/workspace/documents/checklist";
 import { resolveLink } from "@task/workspace/links/resolve";
 import { assessTaskBody, defaultQuality } from "@task/workspace/operations/quality";
 import {
@@ -130,8 +130,11 @@ export function TaskSheet() {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
+  const [changeCount, setChangeCount] = useState(0);
   const open = selected?.type === "task" && detail !== null;
   const taskId = selected?.id;
+  const segmentCount = selected?.extra?.tracking?.segments.length ?? 0;
+  const contentHash = selected?.contentHash;
 
   useEffect(() => setWidth(readWidth()), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Return to the overview whenever another task opens.
@@ -162,6 +165,27 @@ export function TaskSheet() {
       active = false;
     };
   }, [taskId]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reload the count when the task changes or the Changes tab is shown.
+  useEffect(() => {
+    let active = true;
+    setChangeCount(0);
+    if (!taskId || segmentCount === 0) return;
+    void fetch(`/api/runtime/workspace/task/${encodeURIComponent(taskId)}/changes`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          changes?: { available: boolean; totals?: { files: number } };
+        };
+        if (active && response.ok && payload.changes?.available)
+          setChangeCount(payload.changes.totals?.files ?? 0);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [taskId, segmentCount, contentHash, tab === "changes"]);
 
   function closeSheet() {
     if (
@@ -217,6 +241,8 @@ export function TaskSheet() {
   const task = selected;
   const body = detail.body;
   const effectiveWidth = Math.min(width, viewportWidth || width);
+  const progress = checklistProgress(detail?.body ?? "");
+  const remainingSteps = progress.total - progress.completed;
   const compact = effectiveWidth < compactTabsBelow;
   const compactEditors = effectiveWidth < compactEditorsBelow;
   const archived = archivedTasks.some((candidate) => candidate.id === task.id);
@@ -422,7 +448,19 @@ export function TaskSheet() {
                     >
                       {compact ? <Icon className="size-4" /> : label}
                       {id === "quality" && findings.length > 0 ? (
-                        <b className="tab-badge">{findings.length}</b>
+                        <b className="tab-badge" title="Things to fix">
+                          {findings.length}
+                        </b>
+                      ) : null}
+                      {id === "overview" && remainingSteps > 0 ? (
+                        <b className="tab-count" title="Steps not done">
+                          {remainingSteps}
+                        </b>
+                      ) : null}
+                      {id === "changes" && changeCount > 0 ? (
+                        <b className="tab-count" title="Files changed">
+                          {changeCount}
+                        </b>
                       ) : null}
                     </button>
                   ))}

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { type ChecklistSelector, setChecklistItems } from "@task/workspace/documents/checklist";
+import { stripComments } from "@task/workspace/documents/comments";
 import { WorkspaceError } from "@task/workspace/errors";
 import { endTracking, startTracking, trackingEnabled } from "@task/workspace/git/tracking";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
@@ -9,16 +10,21 @@ import { parseFrontmatter, serializeMarkdown } from "@task/workspace/indexing/me
 import type {
   DocumentCreateInput,
   DocumentSummary,
+  Recurrence,
   TaskCreateInput,
   TaskGroup,
+  TaskLink,
+  TaskPriority,
   TaskStatus,
   TaskTracking,
   TaskUpdateInput,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
+import { nextOrder } from "@task/workspace/operations/order";
 import { formatFindings, resolveQuality } from "@task/workspace/operations/quality";
 import { taskQualityFindings } from "@task/workspace/operations/quality-check";
 import { findDocument, findGroup, listTaskGroups } from "@task/workspace/operations/query";
+import { nextOccurrence } from "@task/workspace/operations/recurrence";
 import { resolveSafeWorkspacePath } from "@task/workspace/paths/safe-path";
 
 function existingTracking(extra: Record<string, unknown>): TaskTracking | undefined {
@@ -49,7 +55,11 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
-async function createFile(context: WorkspaceContext, path: string, content: string): Promise<void> {
+export async function createFile(
+  context: WorkspaceContext,
+  path: string,
+  content: string,
+): Promise<void> {
   const absolute = await resolveSafeWorkspacePath(context.root, path);
   await mkdir(dirname(absolute), { recursive: true });
   await resolveSafeWorkspacePath(context.root, path);
@@ -72,7 +82,7 @@ async function createFile(context: WorkspaceContext, path: string, content: stri
   }
 }
 
-async function replaceFile(
+export async function replaceFile(
   context: WorkspaceContext,
   path: string,
   content: string,
@@ -244,6 +254,37 @@ async function validateDependencies(
   }
 }
 
+async function validateRelations(
+  context: WorkspaceContext,
+  currentId: string | undefined,
+  relations: { parent?: string | null; links?: readonly TaskLink[] },
+): Promise<void> {
+  const index = await buildWorkspaceIndex(context);
+  const tasks = new Map(
+    [...index.documents.values()]
+      .filter((document) => document.metadata.type === "task")
+      .map((document) => [document.metadata.id, document]),
+  );
+  if (relations.parent) {
+    if (relations.parent === currentId)
+      throw new WorkspaceError("validation_failed", "A task cannot be its own parent");
+    if (!tasks.has(relations.parent))
+      throw new WorkspaceError("validation_failed", `Unknown parent task ID: ${relations.parent}`);
+    let ancestor: string | undefined = relations.parent;
+    for (let depth = 0; ancestor && depth < 100; depth += 1) {
+      if (currentId && ancestor === currentId)
+        throw new WorkspaceError("validation_failed", "Task parents cannot contain cycles");
+      ancestor = tasks.get(ancestor)?.metadata.parent;
+    }
+  }
+  for (const link of relations.links ?? []) {
+    if (link.task === currentId)
+      throw new WorkspaceError("validation_failed", "A task cannot link to itself");
+    if (!tasks.has(link.task))
+      throw new WorkspaceError("validation_failed", `Unknown linked task ID: ${link.task}`);
+  }
+}
+
 export async function createTaskGroup(
   context: WorkspaceContext,
   name: string,
@@ -336,6 +377,10 @@ export async function createTask(
   const taskId = id("TSK");
   const dependencies = input.dependsOn ?? [];
   await validateDependencies(context, undefined, dependencies);
+  await validateRelations(context, undefined, { parent: input.parent, links: input.links });
+  const siblings = [...(await buildWorkspaceIndex(context)).documents.values()].filter(
+    (document) => document.metadata.type === "task" && dirname(document.path) === group.path,
+  );
   const directory = resolve(context.root, group.path);
   const entries = await readdir(directory, { withFileTypes: true });
   const numbers = entries
@@ -359,6 +404,12 @@ export async function createTask(
     ...(input.startAt ? { start_at: input.startAt } : {}),
     ...(input.dueAt ? { due_at: input.dueAt } : {}),
     ...(dependencies.length ? { depends_on: [...dependencies] } : {}),
+    order: input.order ?? nextOrder(siblings),
+    ...(input.parent ? { parent: input.parent } : {}),
+    ...(input.estimate !== undefined ? { estimate: input.estimate } : {}),
+    ...(input.links?.length ? { links: input.links.map((link) => ({ ...link })) } : {}),
+    ...(input.watchers?.length ? { watchers: [...input.watchers] } : {}),
+    ...(input.recurrence ? { recurrence: { ...input.recurrence } } : {}),
     ...(input.extra ? { extra: { ...input.extra } } : {}),
   };
   while (true) {
@@ -442,6 +493,36 @@ export async function updateTask(
     await validateDependencies(context, task.metadata.id, input.dependsOn);
     values.depends_on = [...input.dependsOn];
   }
+  if (input.order !== undefined) {
+    if (input.order === null) delete values.order;
+    else values.order = input.order;
+  }
+  if (input.parent !== undefined || input.links !== undefined) {
+    await validateRelations(context, task.metadata.id, {
+      parent: input.parent === undefined ? undefined : input.parent,
+      links: input.links,
+    });
+  }
+  if (input.parent !== undefined) {
+    if (input.parent === null) delete values.parent;
+    else values.parent = input.parent;
+  }
+  if (input.estimate !== undefined) {
+    if (input.estimate === null) delete values.estimate;
+    else values.estimate = input.estimate;
+  }
+  if (input.links !== undefined) {
+    if (input.links.length === 0) delete values.links;
+    else values.links = input.links.map((link) => ({ ...link }));
+  }
+  if (input.watchers !== undefined) {
+    if (input.watchers.length === 0) delete values.watchers;
+    else values.watchers = [...input.watchers];
+  }
+  if (input.recurrence !== undefined) {
+    if (input.recurrence === null) delete values.recurrence;
+    else values.recurrence = { ...input.recurrence };
+  }
   const updatedAt = new Date().toISOString();
   const existingExtra =
     typeof values.extra === "object" && values.extra !== null && !Array.isArray(values.extra)
@@ -495,6 +576,14 @@ export async function updateTask(
       error instanceof Error ? error.message : "Invalid task metadata",
       { cause: error },
     );
+  }
+  if (
+    input.status === "completed" &&
+    previousStatus !== "completed" &&
+    typeof values.recurrence === "object" &&
+    values.recurrence !== null
+  ) {
+    await spawnNextOccurrence(context, task, values, parsed.body);
   }
   await replaceFile(context, task.path, next, task.contentHash);
   let updatedIndex = await buildWorkspaceIndex(context);
@@ -554,6 +643,42 @@ export async function updateTask(
     }
   }
   return { task: updatedTask, ...(warnings ? { warnings } : {}) };
+}
+
+/** Creates the next occurrence of a recurring task, with a fresh checklist and no comments. */
+async function spawnNextOccurrence(
+  context: WorkspaceContext,
+  task: DocumentSummary,
+  values: Record<string, unknown>,
+  body: string,
+): Promise<void> {
+  const recurrence = values.recurrence as Recurrence;
+  const base =
+    typeof values.due_at === "string" ? values.due_at : new Date().toISOString().slice(0, 10);
+  const due = nextOccurrence(base, recurrence);
+  if (!due) return;
+  const group = (await listTaskGroups(context)).find(
+    (candidate) => candidate.path === dirname(task.path),
+  );
+  if (!group) return;
+  const reset = setChecklistItems(stripComments(body), { all: true }, false).body;
+  await createTask(context, {
+    title: String(values.name),
+    group: group.id,
+    body: reset,
+    priority: values.priority as TaskPriority | undefined,
+    assignee: typeof values.assignee === "string" ? values.assignee : undefined,
+    project: typeof values.project === "string" ? values.project : undefined,
+    tags: Array.isArray(values.tags) ? (values.tags as string[]) : undefined,
+    estimate: typeof values.estimate === "number" ? values.estimate : undefined,
+    parent: typeof values.parent === "string" ? values.parent : undefined,
+    links: Array.isArray(values.links) ? (values.links as TaskLink[]) : undefined,
+    watchers: Array.isArray(values.watchers) ? (values.watchers as string[]) : undefined,
+    recurrence,
+    order: typeof values.order === "number" ? values.order : undefined,
+    dueAt: due,
+    extra: { recurred_from: task.metadata.id },
+  });
 }
 
 export async function replaceDocumentBody(

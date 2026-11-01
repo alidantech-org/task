@@ -1,6 +1,7 @@
 import { link, lstat, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
+  parseIdentityConfig,
   parseQualityConfig,
   parseTrackingConfig,
   policyYamlLines,
@@ -43,12 +44,12 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
   const record = parsed as Record<string, unknown>;
   if (
     Object.keys(record).some(
-      (key) => !["workspace", "organization", "quality", "tracking"].includes(key),
+      (key) => !["workspace", "organization", "quality", "tracking", "identity"].includes(key),
     )
   ) {
     throw new WorkspaceError(
       "invalid_workspace_config",
-      "task.yaml supports workspace, organization, quality and tracking fields",
+      "task.yaml supports workspace, organization, quality, tracking and identity fields",
     );
   }
   if (record.workspace !== undefined && typeof record.workspace !== "string") {
@@ -123,11 +124,13 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
   }
   const quality = record.quality === undefined ? undefined : parseQualityConfig(record.quality);
   const tracking = record.tracking === undefined ? undefined : parseTrackingConfig(record.tracking);
+  const identity = record.identity === undefined ? undefined : parseIdentityConfig(record.identity);
   return {
     workspace,
     ...(organization ? { organization } : {}),
     ...(quality ? { quality } : {}),
     ...(tracking ? { tracking } : {}),
+    ...(identity ? { identity } : {}),
   };
 }
 
@@ -171,6 +174,7 @@ export async function resolveWorkspace(
     let organization: WorkspaceConfig["organization"];
     let quality: WorkspaceConfig["quality"];
     let tracking: WorkspaceConfig["tracking"];
+    let identity: WorkspaceConfig["identity"];
     try {
       const configStat = await lstat(resolve(projectRoot, "task.yaml"));
       if (!configStat.isFile()) {
@@ -180,6 +184,7 @@ export async function resolveWorkspace(
       organization = fileConfig.organization;
       quality = fileConfig.quality;
       tracking = fileConfig.tracking;
+      identity = fileConfig.identity;
     } catch (error) {
       if (error instanceof WorkspaceError) throw error;
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
@@ -192,6 +197,7 @@ export async function resolveWorkspace(
         ...(organization ? { organization } : {}),
         ...(quality ? { quality } : {}),
         ...(tracking ? { tracking } : {}),
+        ...(identity ? { identity } : {}),
       },
       source: options.workspaceOverride ? "argument" : "environment",
     };
@@ -279,7 +285,7 @@ export async function updateWorkspaceOrganization(
     const selectedOrganization = selected.config.organization ?? {};
     if (
       Object.keys(parsed).some(
-        (key) => !["workspace", "organization", "quality", "tracking"].includes(key),
+        (key) => !["workspace", "organization", "quality", "tracking", "identity"].includes(key),
       ) ||
       parsed.workspace !== selected.config.workspace ||
       currentOrganization.weekStart !== selectedOrganization.weekStart ||

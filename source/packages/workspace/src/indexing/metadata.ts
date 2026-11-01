@@ -1,6 +1,9 @@
 import type {
+  Attachment,
   DocumentMetadata,
+  Recurrence,
   TaskExtra,
+  TaskLink,
   TaskPriority,
   TaskStatus,
 } from "@task/workspace/indexing/types";
@@ -61,6 +64,13 @@ export function parseFrontmatter(content: string): {
           "updated_at",
           "archived_at",
           "depends_on",
+          "order",
+          "parent",
+          "estimate",
+          "links",
+          "watchers",
+          "attachments",
+          "recurrence",
           "extra",
         ]
       : type === "decision"
@@ -124,6 +134,7 @@ export function parseFrontmatter(content: string): {
     ) {
       throw new Error("depends_on must be a sequence of task IDs");
     }
+    validateTaskExtras(values);
     const history = (extra as Record<string, unknown> | undefined)?.status_history;
     const hiddenFromRecent = (extra as Record<string, unknown> | undefined)?.hidden_from_recent;
     if (hiddenFromRecent !== undefined && typeof hiddenFromRecent !== "boolean") {
@@ -192,6 +203,15 @@ export function parseFrontmatter(content: string): {
     ...(scalar("updated_at") ? { updated_at: scalar("updated_at") } : {}),
     ...(scalar("archived_at") ? { archived_at: scalar("archived_at") } : {}),
     ...(Array.isArray(values.depends_on) ? { depends_on: values.depends_on as string[] } : {}),
+    ...(typeof values.order === "number" ? { order: values.order } : {}),
+    ...(typeof values.parent === "string" ? { parent: values.parent } : {}),
+    ...(typeof values.estimate === "number" ? { estimate: values.estimate } : {}),
+    ...(Array.isArray(values.links) ? { links: values.links as TaskLink[] } : {}),
+    ...(Array.isArray(values.watchers) ? { watchers: values.watchers as string[] } : {}),
+    ...(Array.isArray(values.attachments)
+      ? { attachments: values.attachments as Attachment[] }
+      : {}),
+    ...(isMapping(values.recurrence) ? { recurrence: values.recurrence as Recurrence } : {}),
     ...(extra !== undefined ? { extra: extra as TaskExtra } : {}),
     dates,
   };
@@ -256,5 +276,99 @@ function validateTracking(tracking: unknown): void {
       )
         throw new Error(`${label}.summary is invalid`);
     }
+  }
+}
+
+export const maxAttachmentBytes = 1_000_000;
+const linkTypes = new Set(["blocks", "relates", "duplicates"]);
+const recurrenceUnits = new Set(["day", "week", "month"]);
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  for (const key of Object.keys(value))
+    if (!allowed.includes(key)) throw new Error(`${label} has an unknown field: ${key}`);
+}
+
+/** Validates the optional task fields for ordering, hierarchy, relations, watchers, files and recurrence. */
+function validateTaskExtras(values: Record<string, unknown>): void {
+  if (
+    values.order !== undefined &&
+    (typeof values.order !== "number" || !Number.isFinite(values.order))
+  )
+    throw new Error("order must be a finite number");
+  if (values.parent !== undefined && (typeof values.parent !== "string" || !values.parent))
+    throw new Error("parent must be a task id");
+  if (
+    values.estimate !== undefined &&
+    (typeof values.estimate !== "number" ||
+      !Number.isFinite(values.estimate) ||
+      values.estimate < 0)
+  )
+    throw new Error("estimate must be a number of zero or more");
+  if (values.links !== undefined) {
+    if (!Array.isArray(values.links)) throw new Error("links must be a sequence");
+    const seen = new Set<string>();
+    for (const [index, link] of values.links.entries()) {
+      const label = `links[${index}]`;
+      if (!isMapping(link)) throw new Error(`${label} must be a mapping`);
+      onlyKeys(link, ["type", "task"], label);
+      if (typeof link.type !== "string" || !linkTypes.has(link.type))
+        throw new Error(`${label}.type must be blocks, relates or duplicates`);
+      if (typeof link.task !== "string" || !link.task)
+        throw new Error(`${label}.task must be a task id`);
+      const key = `${link.type}:${link.task}`;
+      if (seen.has(key)) throw new Error(`${label} duplicates another link`);
+      seen.add(key);
+    }
+  }
+  if (values.watchers !== undefined) {
+    if (
+      !Array.isArray(values.watchers) ||
+      values.watchers.some((name) => typeof name !== "string" || !name.trim()) ||
+      new Set(values.watchers).size !== values.watchers.length
+    )
+      throw new Error("watchers must be a sequence of unique names");
+  }
+  if (values.attachments !== undefined) {
+    if (!Array.isArray(values.attachments)) throw new Error("attachments must be a sequence");
+    for (const [index, item] of values.attachments.entries()) {
+      const label = `attachments[${index}]`;
+      if (!isMapping(item)) throw new Error(`${label} must be a mapping`);
+      onlyKeys(item, ["kind", "name", "path", "url", "size", "added_at", "added_by"], label);
+      if (typeof item.name !== "string" || !item.name)
+        throw new Error(`${label}.name must be a string`);
+      if (typeof item.added_at !== "string" || Number.isNaN(Date.parse(item.added_at)))
+        throw new Error(`${label}.added_at must be a timestamp`);
+      optionalString(item, "added_by", label);
+      if (item.kind === "file") {
+        if (
+          typeof item.path !== "string" ||
+          !item.path ||
+          item.path.startsWith("/") ||
+          item.path.split("/").includes("..")
+        )
+          throw new Error(`${label}.path must be a safe workspace-relative path`);
+        if (
+          typeof item.size !== "number" ||
+          !Number.isInteger(item.size) ||
+          item.size < 0 ||
+          item.size > maxAttachmentBytes
+        )
+          throw new Error(`${label}.size must be an integer up to ${maxAttachmentBytes} bytes`);
+      } else if (item.kind === "link") {
+        if (typeof item.url !== "string" || !/^https?:\/\/\S+$/i.test(item.url))
+          throw new Error(`${label}.url must be an http or https address`);
+      } else throw new Error(`${label}.kind must be file or link`);
+    }
+  }
+  if (values.recurrence !== undefined) {
+    const recurrence = values.recurrence;
+    if (!isMapping(recurrence)) throw new Error("recurrence must be a mapping");
+    onlyKeys(recurrence, ["every", "interval", "until"], "recurrence");
+    if (typeof recurrence.every !== "string" || !recurrenceUnits.has(recurrence.every))
+      throw new Error("recurrence.every must be day, week or month");
+    if (!Number.isInteger(recurrence.interval) || Number(recurrence.interval) < 1)
+      throw new Error("recurrence.interval must be a whole number of 1 or more");
+    if (recurrence.until !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(recurrence.until)))
+      throw new Error("recurrence.until must be YYYY-MM-DD");
   }
 }

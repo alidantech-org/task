@@ -1,5 +1,5 @@
 import { WorkspaceError } from "@task/workspace/errors";
-import type { QualityConfig, TrackingConfig } from "@task/workspace/indexing/types";
+import type { IdentityConfig, QualityConfig, TrackingConfig } from "@task/workspace/indexing/types";
 
 function mapping(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -65,10 +65,26 @@ export function parseTrackingConfig(value: unknown): TrackingConfig {
   return options.enabled === undefined ? {} : { enabled: options.enabled };
 }
 
+export function parseIdentityConfig(value: unknown): IdentityConfig {
+  const options = mapping(value, "identity");
+  if (Object.keys(options).some((key) => key !== "name"))
+    throw new WorkspaceError(
+      "invalid_workspace_config",
+      "Unsupported identity setting in task.yaml",
+    );
+  if (options.name !== undefined && (typeof options.name !== "string" || !options.name.trim()))
+    throw new WorkspaceError(
+      "invalid_workspace_config",
+      "task.yaml identity.name must be a non-empty string",
+    );
+  return options.name === undefined ? {} : { name: options.name.trim() };
+}
+
 /** YAML lines for the policy sections, so rewriting task.yaml never drops them. */
 export function policyYamlLines(config: {
   quality?: QualityConfig;
   tracking?: TrackingConfig;
+  identity?: IdentityConfig;
 }): string[] {
   const lines: string[] = [];
   if (config.quality && Object.keys(config.quality).length > 0) {
@@ -78,6 +94,11 @@ export function policyYamlLines(config: {
   if (config.tracking && Object.keys(config.tracking).length > 0) {
     lines.push("tracking:");
     for (const [key, value] of Object.entries(config.tracking)) lines.push(`  ${key}: ${value}`);
+  }
+  if (config.identity && Object.keys(config.identity).length > 0) {
+    lines.push("identity:");
+    for (const [key, value] of Object.entries(config.identity))
+      lines.push(`  ${key}: ${JSON.stringify(value)}`);
   }
   return lines;
 }

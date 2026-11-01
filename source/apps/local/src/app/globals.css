@@ -1664,3 +1664,20 @@ html[data-theme="dark"] .code-token,
 .card-shell .ct {
   padding-right: 20px;
 }
+
+/* Neutral counters on tabs (steps left, files changed); the red .tab-badge is only for problems */
+.task-sheet .tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--ln);
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+.task-sheet .task-sheet-tabs button.on .tab-count {
+  background: var(--pn);
+  color: var(--acc);
+}

@@ -20,6 +20,13 @@ export {
   setChecklistItems,
 } from "@task/workspace/documents/checklist";
 export { classifyDocument } from "@task/workspace/documents/classify";
+export type { TaskComment } from "@task/workspace/documents/comments";
+export {
+  appendComment,
+  mentionsOf,
+  parseComments,
+  removeComment,
+} from "@task/workspace/documents/comments";
 export { readWorkspaceDocument } from "@task/workspace/documents/read";
 export { WorkspaceError } from "@task/workspace/errors";
 export { languageForPath } from "@task/workspace/files/language";
@@ -36,15 +43,20 @@ export {
 } from "@task/workspace/git/tracking";
 export { buildWorkspaceIndex, reconcileWorkspaceIndex } from "@task/workspace/indexing/index";
 export type {
+  Attachment,
   DocumentCreateInput,
   DocumentMetadata,
   DocumentSummary,
+  IdentityConfig,
   QualityConfig,
   QualityMode,
+  Recurrence,
   ResolvedWorkspace,
   TaskCreateInput,
   TaskExtra,
   TaskGroup,
+  TaskLink,
+  TaskLinkType,
   TaskPriority,
   TaskStatus,
   TaskStatusChange,
@@ -58,7 +70,25 @@ export type {
 } from "@task/workspace/indexing/types";
 export type { LinkContext, LinkTarget } from "@task/workspace/links/resolve";
 export { resolveLink } from "@task/workspace/links/resolve";
+export type { ActivityEntry } from "@task/workspace/operations/activity";
+export { buildActivity } from "@task/workspace/operations/activity";
+export {
+  addFileAttachment,
+  addLinkAttachment,
+  maxAttachmentBytes,
+  readAttachment,
+  removeAttachment,
+  sanitizeFileName,
+} from "@task/workspace/operations/attachments";
+export type { BulkPatch, BulkResult } from "@task/workspace/operations/bulk";
+export { bulkUpdateTasks } from "@task/workspace/operations/bulk";
 export { readDocumentChecklist } from "@task/workspace/operations/checklist";
+export {
+  addTaskComment,
+  deleteTaskComment,
+  listTaskComments,
+  resolveAuthor,
+} from "@task/workspace/operations/comment-ops";
 export type { DeleteOptions, TrashEntry, TrashKind } from "@task/workspace/operations/delete";
 export {
   deleteDocument,
@@ -67,6 +97,7 @@ export {
   listTrash,
   restoreFromTrash,
 } from "@task/workspace/operations/delete";
+export { moveTask } from "@task/workspace/operations/move";
 export {
   archiveTask,
   archiveTaskGroup,
@@ -82,6 +113,14 @@ export {
   setDocumentChecklist,
   updateTask,
 } from "@task/workspace/operations/mutate";
+export {
+  compareTasks,
+  effectiveOrder,
+  nextOrder,
+  orderStep,
+  rankBetween,
+  sortTasks,
+} from "@task/workspace/operations/order";
 export type {
   QualityFinding,
   QualityFindingCode,
@@ -113,6 +152,19 @@ export {
   readWorkspaceIndex,
   searchWorkspace,
 } from "@task/workspace/operations/query";
+export {
+  nextDueDate,
+  nextOccurrence,
+  parseRecurrence,
+} from "@task/workspace/operations/recurrence";
+export type { ReorderTarget } from "@task/workspace/operations/reorder";
+export { reorderTask } from "@task/workspace/operations/reorder";
+export type { TaskTemplate, TemplateDefaults } from "@task/workspace/operations/templates";
+export {
+  createTaskFromTemplate,
+  createTemplate,
+  listTemplates,
+} from "@task/workspace/operations/templates";
 export type { ValidationScope } from "@task/workspace/operations/validate";
 export { isErrorDiagnostic, validateWorkspace } from "@task/workspace/operations/validate";
 export { resolveSafeWorkspacePath, resolveWorkspacePath } from "@task/workspace/paths/safe-path";
