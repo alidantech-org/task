@@ -1,5 +1,5 @@
 ---
-{id: TSK-2E34D38F08D1,name: "Schema, operations and command line for the new task features",type: task,status: planned,priority: high,created_at: 2026-11-01T04:27:33.331Z,updated_at: 2026-11-01T04:27:33.331Z,due_at: 2026-11-01}
+{id: TSK-2E34D38F08D1,name: "Schema, operations and command line for the new task features",type: task,status: in-progress,priority: high,created_at: 2026-11-01T04:27:33.331Z,updated_at: 2026-11-01T04:42:36.887Z,due_at: 2026-11-01,extra: {status_history: [{from: planned,to: in-progress,at: 2026-11-01T04:42:36.887Z}],tracking: {segments: [{base_ref: refs/tracking/TSK-2E34D38F08D1/1793508156889-start,started_at: 2026-11-01T04:42:36.929Z}]}}}
 ---
 
 # Schema, operations and command line for the new task features

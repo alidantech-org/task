@@ -5,15 +5,29 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { confirm, isCancel, multiselect, outro, select } from "@clack/prompts";
-import type { DocumentSummary, QualityConfig, SetupSelection } from "@task/workspace";
+import type {
+  DocumentSummary,
+  QualityConfig,
+  Recurrence,
+  SetupSelection,
+  TaskLink,
+} from "@task/workspace";
 import {
+  addFileAttachment,
+  addLinkAttachment,
+  addTaskComment,
   applyProjectSetupPlan,
   archiveTask,
   archiveTaskGroup,
+  buildActivity,
+  bulkUpdateTasks,
+  compareTasks,
   createDocument,
   createProjectSetupPlan,
   createTask,
+  createTaskFromTemplate,
   createTaskGroup,
+  createTemplate,
   deleteDocument,
   deleteTask,
   deleteTaskGroup,
@@ -25,14 +39,21 @@ import {
   inspectProject,
   isErrorDiagnostic,
   listDocuments,
+  listTaskComments,
   listTaskGroups,
   listTasks,
+  listTemplates,
   listTrash,
   listWorkspaceTree,
   migrateLegacyGroups,
+  moveTask,
+  parseRecurrence,
   readDocumentChecklist,
   readWorkspaceIndex,
+  removeAttachment,
+  reorderTask,
   replaceDocumentBody,
+  resolveAuthor,
   resolveWorkspace,
   restoreFromTrash,
   restoreTask,
@@ -136,6 +157,11 @@ function printHelp(): void {
     "  restore <task-or-group> Restore an archived task or group",
     "  start <id> [--track]   Move a task to in-progress, optionally recording git changes",
     "  changes <id> [--diff <path>]  Show git changes made while the task was in progress",
+    '  comment <id> --text "…"   Add a comment; comments <id> lists them',
+    "  move <id> (--before|--after <id> | --order N | --group <id>)  Reorder or move a task",
+    "  attach <id> <file|url> / detach <id> <name>  Manage small attachments and links",
+    "  template create|list   Reusable task templates (use with create --template <id>)",
+    "  bulk <id…> [--status …]  Change many tasks; activity <id> shows the timeline",
     "  checklist <id>         Show a task's checkboxes grouped by heading",
     '  check|uncheck <id> (--item N | --section "Heading" | --all)  Tick checkboxes without editing the file',
     "  delete <id> [--yes] [--force] [--cascade]  Move a task, group or document to the temp trash",
@@ -166,6 +192,13 @@ function record(summary: DocumentSummary): Record<string, unknown> {
     assignee: summary.metadata.assignee,
     project: summary.metadata.project,
     tags: summary.metadata.tags,
+    order: summary.metadata.order,
+    parent: summary.metadata.parent,
+    estimate: summary.metadata.estimate,
+    links: summary.metadata.links,
+    watchers: summary.metadata.watchers,
+    recurrence: summary.metadata.recurrence,
+    attachments: summary.metadata.attachments?.length,
     path: summary.path,
     modifiedAt: new Date(summary.modifiedAt).toISOString(),
   };
@@ -208,6 +241,45 @@ function extraOption(): Record<string, unknown> | undefined {
     throw new WorkspaceError("invalid_input", "--extra must be a JSON object");
   }
   return parsed as Record<string, unknown>;
+}
+
+function numberOption(key: string): number | null | undefined {
+  const value = optionString(args, key);
+  if (value === undefined) return undefined;
+  if (value === "none") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed))
+    throw new WorkspaceError("invalid_input", `--${key} must be a number or none`);
+  return parsed;
+}
+
+function linkOption(): TaskLink[] | undefined {
+  if (!args.options.has("link")) return undefined;
+  const values = optionList(args, "link");
+  if (values.length === 1 && values[0] === "none") return [];
+  return values.map((value) => {
+    const [type, task] = value.split(":");
+    if ((type !== "blocks" && type !== "relates" && type !== "duplicates") || !task)
+      throw new WorkspaceError(
+        "invalid_input",
+        "--link must look like blocks:TSK-… (blocks, relates or duplicates)",
+      );
+    return { type, task };
+  });
+}
+
+function repeatOption(): Recurrence | null | undefined {
+  const value = optionString(args, "repeat");
+  if (value === undefined) return undefined;
+  if (value === "none") return null;
+  try {
+    return parseRecurrence(value);
+  } catch (error) {
+    throw new WorkspaceError(
+      "invalid_input",
+      error instanceof Error ? error.message : "Invalid --repeat",
+    );
+  }
 }
 
 async function readTextInput(source: string): Promise<string> {
@@ -695,12 +767,23 @@ async function main(): Promise<void> {
       tag: optionString(args, "tag"),
       group: optionString(args, "group"),
     });
-    const sort = optionString(args, "sort") ?? "name";
-    if (!["name", "status", "priority", "updated", "due"].includes(sort))
+    const sort = optionString(args, "sort") ?? "order";
+    if (!["order", "name", "status", "priority", "updated", "due"].includes(sort))
       throw new WorkspaceError(
         "invalid_input",
-        "--sort must be name, status, priority, updated, or due",
+        "--sort must be order, name, status, priority, updated, or due",
       );
+    const me =
+      args.options.has("mine") || args.options.has("watching") ? await resolveAuthor(context) : "";
+    const parentFilter = optionString(args, "parent");
+    const selected = tasks.filter(
+      (task) =>
+        (!args.options.has("mine") || task.metadata.assignee?.toLowerCase() === me.toLowerCase()) &&
+        (!args.options.has("watching") ||
+          (task.metadata.watchers ?? []).some((name) => name.toLowerCase() === me.toLowerCase())) &&
+        (parentFilter === undefined || task.metadata.parent === parentFilter),
+    );
+    tasks.splice(0, tasks.length, ...selected);
     tasks.sort((a, b) => {
       const sortValue = (task: DocumentSummary): string => {
         if (sort === "status") return task.metadata.status ?? "";
@@ -709,7 +792,11 @@ async function main(): Promise<void> {
         return task.metadata.name;
       };
       const key =
-        sort === "updated" ? b.modifiedAt - a.modifiedAt : sortValue(a).localeCompare(sortValue(b));
+        sort === "order"
+          ? compareTasks(a, b)
+          : sort === "updated"
+            ? b.modifiedAt - a.modifiedAt
+            : sortValue(a).localeCompare(sortValue(b));
       return key || a.metadata.name.localeCompare(b.metadata.name);
     });
     if (limit !== undefined) tasks.splice(limit);
@@ -817,7 +904,11 @@ async function main(): Promise<void> {
     }
     if (!title) throw new WorkspaceError("invalid_input", "Provide --title <name>");
     if (!group) throw new WorkspaceError("invalid_input", "Provide --group <group-id-or-slug>");
-    const task = await createTask(context, {
+    const create = args.options.has("template")
+      ? (input: Parameters<typeof createTask>[1]) =>
+          createTaskFromTemplate(context, optionString(args, "template") ?? "", input)
+      : (input: Parameters<typeof createTask>[1]) => createTask(context, input);
+    const task = await create({
       title,
       group,
       description: optionString(args, "description"),
@@ -829,6 +920,13 @@ async function main(): Promise<void> {
       dueAt: optionString(args, "due"),
       tags: optionList(args, "tag"),
       dependsOn: optionList(args, "depends-on"),
+      startAt: optionString(args, "start"),
+      order: numberOption("order") ?? undefined,
+      estimate: numberOption("estimate") ?? undefined,
+      parent: optionString(args, "parent"),
+      links: linkOption(),
+      watchers: args.options.has("add-watcher") ? optionList(args, "add-watcher") : undefined,
+      recurrence: repeatOption() ?? undefined,
       extra: extraOption(),
     });
     if (json) output(record(task));
@@ -868,10 +966,44 @@ async function main(): Promise<void> {
     const dependsOn = args.options.has("depends-on") ? optionList(args, "depends-on") : undefined;
     const extra = extraOption();
     const track = args.options.has("track") ? true : undefined;
+    const startAt = optionString(args, "start");
+    const order = numberOption("order");
+    const estimate = numberOption("estimate");
+    const parentOption = optionString(args, "parent");
+    const parent =
+      parentOption === undefined ? undefined : parentOption === "none" ? null : parentOption;
+    const links = linkOption();
+    const recurrence = repeatOption();
+    const watch = args.options.has("add-watcher") ? optionList(args, "add-watcher") : [];
+    const unwatch = args.options.has("remove-watcher") ? optionList(args, "remove-watcher") : [];
+    const watchers =
+      watch.length || unwatch.length
+        ? [...new Set([...(task.metadata.watchers ?? []), ...watch])].filter(
+            (name) => !unwatch.includes(name),
+          )
+        : undefined;
+    const group = optionString(args, "group");
     if (
-      ![title, status, priority, assignee, project, dueAt, tags, dependsOn, extra, track].some(
-        (value) => value !== undefined,
-      )
+      ![
+        title,
+        status,
+        priority,
+        assignee,
+        project,
+        dueAt,
+        tags,
+        dependsOn,
+        extra,
+        track,
+        startAt,
+        order,
+        estimate,
+        parent,
+        links,
+        recurrence,
+        watchers,
+        group,
+      ].some((value) => value !== undefined)
     )
       throw new WorkspaceError("invalid_input", "Provide at least one field to update");
     const result = await updateTask(context, identifier, {
@@ -885,7 +1017,15 @@ async function main(): Promise<void> {
       dependsOn,
       extra,
       track,
+      startAt,
+      order,
+      estimate,
+      parent,
+      links,
+      recurrence,
+      watchers,
     });
+    if (group) result.task = await moveTask(context, identifier, group);
     printWarnings(result.warnings);
     if (json) output({ ...record(result.task), warnings: result.warnings });
     else {
@@ -1001,6 +1141,211 @@ async function main(): Promise<void> {
           "requested",
         );
     }
+    return;
+  }
+
+  if (command === "comment" || command === "comments") {
+    const identifier = args.positionals[0];
+    if (!identifier)
+      throw new WorkspaceError("invalid_input", `Usage: task ${command} <task-id> [--text "…"]`);
+    if (command === "comment") {
+      const text = optionString(args, "text") ?? (await optionalTextFile("body-file"));
+      if (!text)
+        throw new WorkspaceError("invalid_input", 'Provide --text "…" or --body-file <path|->');
+      const result = await addTaskComment(context, identifier, text);
+      const added = result.comments.at(-1);
+      if (json) output({ id: identifier, comment: added, total: result.comments.length });
+      else
+        line(
+          renderMessage(
+            "success",
+            `Comment added by ${added?.author ?? "unknown"} · ${result.comments.length} total`,
+            stdoutStyle,
+            stdoutSymbols,
+          ),
+          "requested",
+        );
+      return;
+    }
+    const comments = await listTaskComments(context, identifier);
+    if (json) output(comments.map(({ start: _start, end: _end, ...rest }) => rest));
+    else if (!comments.length) line("No comments", "requested");
+    else
+      for (const comment of comments)
+        line(
+          `${comment.index + 1}. ${comment.at} ${comment.author ?? ""}\n   ${comment.text.replace(/\n/g, "\n   ")}`,
+          "requested",
+        );
+    return;
+  }
+
+  if (command === "move") {
+    const identifier = args.positionals[0];
+    if (!identifier)
+      throw new WorkspaceError(
+        "invalid_input",
+        "Usage: task move <task-id> (--before|--after <task-id> | --order N | --group <id>)",
+      );
+    const group = optionString(args, "group");
+    let task: DocumentSummary | undefined;
+    if (group) task = await moveTask(context, identifier, group);
+    const before = optionString(args, "before");
+    const after = optionString(args, "after");
+    const order = numberOption("order");
+    if (before !== undefined || after !== undefined || (order !== undefined && order !== null))
+      task = await reorderTask(context, identifier, {
+        ...(before !== undefined ? { before } : {}),
+        ...(after !== undefined ? { after } : {}),
+        ...(order !== undefined && order !== null ? { order } : {}),
+      });
+    if (!task)
+      throw new WorkspaceError("invalid_input", "Provide --before, --after, --order or --group");
+    if (json) output(record(task));
+    else
+      line(
+        renderMessage(
+          "success",
+          `Moved ${task.metadata.id} · ${task.path}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+    return;
+  }
+
+  if (command === "attach" || command === "detach") {
+    const identifier = args.positionals[0];
+    const target = args.positionals[1];
+    if (!identifier || !target)
+      throw new WorkspaceError(
+        "invalid_input",
+        `Usage: task ${command} <task-id> <${command === "attach" ? "file-or-url" : "name"}>`,
+      );
+    const author = await resolveAuthor(context);
+    let task: DocumentSummary;
+    if (command === "detach") task = await removeAttachment(context, identifier, target);
+    else if (/^https?:\/\//i.test(target))
+      task = await addLinkAttachment(
+        context,
+        identifier,
+        { url: target, name: optionString(args, "name") },
+        author,
+      );
+    else {
+      const file = Bun.file(target);
+      if (!(await file.exists())) throw new WorkspaceError("not_found", `No file at ${target}`);
+      task = await addFileAttachment(
+        context,
+        identifier,
+        {
+          name: optionString(args, "name") ?? target,
+          data: new Uint8Array(await file.arrayBuffer()),
+        },
+        author,
+      );
+    }
+    if (json) output({ id: task.metadata.id, attachments: task.metadata.attachments ?? [] });
+    else
+      line(
+        renderMessage(
+          "success",
+          `${task.metadata.attachments?.length ?? 0} attachment(s) on ${task.metadata.id}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+    return;
+  }
+
+  if (command === "template") {
+    const action = args.positionals[0];
+    if (action === "list") {
+      const templates = await listTemplates(context);
+      if (json) output(templates);
+      else if (!templates.length) line("No templates", "requested");
+      else
+        for (const template of templates)
+          line(`${template.id}  ${template.name}  ${template.path}`, "requested");
+      return;
+    }
+    if (action === "create") {
+      const name = optionString(args, "title");
+      const body = await optionalTextFile("body-file");
+      if (!name || !body)
+        throw new WorkspaceError(
+          "invalid_input",
+          "Usage: task template create --title <name> --body-file <path|->",
+        );
+      const priority = enumOption("priority", taskPriorities);
+      const estimate = numberOption("estimate");
+      const recurrence = repeatOption();
+      const template = await createTemplate(context, {
+        name,
+        body,
+        defaults: {
+          ...(priority ? { priority } : {}),
+          ...(args.options.has("tag") ? { tags: optionList(args, "tag") } : {}),
+          ...(estimate !== undefined && estimate !== null ? { estimate } : {}),
+          ...(args.options.has("add-watcher") ? { watchers: optionList(args, "add-watcher") } : {}),
+          ...(recurrence ? { recurrence } : {}),
+        },
+      });
+      if (json) output(template);
+      else
+        line(
+          renderMessage(
+            "success",
+            `Created template ${template.id} · ${template.path}`,
+            stdoutStyle,
+            stdoutSymbols,
+          ),
+          "requested",
+        );
+      return;
+    }
+    throw new WorkspaceError("invalid_input", "Use: task template create|list");
+  }
+
+  if (command === "bulk") {
+    const ids = args.positionals;
+    if (ids.length === 0)
+      throw new WorkspaceError(
+        "invalid_input",
+        "Usage: task bulk <task-id…> [--status … --priority … --assignee … --group … --archive]",
+      );
+    const results = await bulkUpdateTasks(context, ids, {
+      status: enumOption("status", taskStatuses),
+      priority: enumOption("priority", taskPriorities),
+      assignee: optionString(args, "assignee"),
+      tags: args.options.has("tag") ? optionList(args, "tag") : undefined,
+      group: optionString(args, "group"),
+      archive: args.options.has("archive") ? true : undefined,
+    });
+    if (json) output(results);
+    else
+      for (const result of results)
+        line(
+          `${result.ok ? stdoutSymbols.success : stdoutSymbols.warning} ${result.id}${result.error ? `  ${result.error}` : ""}`,
+          "requested",
+        );
+    if (results.some((result) => !result.ok)) process.exitCode = 1;
+    return;
+  }
+
+  if (command === "activity") {
+    const identifier = args.positionals[0];
+    if (!identifier) throw new WorkspaceError("invalid_input", "Usage: task activity <task-id>");
+    const task = findDocument(await readWorkspaceIndex(context), identifier);
+    const timeline = buildActivity(task.metadata, await listTaskComments(context, identifier));
+    if (json) output(timeline);
+    else
+      for (const entry of timeline)
+        line(
+          `${entry.at}  ${entry.kind.padEnd(10)} ${entry.text}${entry.author ? ` — ${entry.author}` : ""}`,
+          "requested",
+        );
     return;
   }
 

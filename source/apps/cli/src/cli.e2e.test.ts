@@ -316,6 +316,141 @@ describe("workspace-connected CLI", () => {
     expect((await cli(workspace, "check", task.id, "--item", "9", "--json")).exitCode).toBe(1);
   });
 
+  test("fields, ordering, comments, attachments, templates and bulk work from the command line", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-features-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const run = async (...args: string[]) => {
+      const result = await cli(workspace, ...args, "--json");
+      return {
+        code: result.exitCode,
+        data: result.stdout.toString() ? JSON.parse(result.stdout.toString()) : null,
+        err: result.stderr.toString(),
+      };
+    };
+    const group = (await run("group", "create", "--title", "Features")).data;
+    const make = async (title: string, ...extra: string[]) =>
+      (await run("create", "--title", title, "--group", group.id, ...extra)).data;
+    const a = await make("Alpha", "--estimate", "3", "--add-watcher", "ann");
+    const b = await make("Beta");
+    const c = await make("Gamma");
+    expect(a.estimate).toBe(3);
+    expect(a.watchers).toEqual(["ann"]);
+    const names = async () => (await run("list")).data.map((task: { name: string }) => task.name);
+    expect(await names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect((await run("move", c.id, "--before", a.id)).code).toBe(0);
+    expect(await names()).toEqual(["Gamma", "Alpha", "Beta"]);
+    expect((await run("move", c.id, "--after", b.id)).code).toBe(0);
+    expect(await names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect((await run("move", c.id)).code).toBe(1);
+
+    const updated = (
+      await run(
+        "update",
+        b.id,
+        "--parent",
+        a.id,
+        "--link",
+        `blocks:${c.id}`,
+        "--repeat",
+        "week:2",
+        "--add-watcher",
+        "peter",
+        "--start",
+        "2026-11-02",
+      )
+    ).data;
+    expect(updated).toMatchObject({
+      parent: a.id,
+      links: [{ type: "blocks", task: c.id }],
+      recurrence: { every: "week", interval: 2 },
+    });
+    expect(
+      (
+        await run(
+          "update",
+          b.id,
+          "--parent",
+          "none",
+          "--link",
+          "none",
+          "--repeat",
+          "none",
+          "--remove-watcher",
+          "peter",
+        )
+      ).data.parent,
+    ).toBeUndefined();
+    expect((await run("update", b.id, "--parent", b.id)).code).toBe(1);
+    expect((await run("list", "--parent", a.id)).data).toEqual([]);
+
+    process.env.TASK_AUTHOR = "Peter";
+    try {
+      expect((await run("comment", a.id, "--text", "First note @ann")).data.total).toBe(1);
+      const comments = (await run("comments", a.id)).data;
+      expect(comments[0]).toMatchObject({ author: "Peter", text: "First note @ann" });
+      expect((await run("comment", a.id)).code).toBe(1);
+    } finally {
+      delete process.env.TASK_AUTHOR;
+    }
+    expect(
+      (await run("activity", a.id)).data.map((entry: { kind: string }) => entry.kind),
+    ).toContain("comment");
+
+    await Bun.write(join(root, "note.txt"), "hello");
+    const attached = (await run("attach", a.id, join(root, "note.txt"))).data;
+    expect(attached.attachments[0]).toMatchObject({ kind: "file", name: "note.txt", size: 5 });
+    const linked = (await run("attach", a.id, "https://example.com/spec", "--name", "Spec")).data;
+    expect(linked.attachments).toHaveLength(2);
+    expect((await run("attach", a.id, join(root, "missing.txt"))).code).toBe(1);
+    expect((await run("detach", a.id, "note.txt")).data.attachments).toHaveLength(1);
+
+    await Bun.write(
+      join(root, "template.md"),
+      "# Template\n\n## Goal\nWhy.\n\n## Acceptance checklist\n- [ ] One\n",
+    );
+    expect(
+      (
+        await run(
+          "template",
+          "create",
+          "--title",
+          "Standard",
+          "--body-file",
+          join(root, "template.md"),
+          "--priority",
+          "high",
+          "--estimate",
+          "2",
+        )
+      ).code,
+    ).toBe(0);
+    const templates = (await run("template", "list")).data;
+    expect(templates.map((template: { name: string }) => template.name)).toEqual(["Standard"]);
+    const fromTemplate = (
+      await run(
+        "create",
+        "--title",
+        "From template",
+        "--group",
+        group.id,
+        "--template",
+        templates[0].id,
+      )
+    ).data;
+    expect(fromTemplate.priority).toBe("high");
+    expect(fromTemplate.estimate).toBe(2);
+
+    const other = (await run("group", "create", "--title", "Other")).data;
+    const bulk = (
+      await run("bulk", a.id, "TSK-NOPE", b.id, "--priority", "low", "--group", other.id)
+    ).data;
+    expect(bulk.map((result: { ok: boolean }) => result.ok)).toEqual([true, false, true]);
+    expect((await run("bulk", a.id, "TSK-NOPE", "--priority", "low")).code).toBe(1);
+    const moved = (await run("list", "--group", other.id)).data;
+    expect(moved.map((task: { name: string }) => task.name).sort()).toEqual(["Alpha", "Beta"]);
+  });
+
   test("init configures a fresh project and supports a custom workspace", async () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-init-"));
     const project = join(root, "custom-project");
