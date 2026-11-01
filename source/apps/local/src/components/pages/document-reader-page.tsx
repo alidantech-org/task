@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@task/ui";
+import { resolveLink } from "@task/workspace/links/resolve";
 import { ArrowLeft, RotateCcw, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,40 +9,12 @@ import { useEffect, useState } from "react";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { detailRows } from "@/lib/document-details";
 import { restartSectionEntrance } from "@/lib/entrance";
-import { buildLinkContext } from "@/lib/link-context";
-import { toggleMarkdownCheckbox } from "@/lib/markdown";
+import { buildLinkContext, internalHref } from "@/lib/link-context";
+import { extractLinks, headingEntries, toggleMarkdownCheckbox } from "@/lib/markdown";
 
-type HeadingEntry = { level: number; title: string; id: string };
 type LinkedSearchResult = { id: string };
-
-function documentHeadings(markdown: string): HeadingEntry[] {
-  const occurrences = new Map<string, number>();
-  let inCodeFence = false;
-  return markdown.split("\n").flatMap((line) => {
-    if (/^\s*```/.test(line)) {
-      inCodeFence = !inCodeFence;
-      return [];
-    }
-    if (inCodeFence) return [];
-    const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (!match) return [];
-    const level = match[1].length;
-    const title = match[2]
-      .replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/[`*_~]/g, "")
-      .trim();
-    const slug = `h-${title
-      .toLocaleLowerCase()
-      .replace(/[^\w]+/g, "-")
-      .replace(/^-|-$/g, "")}`;
-    const occurrence = occurrences.get(slug) ?? 0;
-    occurrences.set(slug, occurrence + 1);
-    return level === 2 || level === 3
-      ? [{ level, title, id: occurrence ? `${slug}-${occurrence + 1}` : slug }]
-      : [];
-  });
-}
 
 function wordCount(body: string): number {
   return (body.match(/\S+/g) ?? []).length;
@@ -100,6 +73,39 @@ export function DocumentReaderPage() {
       active = false;
     };
   }, [activeSelected?.id]);
+  const [activeHeading, setActiveHeading] = useState<string | null>(null);
+  const bodyText = detail?.body ?? "";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Follow the reading position of the open document.
+  useEffect(() => {
+    if (mode !== "read") return;
+    const root = document.querySelector<HTMLElement>(".body");
+    const ids = headingEntries(bodyText)
+      .filter((heading) => heading.level > 1 && heading.level < 4)
+      .map((heading) => heading.id);
+    if (!root || ids.length === 0) return;
+    const update = () => {
+      const top = root.getBoundingClientRect().top + 90;
+      let current: string | null = ids[0] ?? null;
+      for (const id of ids) {
+        const element = document.getElementById(id);
+        if (element && element.getBoundingClientRect().top <= top) current = id;
+      }
+      setActiveHeading(current);
+    };
+    update();
+    root.addEventListener("scroll", update, { passive: true });
+    return () => root.removeEventListener("scroll", update);
+  }, [bodyText, mode, activeSelected?.id]);
+  function goToHeading(id: string) {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    setActiveHeading(id);
+    window.history.replaceState(null, "", `#${id}`);
+  }
   if (!activeSelected || !detail)
     return (
       <div className="mx-auto max-w-3xl py-16 text-center">
@@ -108,6 +114,7 @@ export function DocumentReaderPage() {
       </div>
     );
   const documentId = activeSelected.id;
+  const linkContext = buildLinkContext(workspace, records, activeSelected.path);
   async function save() {
     setSaving(true);
     try {
@@ -123,9 +130,13 @@ export function DocumentReaderPage() {
     if (next !== current.body) await saveBody(next);
   }
   const dirty = draft !== detail.body;
-  const headings = documentHeadings(detail.body).filter(
+  const headings = headingEntries(detail.body).filter(
     (heading) => heading.level > 1 && heading.level < 4,
   );
+  const sources = extractLinks(detail.body)
+    .map((link) => ({ link, target: resolveLink(link.href, linkContext) }))
+    .filter((entry) => entry.target.kind !== "blocked" && entry.target.kind !== "anchor");
+  const details = detailRows(activeSelected);
   const linkedRecords = linkedIds
     .map((id) => records.find((record) => record.id === id))
     .filter((record): record is NonNullable<typeof record> =>
@@ -274,7 +285,7 @@ export function DocumentReaderPage() {
                 body={detail.body}
                 className="mdb"
                 headingAnchors
-                linkContext={buildLinkContext(workspace, records, activeSelected.path)}
+                linkContext={linkContext}
                 onNavigate={(href) => router.push(href)}
                 knownWikiLinks={records.map((record) => record.id)}
                 onWikiLink={(id) => {
@@ -290,13 +301,48 @@ export function DocumentReaderPage() {
               {headings.length > 0 && <h4>On this page</h4>}
               {headings.map((heading) => (
                 <a
-                  className={heading.level === 3 ? "l3" : ""}
+                  className={`${heading.level === 3 ? "l3" : ""} ${activeHeading === heading.id ? "on" : ""}`.trim()}
                   href={`#${heading.id}`}
+                  aria-current={activeHeading === heading.id ? "location" : undefined}
                   key={heading.id}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    goToHeading(heading.id);
+                  }}
                 >
                   {heading.title}
                 </a>
               ))}
+              {sources.length > 0 && <h4>Sources</h4>}
+              {sources.map(({ link, target }) =>
+                target.kind === "external" ? (
+                  <a
+                    className="toc-link source"
+                    key={link.href}
+                    href={target.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={target.href}
+                  >
+                    {link.label}
+                    <small>{new URL(target.href).host || target.href}</small>
+                  </a>
+                ) : (
+                  <button
+                    className="toc-link source"
+                    key={link.href}
+                    type="button"
+                    title={link.href}
+                    onClick={() => {
+                      const internal = internalHref(target);
+                      if (internal) router.push(internal);
+                    }}
+                  >
+                    {link.label}
+                    <small>{target.kind === "file" ? target.path : "Document"}</small>
+                  </button>
+                ),
+              )}
               <h4>Linked from</h4>
               {linkedRecords.length > 0 ? (
                 linkedRecords.map((record) => (
@@ -307,11 +353,34 @@ export function DocumentReaderPage() {
                     onClick={() => openRecord(record)}
                   >
                     {record.type === "task" ? `${record.id} · ${record.name}` : record.name}
+                    <small>
+                      {record.type}
+                      {record.status ? ` · ${record.status}` : ""}
+                    </small>
                   </button>
                 ))
               ) : (
                 <small className="sub toc-empty">Nothing links here yet.</small>
               )}
+              <h4>Details</h4>
+              <dl className="toc-details">
+                {details.map((row) => (
+                  <div key={row.label}>
+                    <dt>{row.label}</dt>
+                    <dd>
+                      {row.values ? (
+                        <span className="toc-chips">
+                          {row.values.map((value) => (
+                            <span key={value}>{value}</span>
+                          ))}
+                        </span>
+                      ) : (
+                        row.value
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </aside>
           </div>
         ) : (
@@ -322,7 +391,7 @@ export function DocumentReaderPage() {
                   body={draft}
                   className="mdb"
                   headingAnchors
-                  linkContext={buildLinkContext(workspace, records, activeSelected.path)}
+                  linkContext={linkContext}
                   onNavigate={(href) => router.push(href)}
                   knownWikiLinks={records.map((record) => record.id)}
                   onWikiLink={(id) => {

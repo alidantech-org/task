@@ -2319,3 +2319,62 @@ button.more:hover {
 .custom-select.icon .custom-select-dot {
   margin: 0;
 }
+
+/* Document reader rail: active heading, sources and details */
+.toc a {
+  scroll-margin-top: 12px;
+}
+.toc a.on {
+  color: var(--acc);
+  border-left-color: var(--acc);
+  font-weight: 600;
+}
+.mdb :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 16px;
+}
+.doc-reader-match .toc-link.source,
+.doc-reader-match .toc-link {
+  display: block;
+  text-decoration: none;
+}
+.doc-reader-match .toc-link small {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--mut);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toc-details {
+  margin: 0;
+  padding: 0 0 12px 12px;
+  border-left: 2px solid var(--ln);
+}
+.toc-details > div {
+  display: flex;
+  flex-direction: column;
+  padding: 3px 0;
+}
+.toc-details dt {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+.toc-details dd {
+  margin: 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.toc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.toc-chips span {
+  padding: 0 7px;
+  border-radius: 99px;
+  background: var(--accs);
+  color: var(--acc);
+  font-size: 11.5px;
+}

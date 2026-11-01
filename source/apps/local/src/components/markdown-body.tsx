@@ -6,6 +6,7 @@ import ReactMarkdown, { type Components, defaultUrlTransform } from "react-markd
 import remarkGfm from "remark-gfm";
 import { CodeViewer } from "@/components/code-viewer";
 import { internalHref } from "@/lib/link-context";
+import { headingEntries } from "@/lib/markdown";
 
 type MarkdownBodyProps = {
   body: string;
@@ -41,24 +42,18 @@ export function MarkdownBody({
   onNavigate,
 }: MarkdownBodyProps) {
   let checkboxIndex = 0;
-  const headingCounts = new Map<string, number>();
-  const anchorForHeading = (children: ReactNode) => {
-    const text = Children.toArray(children).map(headingText).join("");
-    const slug = `h-${text
-      .toLocaleLowerCase()
-      .replace(/[^\w]+/g, "-")
-      .replace(/^-|-$/g, "")}`;
-    const occurrence = headingCounts.get(slug) ?? 0;
-    headingCounts.set(slug, occurrence + 1);
-    return occurrence ? `${slug}-${occurrence + 1}` : slug;
-  };
+  const headingIds = new Map(
+    (headingAnchors ? headingEntries(body) : []).map((entry) => [entry.line, entry.id]),
+  );
   const heading =
     (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6") =>
-    ({ children, ...props }: { children?: ReactNode }) => (
-      <Tag {...props} id={headingAnchors ? anchorForHeading(children) : undefined}>
-        {children}
-      </Tag>
-    );
+    ({
+      children,
+      node,
+    }: {
+      children?: ReactNode;
+      node?: { position?: { start: { line: number } } };
+    }) => <Tag id={headingIds.get(node?.position?.start.line ?? -1)}>{children}</Tag>;
   const components: Components = {
     input: ({ type, checked, disabled, ...props }) => {
       if (type !== "checkbox") return <input type={type} disabled={disabled} {...props} />;
