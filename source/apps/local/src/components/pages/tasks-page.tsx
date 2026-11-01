@@ -10,16 +10,20 @@ import {
   List,
   Pencil,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { BoardTask, StatusDropZone } from "@/components/calendar";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { TaskChanges } from "@/components/task-changes";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CustomSelect } from "@/components/ui/select";
+import { buildLinkContext } from "@/lib/link-context";
 import { markdownChecklistProgress, toggleMarkdownCheckbox } from "@/lib/markdown";
 
 const columns = ["planned", "in-progress", "blocked", "completed"] as const;
@@ -30,11 +34,19 @@ const labels: Record<string, string> = {
   completed: "Completed",
   archived: "Archived",
 };
+function openSegment(task: {
+  extra?: { tracking?: { segments: readonly { ended_at?: string }[] } };
+}): boolean {
+  const last = task.extra?.tracking?.segments.at(-1);
+  return Boolean(last && !last.ended_at);
+}
+
 export function TasksPageContent() {
   const [drawerHost, setDrawerHost] = useState<HTMLElement | null>(null);
   const {
     archivedTasks,
     groups,
+    workspace,
     records,
     visibleTasks,
     taskFilter,
@@ -49,11 +61,14 @@ export function TasksPageContent() {
     updateTaskPriority,
     setTaskHiddenFromRecent,
     setTaskArchived,
+    deleteRecord,
+    startTaskTracking,
     selected,
     detail,
     saveBody,
     setNotice,
   } = useWorkspaceApp();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -137,6 +152,19 @@ export function TasksPageContent() {
                 onClick={() => openRecord(null)}
               >
                 <X className="size-4" />
+              </Button>
+              {!openSegment(selected) && selected.status !== "completed" && (
+                <Button variant="outline" onClick={() => void startTaskTracking(selected)}>
+                  Track changes
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                aria-label="Delete task"
+                onClick={() => void deleteRecord({ id: selected.id, name: selected.name }, "task")}
+              >
+                <Trash2 className="size-4" />
+                Delete
               </Button>
               <Button
                 variant="outline"
@@ -227,6 +255,7 @@ export function TasksPageContent() {
               </Button>
             )}
           </div>
+          <TaskChanges taskId={selected.id} refreshKey={`${selected.contentHash}`} />
           {editing ? (
             <MarkdownEditor
               key={`${selected.id}:${detail.contentHash}`}
@@ -238,6 +267,8 @@ export function TasksPageContent() {
             <MarkdownBody
               body={detail.body}
               className="mdb sm"
+              linkContext={buildLinkContext(workspace, records, selected.path)}
+              onNavigate={(href) => router.push(href)}
               knownWikiLinks={records.map((record) => record.id)}
               onWikiLink={(id) => {
                 const record = records.find((item) => item.id === id);

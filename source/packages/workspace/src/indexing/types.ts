@@ -6,10 +6,22 @@ export type WorkspaceContext = {
 export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed" | "archived";
 export type TaskStatusChange = { from: TaskStatus; to: TaskStatus; at: string };
 export type TaskPriority = "low" | "medium" | "high";
+export type TrackingSummary = { files: number; insertions: number; deletions: number };
+export type TrackingSegment = {
+  base_ref: string;
+  base_commit?: string;
+  started_at: string;
+  end_ref?: string;
+  ended_at?: string;
+  end_error?: string;
+  summary?: TrackingSummary;
+};
+export type TaskTracking = { segments: readonly TrackingSegment[] };
 export type TaskExtra = Readonly<
   Record<string, unknown> & {
     status_history?: readonly TaskStatusChange[];
     hidden_from_recent?: boolean;
+    tracking?: TaskTracking;
   }
 >;
 export type DocumentMetadata = {
@@ -96,6 +108,8 @@ export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "descripti
   title?: string;
   dueAt?: string | null;
   hiddenFromRecent?: boolean;
+  /** Record git snapshots while the task is in progress (requires a git repository). */
+  track?: boolean;
 };
 export type DocumentCreateInput = {
   title: string;

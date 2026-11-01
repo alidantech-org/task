@@ -54,10 +54,10 @@ describe("workspace resolution", () => {
     const initialized = await initializeWorkspace({ projectRoot: root, workspace: ".tasks" });
     expect(initialized.root).toBe(join(root, ".tasks"));
     expect(initialized.createdWorkspace).toBe(true);
-    expect(await readFile(join(root, "task.yaml"), "utf8")).toBe('workspace: ".tasks"\n');
+    expect(await readFile(join(root, "task.yaml"), "utf8")).toContain('\nworkspace: ".tasks"\n');
     expect(await readFile(join(root, "README.md"), "utf8")).toBe("keep me\n");
     await expect(initializeWorkspace({ projectRoot: root })).rejects.toThrow("already exists");
-    expect(await readFile(join(root, "task.yaml"), "utf8")).toBe('workspace: ".tasks"\n');
+    expect(await readFile(join(root, "task.yaml"), "utf8")).toContain('\nworkspace: ".tasks"\n');
   });
 
   test("rejects workspace paths outside the project", async () => {

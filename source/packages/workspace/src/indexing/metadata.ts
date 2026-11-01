@@ -129,6 +129,7 @@ export function parseFrontmatter(content: string): {
     if (hiddenFromRecent !== undefined && typeof hiddenFromRecent !== "boolean") {
       throw new Error("extra.hidden_from_recent must be a boolean");
     }
+    validateTracking((extra as Record<string, unknown> | undefined)?.tracking);
     if (history !== undefined) {
       if (!Array.isArray(history)) throw new Error("extra.status_history must be a sequence");
       let previous: TaskStatus | undefined;
@@ -203,4 +204,54 @@ export function parseMetadata(content: string): DocumentMetadata {
 
 export function serializeMarkdown(values: Record<string, unknown>, body: string): string {
   return `---\n${Bun.YAML.stringify(values).trimEnd()}\n---\n${body.startsWith("\n") || body.length === 0 ? "" : "\n"}${body}`;
+}
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: Record<string, unknown>, key: string, label: string): void {
+  if (value[key] !== undefined && typeof value[key] !== "string")
+    throw new Error(`${label}.${key} must be a string`);
+}
+
+function validateTracking(tracking: unknown): void {
+  if (tracking === undefined) return;
+  if (!isMapping(tracking) || Object.keys(tracking).some((key) => key !== "segments"))
+    throw new Error("extra.tracking must be a mapping with only segments");
+  if (!Array.isArray(tracking.segments))
+    throw new Error("extra.tracking.segments must be a sequence");
+  for (const [index, segment] of tracking.segments.entries()) {
+    const label = `extra.tracking.segments[${index}]`;
+    if (!isMapping(segment)) throw new Error(`${label} must be a mapping`);
+    const allowed = [
+      "base_ref",
+      "base_commit",
+      "started_at",
+      "end_ref",
+      "ended_at",
+      "end_error",
+      "summary",
+    ];
+    if (Object.keys(segment).some((key) => !allowed.includes(key)))
+      throw new Error(`${label} has an unknown field`);
+    if (typeof segment.base_ref !== "string" || !segment.base_ref)
+      throw new Error(`${label}.base_ref must be a string`);
+    if (typeof segment.started_at !== "string" || Number.isNaN(Date.parse(segment.started_at)))
+      throw new Error(`${label}.started_at must be a timestamp`);
+    for (const key of ["base_commit", "end_ref", "end_error"]) optionalString(segment, key, label);
+    if (segment.ended_at !== undefined && Number.isNaN(Date.parse(String(segment.ended_at))))
+      throw new Error(`${label}.ended_at must be a timestamp`);
+    if (segment.summary !== undefined) {
+      const summary = segment.summary;
+      if (
+        !isMapping(summary) ||
+        Object.keys(summary).some((key) => !["files", "insertions", "deletions"].includes(key)) ||
+        !["files", "insertions", "deletions"].every(
+          (key) => Number.isInteger(summary[key]) && Number(summary[key]) >= 0,
+        )
+      )
+        throw new Error(`${label}.summary is invalid`);
+    }
+  }
 }

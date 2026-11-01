@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { WorkspaceError } from "@task/workspace/errors";
+import { endTracking, startTracking } from "@task/workspace/git/tracking";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
 import { parseFrontmatter, serializeMarkdown } from "@task/workspace/indexing/metadata";
 import type {
@@ -10,11 +11,19 @@ import type {
   TaskCreateInput,
   TaskGroup,
   TaskStatus,
+  TaskTracking,
   TaskUpdateInput,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
 import { findDocument, findGroup, listTaskGroups } from "@task/workspace/operations/query";
 import { resolveSafeWorkspacePath } from "@task/workspace/paths/safe-path";
+
+function existingTracking(extra: Record<string, unknown>): TaskTracking | undefined {
+  const tracking = extra.tracking;
+  return typeof tracking === "object" && tracking !== null && "segments" in tracking
+    ? (tracking as TaskTracking)
+    : undefined;
+}
 
 function id(prefix: "TSK" | "GRP" | "DOC"): string {
   return `${prefix}-${randomBytes(6).toString("hex").toUpperCase()}`;
@@ -335,8 +344,8 @@ export async function updateTask(
   input: TaskUpdateInput,
   expectedHash?: string,
 ): Promise<{ task: DocumentSummary; completedGroup?: TaskGroup }> {
-  let index = await buildWorkspaceIndex(context);
-  let task = findDocument(index, identifier);
+  const index = await buildWorkspaceIndex(context);
+  const task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
     throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
   if (expectedHash !== undefined && task.contentHash !== expectedHash) {
@@ -383,6 +392,16 @@ export async function updateTask(
       ...history,
       { from: previousStatus, to: input.status, at: updatedAt },
     ];
+  }
+  const nextStatus = input.status ?? previousStatus;
+  const segments = [...(existingTracking(existingExtra)?.segments ?? [])];
+  const open = segments.at(-1);
+  if (open && !open.ended_at && nextStatus !== "in-progress") {
+    segments[segments.length - 1] = await endTracking(context, task.metadata.id, open);
+    nextExtra.tracking = { segments };
+  } else if (input.track && nextStatus === "in-progress" && !(open && !open.ended_at)) {
+    segments.push(await startTracking(context, task.metadata.id));
+    nextExtra.tracking = { segments };
   }
   if (Object.keys(nextExtra).length > 0) values.extra = nextExtra;
   values.updated_at = updatedAt;
@@ -566,9 +585,6 @@ export async function restoreGroup(
   const group = await findGroup(context, identifier);
   if (!group.archived) throw new WorkspaceError("invalid_input", "Task group is not archived");
   const index = await buildWorkspaceIndex(context);
-  const tasks = [...index.documents.values()].filter(
-    (task) => task.metadata.type === "task" && task.path.startsWith(`${group.path}/`),
-  );
   const destination = `${getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
   const sourcePath = await resolveSafeWorkspacePath(context.root, group.path);
   const destinationPath = await resolveSafeWorkspacePath(context.root, destination);

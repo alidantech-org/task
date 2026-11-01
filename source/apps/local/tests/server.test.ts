@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createTask, createTaskGroup } from "@task/workspace";
 import {
   closeLocalWorkspace,
   configureWorkspace,
@@ -45,6 +46,163 @@ describe("local runtime HTTP boundary", () => {
 
     const wrongMethod = await fetch(`${baseUrl}/health/live`, { method: "POST" });
     expect(wrongMethod.status).toBe(405);
+  });
+
+  test("deletes a document into the temp trash and restores it with capability protection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-delete-"));
+    const previousTrash = process.env.TASK_TRASH_DIR;
+    process.env.TASK_TRASH_DIR = join(root, "trash");
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      const documentPath = join(root, "tasks", "gone.md");
+      await writeFile(
+        documentPath,
+        "---\nid: D-GONE\nname: Gone\ntype: documentation\n---\n\nbody\n",
+      );
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const { capability } = (await (await fetch(`${baseUrl}/internal/session`)).json()) as {
+        capability: string;
+      };
+      const headers = { "x-task-capability": capability };
+
+      const unauthorised = await fetch(`${baseUrl}/workspace/document/D-GONE`, {
+        method: "DELETE",
+      });
+      expect(unauthorised.status).toBe(401);
+      expect(await Bun.file(documentPath).exists()).toBe(true);
+
+      const deleted = await fetch(`${baseUrl}/workspace/document/D-GONE`, {
+        method: "DELETE",
+        headers,
+      });
+      expect(deleted.status).toBe(200);
+      const { trash } = (await deleted.json()) as { trash: { trashId: string; trashPath: string } };
+      expect(trash.trashPath.startsWith(join(root, "trash"))).toBe(true);
+      expect(await Bun.file(documentPath).exists()).toBe(false);
+
+      const listed = (await (await fetch(`${baseUrl}/workspace/trash`, { headers })).json()) as {
+        entries: { trashId: string }[];
+      };
+      expect(listed.entries.map((entry) => entry.trashId)).toEqual([trash.trashId]);
+
+      const missing = await fetch(`${baseUrl}/workspace/document/NOPE`, {
+        method: "DELETE",
+        headers,
+      });
+      expect(missing.status).toBe(404);
+
+      const restored = await fetch(`${baseUrl}/workspace/trash/${trash.trashId}/restore`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(restored.status).toBe(200);
+      expect(await readFile(documentPath, "utf8")).toContain("id: D-GONE");
+    } finally {
+      if (previousTrash === undefined) delete process.env.TASK_TRASH_DIR;
+      else process.env.TASK_TRASH_DIR = previousTrash;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("serves tracked git changes and hides protected diffs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-changes-"));
+    try {
+      const git = (...args: string[]) =>
+        Bun.spawnSync(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", ...args], {
+          cwd: root,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+      git("init", "-q");
+      await writeFile(join(root, "app.txt"), "base\n");
+      git("add", "-A");
+      git("commit", "-q", "-m", "base");
+      const context = { root: join(root, "tasks"), projectRoot: root };
+      await mkdir(context.root, { recursive: true });
+      const group = await createTaskGroup(context, "Work");
+      const task = await createTask(context, { title: "Tracked", group: group.id });
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const { capability } = (await (await fetch(`${baseUrl}/internal/session`)).json()) as {
+        capability: string;
+      };
+      const headers = { "x-task-capability": capability, "content-type": "application/json" };
+      const hash = task.contentHash;
+      const started = await fetch(`${baseUrl}/workspace/task/${task.metadata.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ status: "in-progress", track: true, expectedHash: hash }),
+      });
+      expect(started.status).toBe(200);
+      await writeFile(join(root, "app.txt"), "base\nchanged\n");
+      await writeFile(join(root, ".env"), "SECRET=1\n");
+      const changes = (await (
+        await fetch(`${baseUrl}/workspace/task/${task.metadata.id}/changes`, { headers })
+      ).json()) as { tracked: boolean; changes: { files: { path: string; denied: boolean }[] } };
+      expect(changes.tracked).toBe(true);
+      expect(changes.changes.files.map((file) => file.path)).toEqual([".env", "app.txt"]);
+      const diff = await fetch(
+        `${baseUrl}/workspace/task/${task.metadata.id}/changes/diff?path=app.txt`,
+        { headers },
+      );
+      expect(((await diff.json()) as { diff: string }).diff).toContain("+changed");
+      const protectedDiff = await fetch(
+        `${baseUrl}/workspace/task/${task.metadata.id}/changes/diff?path=.env`,
+        { headers },
+      );
+      expect(protectedDiff.status).toBe(400);
+      const unauthorised = await fetch(`${baseUrl}/workspace/task/${task.metadata.id}/changes`);
+      expect(unauthorised.status).toBe(401);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("serves project files read-only and refuses protected or escaping paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-files-"));
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      await mkdir(join(root, "src"), { recursive: true });
+      await writeFile(join(root, "src", "app.ts"), "export const a = 1;\n");
+      await writeFile(join(root, ".env"), "SECRET=1\n");
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const { capability } = (await (await fetch(`${baseUrl}/internal/session`)).json()) as {
+        capability: string;
+      };
+      const headers = { "x-task-capability": capability };
+      const get = (path: string, init: RequestInit = { headers }) =>
+        fetch(`${baseUrl}/workspace/project-file?path=${encodeURIComponent(path)}`, init);
+      const ok = await get("src/app.ts");
+      expect(ok.status).toBe(200);
+      expect(((await ok.json()) as { file: { language: string } }).file.language).toBe(
+        "typescript",
+      );
+      expect((await get(".env")).status).toBe(400);
+      expect((await get("../outside")).status).toBe(400);
+      expect((await get("missing.ts")).status).toBe(404);
+      expect((await get("src/app.ts", {})).status).toBe(401);
+      expect((await get("src/app.ts", { method: "POST", headers })).status).toBe(404);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("streams external workspace edits to live dashboard subscribers", async () => {

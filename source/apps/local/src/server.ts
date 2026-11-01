@@ -11,14 +11,24 @@ import {
   createDocument,
   createTask,
   createTaskGroup,
+  deleteDocument,
+  deleteTask,
+  deleteTaskGroup,
+  findDocument,
   getDocument,
+  getTaskChanges,
+  getTaskFileDiff,
   getWorkspaceOverview,
   type IndexChange,
   listTaskGroups,
+  listTrash,
   migrateLegacyGroups,
   type ResolvedWorkspace,
+  readProjectFile,
+  readWorkspaceIndex,
   replaceDocumentBody,
   resolveWorkspace,
+  restoreFromTrash,
   restoreTask,
   restoreTaskGroup,
   searchWorkspace,
@@ -712,7 +722,16 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       }
       if (path.startsWith("/workspace/task/") && method === "PATCH") {
         const input = await readJson(request);
-        assertKeys(input, ["status", "dueAt", "priority", "hiddenFromRecent", "expectedHash"]);
+        assertKeys(input, [
+          "status",
+          "dueAt",
+          "priority",
+          "hiddenFromRecent",
+          "track",
+          "expectedHash",
+        ]);
+        if (input.track !== undefined && typeof input.track !== "boolean")
+          throw new Error("track must be a boolean");
         if (input.dueAt !== undefined && input.dueAt !== null && typeof input.dueAt !== "string") {
           throw new Error("dueAt must be a date string or null");
         }
@@ -751,6 +770,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
             ...(typeof input.hiddenFromRecent === "boolean"
               ? { hiddenFromRecent: input.hiddenFromRecent }
               : {}),
+            ...(input.track === true ? { track: true } : {}),
           },
           stringField(input, "expectedHash"),
         );
@@ -784,6 +804,81 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
           response,
           200,
           { task, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/project-file" && method === "GET") {
+        const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+        const file = await readProjectFile(workspace, query.get("path") ?? "");
+        send(response, 200, { file, requestId }, requestId);
+        return;
+      }
+      const changesRoute = /^\/workspace\/task\/([^/]+)\/changes(\/diff)?$/.exec(path);
+      if (changesRoute && method === "GET") {
+        const identifier = decodeURIComponent(changesRoute[1] ?? "");
+        const task = findDocument(await readWorkspaceIndex(workspace), identifier);
+        const segments = task.metadata.extra?.tracking?.segments ?? [];
+        if (changesRoute[2]) {
+          const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+          const diff = await getTaskFileDiff(
+            workspace,
+            segments,
+            Number(query.get("segment") ?? segments.length - 1),
+            query.get("path") ?? "",
+          );
+          send(response, 200, { ...diff, requestId }, requestId);
+          return;
+        }
+        send(
+          response,
+          200,
+          {
+            changes: await getTaskChanges(workspace, segments),
+            tracked: segments.length > 0,
+            requestId,
+          },
+          requestId,
+        );
+        return;
+      }
+      const deleteTarget = /^\/workspace\/(task|document|task-groups)\/(.+)$/.exec(path);
+      if (deleteTarget && method === "DELETE") {
+        const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+        const options = {
+          force: query.get("force") === "1",
+          cascade: query.get("cascade") === "1",
+        };
+        const identifier = decodeURIComponent(deleteTarget[2] ?? "");
+        const entry =
+          deleteTarget[1] === "task"
+            ? await deleteTask(workspace, identifier, options)
+            : deleteTarget[1] === "document"
+              ? await deleteDocument(workspace, identifier)
+              : await deleteTaskGroup(workspace, identifier, options);
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { trash: entry, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/trash" && method === "GET") {
+        send(response, 200, { entries: await listTrash(workspace), requestId }, requestId);
+        return;
+      }
+      if (path.startsWith("/workspace/trash/") && path.endsWith("/restore") && method === "POST") {
+        const trashId = decodeURIComponent(
+          path.slice("/workspace/trash/".length, -"/restore".length),
+        );
+        const entry = await restoreFromTrash(workspace, trashId);
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { trash: entry, workspace: await snapshot(monitor.index), requestId },
           requestId,
         );
         return;

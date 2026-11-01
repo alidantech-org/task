@@ -20,6 +20,20 @@ function isWithin(root: string, path: string): boolean {
   return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 
+function configTemplate(workspace: string): string {
+  return [
+    "# Task project configuration.",
+    "# This project is managed with Task (taskcode; the `task` and `tc` commands are aliases).",
+    "# Work records, documents, decisions and handoffs live in the workspace directory below as",
+    "# Markdown files with YAML frontmatter. Read <workspace>/README.md for how the tool works,",
+    "# and run `task validate` after editing any file inside the workspace.",
+    "",
+    "# Directory (relative to this file) that Task manages.",
+    `workspace: ${JSON.stringify(workspace)}`,
+    "",
+  ].join("\n");
+}
+
 export async function initializeWorkspace(
   options: InitializeWorkspaceOptions,
 ): Promise<InitializedWorkspace> {
@@ -74,7 +88,7 @@ export async function initializeWorkspace(
   let file: FileHandle | undefined;
   try {
     file = await open(configPath, "wx", 0o644);
-    await file.writeFile(`workspace: ${JSON.stringify(workspace)}\n`, "utf8");
+    await file.writeFile(configTemplate(workspace), "utf8");
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "EEXIST")
       throw new WorkspaceError(

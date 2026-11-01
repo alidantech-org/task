@@ -4,11 +4,25 @@ export type {
   InitializeWorkspaceOptions,
 } from "@task/workspace/config/setup";
 export { initializeWorkspace } from "@task/workspace/config/setup";
+export type { DiffFile, DiffHunk, DiffLine } from "@task/workspace/diff/parse";
+export { parseUnifiedDiff } from "@task/workspace/diff/parse";
 export { shouldIgnoreDirectory } from "@task/workspace/discovery/ignore";
 export { discoverMarkdown } from "@task/workspace/discovery/scan";
 export { classifyDocument } from "@task/workspace/documents/classify";
 export { readWorkspaceDocument } from "@task/workspace/documents/read";
 export { WorkspaceError } from "@task/workspace/errors";
+export { languageForPath } from "@task/workspace/files/language";
+export type { ProjectFile } from "@task/workspace/files/read";
+export { maxProjectFileBytes, readProjectFile } from "@task/workspace/files/read";
+export { isDeniedPath } from "@task/workspace/git/deny";
+export type { FileChange, SegmentChanges, TaskChanges } from "@task/workspace/git/tracking";
+export {
+  endTracking,
+  findGitRoot,
+  getTaskChanges,
+  getTaskFileDiff,
+  startTracking,
+} from "@task/workspace/git/tracking";
 export { buildWorkspaceIndex, reconcileWorkspaceIndex } from "@task/workspace/indexing/index";
 export type {
   DocumentCreateInput,
@@ -28,14 +42,24 @@ export type {
   WorkspaceContext,
   WorkspaceIndex,
 } from "@task/workspace/indexing/types";
+export type { LinkContext, LinkTarget } from "@task/workspace/links/resolve";
+export { resolveLink } from "@task/workspace/links/resolve";
+export type { DeleteOptions, TrashEntry, TrashKind } from "@task/workspace/operations/delete";
+export {
+  deleteDocument,
+  deleteTask,
+  deleteTaskGroup,
+  listTrash,
+  restoreFromTrash,
+} from "@task/workspace/operations/delete";
 export {
   archiveTask,
   archiveTaskGroup,
   autoArchiveResolvedGroups,
-  getTaskGroupWeekPath,
   createDocument,
   createTask,
   createTaskGroup,
+  getTaskGroupWeekPath,
   migrateLegacyGroups,
   replaceDocumentBody,
   restoreTask,
@@ -58,6 +82,8 @@ export {
 export type { ValidationScope } from "@task/workspace/operations/validate";
 export { validateWorkspace } from "@task/workspace/operations/validate";
 export { resolveSafeWorkspacePath, resolveWorkspacePath } from "@task/workspace/paths/safe-path";
+export type { SelfDocumentationResult } from "@task/workspace/project/self-docs";
+export { writeSelfDocumentation } from "@task/workspace/project/self-docs";
 export type {
   ProjectFact,
   ProjectFinding,

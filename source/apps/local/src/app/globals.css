@@ -716,3 +716,114 @@ svg { display: inline-block; vertical-align: baseline; }
   .calendar-unscheduled-toggle { gap: 4px; padding-inline: 8px; }
   .calendar-unscheduled-toggle > span { display: none; }
 }
+
+/* Code and diff viewer */
+.code-viewer {
+  border: 1px solid var(--border, rgb(128 128 128 / 0.3));
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
+  background: var(--code-bg, rgb(128 128 128 / 0.06));
+}
+.code-viewer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+  border-bottom: 1px solid var(--border, rgb(128 128 128 / 0.3));
+}
+.code-viewer-bar button {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  text-transform: none;
+  cursor: pointer;
+}
+.code-viewer-body {
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.55;
+  padding: 6px 0;
+}
+.code-line {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px;
+  min-width: max-content;
+}
+.code-line code {
+  white-space: pre;
+  font: inherit;
+}
+.code-ln {
+  flex: none;
+  min-width: 3ch;
+  text-align: right;
+  opacity: 0.45;
+  user-select: none;
+}
+.code-line.hl {
+  background: rgb(234 179 8 / 0.18);
+}
+.code-token {
+  color: var(--code-light);
+}
+html[data-theme="dark"] .code-token,
+.dark .code-token {
+  color: var(--code-dark);
+}
+.diff-hunk-header {
+  padding: 2px 12px;
+  opacity: 0.6;
+  background: rgb(56 189 248 / 0.08);
+}
+.diff-add {
+  background: rgb(34 197 94 / 0.14);
+}
+.diff-delete {
+  background: rgb(239 68 68 / 0.14);
+}
+.diff-marker {
+  flex: none;
+  width: 1ch;
+  opacity: 0.7;
+}
+.task-markdown .code-viewer {
+  margin: 0.75rem 0;
+}
+
+.task-changes {
+  margin: 1rem 0;
+}
+.task-change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.task-change-list > li > button {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 6px;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.task-change-list > li > button > :nth-child(2) {
+  flex: 1;
+}
+.diff-status {
+  width: 1.5ch;
+  opacity: 0.7;
+}
+.diff-stat-add {
+  color: rgb(22 163 74);
+}
+.diff-stat-del {
+  color: rgb(220 38 38);
+}

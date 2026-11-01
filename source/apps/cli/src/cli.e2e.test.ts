@@ -124,6 +124,85 @@ describe("workspace-connected CLI", () => {
     expect(unsupported.stderr.toString()).toContain("Unknown option: --watch");
   });
 
+  test("delete moves items to the temp trash, requires --yes and can be undone", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-delete-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    process.env.TASK_TRASH_DIR = join(root, "trash");
+    try {
+      const group = JSON.parse(
+        (await cli(workspace, "group", "create", "--title", "Doomed", "--json")).stdout.toString(),
+      );
+      const task = JSON.parse(
+        (
+          await cli(workspace, "create", "--title", "Doomed task", "--group", group.id, "--json")
+        ).stdout.toString(),
+      );
+      const refused = await cli(workspace, "delete", task.id, "--json");
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stderr.toString() + refused.stdout.toString()).toContain("--yes");
+      const deleted = await cli(workspace, "delete", task.id, "--yes", "--json");
+      expect(deleted.exitCode).toBe(0);
+      const entry = JSON.parse(deleted.stdout.toString());
+      expect(entry.trashPath.startsWith(join(root, "trash"))).toBe(true);
+      const listed = JSON.parse(
+        (await cli(workspace, "trash", "list", "--json")).stdout.toString(),
+      );
+      expect(listed.map((item: { trashId: string }) => item.trashId)).toEqual([entry.trashId]);
+      const blocked = await cli(workspace, "delete", group.id, "--yes", "--json");
+      expect(blocked.exitCode).toBe(0);
+      const groupEntry = JSON.parse(blocked.stdout.toString());
+      expect(groupEntry.kind).toBe("task-group");
+      const restored = await cli(workspace, "undelete", groupEntry.trashId, "--json");
+      expect(restored.exitCode).toBe(0);
+      const missing = await cli(workspace, "undelete", "20200101T000000Z-TSK-000000", "--json");
+      expect(missing.exitCode).toBe(1);
+    } finally {
+      delete process.env.TASK_TRASH_DIR;
+    }
+  });
+
+  test("start --track records git changes until the task leaves in-progress", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-track-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", ...args], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    git("init", "-q");
+    await Bun.write(join(root, "app.txt"), "base\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "base");
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Track", "--json")).stdout.toString(),
+    );
+    const task = JSON.parse(
+      (
+        await cli(workspace, "create", "--title", "Tracked", "--group", group.id, "--json")
+      ).stdout.toString(),
+    );
+    expect((await cli(workspace, "changes", task.id, "--json")).exitCode).toBe(1);
+    expect((await cli(workspace, "start", task.id, "--track", "--json")).exitCode).toBe(0);
+    await Bun.write(join(root, "app.txt"), "base\nchanged\n");
+    await Bun.write(join(root, "added.txt"), "x\n");
+    const live = JSON.parse((await cli(workspace, "changes", task.id, "--json")).stdout.toString());
+    expect(live.segments[0].live).toBe(true);
+    expect(live.totals.files).toBe(2);
+    expect(
+      (await cli(workspace, "update", task.id, "--status", "completed", "--json")).exitCode,
+    ).toBe(0);
+    const done = JSON.parse((await cli(workspace, "changes", task.id, "--json")).stdout.toString());
+    expect(done.segments[0].live).toBe(false);
+    expect(done.files.map((file: { path: string }) => file.path)).toEqual(["added.txt", "app.txt"]);
+    const diff = await cli(workspace, "changes", task.id, "--diff", "app.txt");
+    expect(diff.stdout.toString()).toContain("+changed");
+    const text = await cli(workspace, "changes", task.id);
+    expect(text.stdout.toString()).toContain("2 file(s)");
+  });
+
   test("init configures a fresh project and supports a custom workspace", async () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-init-"));
     const project = join(root, "custom-project");
@@ -134,7 +213,15 @@ describe("workspace-connected CLI", () => {
     );
     expect(initialized.exitCode).toBe(0);
     expect(JSON.parse(initialized.stdout.toString()).workspace).toBe(join(project, ".tasks"));
-    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+    const config = await Bun.file(join(project, "task.yaml")).text();
+    expect(config).toContain('\nworkspace: ".tasks"\n');
+    expect(config).toContain("managed with Task");
+    const guide = await Bun.file(join(project, ".tasks", "README.md")).text();
+    expect(guide.startsWith("---\n")).toBe(true);
+    expect(guide).toContain("type: workspace-guide");
+    const agents = await Bun.file(join(project, "AGENTS.md")).text();
+    expect(agents).toContain("<!-- BEGIN TASK MANAGED TASK-TOOL -->");
+    expect(agents).toContain(".tasks/README.md");
     const overview = await Bun.spawnSync(
       ["bun", "run", join(import.meta.dir, "index.ts"), "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
@@ -147,7 +234,19 @@ describe("workspace-connected CLI", () => {
     );
     expect(repeated.exitCode).toBe(1);
     expect(repeated.stderr.toString()).toContain("already exists");
-    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+    expect(await Bun.file(join(project, "task.yaml")).text()).toBe(config);
+    await Bun.write(join(project, "AGENTS.md"), `# Mine\n\n${agents}\n\nKeep this.\n`);
+    const refreshed = Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--refresh-docs", "--json"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(refreshed.exitCode).toBe(0);
+    const refreshedAgents = await Bun.file(join(project, "AGENTS.md")).text();
+    expect(refreshedAgents.match(/BEGIN TASK MANAGED TASK-TOOL/g)).toHaveLength(1);
+    expect(refreshedAgents).toContain("Keep this.");
+    expect(JSON.parse(refreshed.stdout.toString()).documentation.skipped).toContain(
+      join(project, ".tasks", "README.md"),
+    );
   });
 
   test("accepts the project root as an explicit workspace", async () => {

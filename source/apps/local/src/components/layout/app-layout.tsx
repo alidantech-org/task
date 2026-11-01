@@ -70,6 +70,7 @@ type RecordItem = {
     status_history?: readonly StatusChange[];
     hidden_from_recent?: boolean;
     archived_from?: string;
+    tracking?: { segments: readonly { ended_at?: string }[] };
   };
   size: number;
   modifiedAt: number;
@@ -164,6 +165,12 @@ type WorkspaceAppContextValue = {
   updateTaskPriority(task: RecordItem, priority: string): Promise<void>;
   setTaskHiddenFromRecent(task: RecordItem, hidden: boolean): Promise<void>;
   setTaskArchived(task: RecordItem, archived: boolean): Promise<void>;
+  deleteRecord(
+    record: { id: string; name: string },
+    kind: "task" | "document" | "task-group",
+  ): Promise<boolean>;
+  undoDelete(): Promise<void>;
+  startTaskTracking(task: RecordItem): Promise<void>;
   saveBody(body: string): Promise<boolean>;
   setNotice(message: string): void;
   refresh(): Promise<void>;
@@ -328,6 +335,7 @@ export function App({
   const [completedLimit, setCompletedLimit] = useState(5);
   const [completedLimitReady, setCompletedLimitReady] = useState(false);
   const [notice, setNotice] = useState("");
+  const [undoTrashId, setUndoTrashId] = useState("");
   const [dialog, setDialog] = useState(false);
   const [title, setTitle] = useState("");
   const [group, setGroup] = useState("");
@@ -355,7 +363,10 @@ export function App({
     return () => window.clearTimeout(timer);
   }, [liveFlashId]);
   useEffect(() => {
-    if (!notice) return;
+    if (!notice) {
+      setUndoTrashId("");
+      return;
+    }
     const timer = window.setTimeout(() => setNotice(""), 4500);
     return () => window.clearTimeout(timer);
   }, [notice]);
@@ -947,6 +958,65 @@ export function App({
       setNotice(error instanceof Error ? error.message : "Could not update task archive state");
     }
   }
+  async function deleteRecord(
+    record: { id: string; name: string },
+    kind: "task" | "document" | "task-group",
+  ): Promise<boolean> {
+    if (
+      !window.confirm(
+        `Delete "${record.name}"? It moves to the system temp folder and can be undone until that folder is cleared.`,
+      )
+    )
+      return false;
+    try {
+      const route = kind === "task-group" ? "task-groups" : kind;
+      const cascade = kind === "task-group" ? "?cascade=1" : "";
+      const response = await fetch(
+        `/api/runtime/workspace/${route}/${encodeURIComponent(record.id)}${cascade}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.clone().json()) as { trash?: { trashId: string } };
+      await acceptWorkspaceResponse(response);
+      openRecord(null);
+      setNotice(`Deleted ${record.name}`);
+      setUndoTrashId(payload.trash?.trashId ?? "");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete");
+      return false;
+    }
+  }
+  async function startTaskTracking(task: RecordItem): Promise<void> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: "in-progress",
+          track: true,
+          expectedHash: task.contentHash,
+        }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice("Tracking git changes for this task");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not start tracking");
+    }
+  }
+  async function undoDelete(): Promise<void> {
+    const trashId = undoTrashId;
+    if (!trashId) return;
+    try {
+      const response = await fetch(
+        `/api/runtime/workspace/trash/${encodeURIComponent(trashId)}/restore`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+      );
+      await acceptWorkspaceResponse(response);
+      setNotice("Restored");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not restore");
+    }
+  }
   async function updateTaskStatus(task: RecordItem, status: string): Promise<void> {
     try {
       const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
@@ -1407,6 +1477,9 @@ export function App({
           updateTaskPriority,
           setTaskHiddenFromRecent,
           setTaskArchived,
+          deleteRecord,
+          undoDelete,
+          startTaskTracking,
           saveBody: persistDocumentBody,
           setNotice,
           refresh,
@@ -1796,6 +1869,11 @@ export function App({
           )}
           <div role="status" className={`toast ${notice ? "on" : ""}`}>
             <span>{notice}</span>
+            {undoTrashId && (
+              <button type="button" onClick={() => void undoDelete()}>
+                Undo
+              </button>
+            )}
             <button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}>
               ×
             </button>

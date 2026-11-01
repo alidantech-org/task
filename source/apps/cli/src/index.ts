@@ -14,24 +14,32 @@ import {
   createProjectSetupPlan,
   createTask,
   createTaskGroup,
+  deleteDocument,
+  deleteTask,
+  deleteTaskGroup,
   findDocument,
   getDocument,
+  getTaskChanges,
+  getTaskFileDiff,
   initializeWorkspace,
   inspectProject,
   listDocuments,
   listTaskGroups,
-  migrateLegacyGroups,
   listTasks,
+  listTrash,
   listWorkspaceTree,
+  migrateLegacyGroups,
   readWorkspaceIndex,
   replaceDocumentBody,
   resolveWorkspace,
+  restoreFromTrash,
   restoreTask,
   restoreTaskGroup,
   searchWorkspace,
   updateTask,
   validateWorkspace,
   WorkspaceError,
+  writeSelfDocumentation,
 } from "@task/workspace";
 import type { ParsedArgs } from "#/command";
 import {
@@ -102,7 +110,8 @@ function printHelp(): void {
     "",
     "Commands:",
     "  (no command)           Workspace overview",
-    "  init [--workspace <path>]  Initialize this project for Task",
+    "  init [--workspace <path>]  Initialize this project for Task and document it for agents",
+    "  init --refresh-docs    Refresh the workspace guide and AGENTS.md block of an existing workspace",
     "  project inspect       Inspect repository and suggest guidance (read-only)",
     "  setup                 Review and apply project documentation and agent guidance",
     "  setup plan --json     Emit a reviewed setup plan without writing files",
@@ -122,6 +131,11 @@ function printHelp(): void {
     "  edit <id>              Edit the Markdown body in $EDITOR",
     "  archive <task-or-group> Archive a task or group",
     "  restore <task-or-group> Restore an archived task or group",
+    "  start <id> [--track]   Move a task to in-progress, optionally recording git changes",
+    "  changes <id> [--diff <path>]  Show git changes made while the task was in progress",
+    "  delete <id> [--yes] [--force] [--cascade]  Move a task, group or document to the temp trash",
+    "  undelete <trash-id>    Restore a deleted item from the trash",
+    "  trash list             List items that can be undeleted",
     "  validate [scope]       Validate tasks, docs, links, and references",
     "  docs list|show|search|tree|open|create",
     "  index status|rebuild|verify",
@@ -327,26 +341,50 @@ async function main(): Promise<void> {
   if (args.options.has("version") || args.command === "version")
     return line(`task ${metadata.version}`);
   if (args.command === "init") {
-    const workspace = optionString(args, "workspace") ?? "tasks";
-    const initialized = await initializeWorkspace({ projectRoot: process.cwd(), workspace });
+    const refreshDocs = args.options.has("refresh-docs");
+    let projectRoot: string;
+    let workspaceRoot: string;
+    let createdWorkspace = false;
+    if (refreshDocs) {
+      const existing = await resolveWorkspace({
+        workspaceOverride: optionString(args, "workspace"),
+        environmentWorkspaceRoot: process.env.TASK_WORKSPACE_ROOT,
+      });
+      projectRoot = existing.projectRoot;
+      workspaceRoot = existing.root;
+    } else {
+      const initialized = await initializeWorkspace({
+        projectRoot: process.cwd(),
+        workspace: optionString(args, "workspace") ?? "tasks",
+      });
+      projectRoot = initialized.projectRoot;
+      workspaceRoot = initialized.root;
+      createdWorkspace = initialized.createdWorkspace;
+    }
+    const documentation = await writeSelfDocumentation({ projectRoot, workspaceRoot });
     const result = {
-      workspace: initialized.root,
-      config: join(initialized.projectRoot, "task.yaml"),
-      createdWorkspace: initialized.createdWorkspace,
+      workspace: workspaceRoot,
+      config: join(projectRoot, "task.yaml"),
+      createdWorkspace,
+      documentation,
     };
     if (json) output(result);
     else {
       line(
         renderMessage(
           "success",
-          `Initialized Task workspace · ${initialized.root}`,
+          `${refreshDocs ? "Refreshed Task documentation" : "Initialized Task workspace"} · ${workspaceRoot}`,
           stdoutStyle,
           stdoutSymbols,
         ),
         "requested",
       );
-      line(`  ${stdoutStyle.muted("task.yaml")}`, "requested");
-      line('  Start with: task group create --title "My project"', "requested");
+      if (!refreshDocs) line(`  ${stdoutStyle.muted("task.yaml")}`, "requested");
+      for (const path of documentation.written)
+        line(`  ${stdoutStyle.muted(`wrote ${path}`)}`, "requested");
+      for (const path of documentation.skipped)
+        line(`  ${stdoutStyle.muted(`kept existing ${path}`)}`, "requested");
+      if (!refreshDocs) line('  Start with: task group create --title "My project"', "requested");
     }
     return;
   }
@@ -798,8 +836,9 @@ async function main(): Promise<void> {
     const tags = args.options.has("tag") ? optionList(args, "tag") : undefined;
     const dependsOn = args.options.has("depends-on") ? optionList(args, "depends-on") : undefined;
     const extra = extraOption();
+    const track = args.options.has("track") ? true : undefined;
     if (
-      ![title, status, priority, assignee, project, dueAt, tags, dependsOn, extra].some(
+      ![title, status, priority, assignee, project, dueAt, tags, dependsOn, extra, track].some(
         (value) => value !== undefined,
       )
     )
@@ -814,6 +853,7 @@ async function main(): Promise<void> {
       tags,
       dependsOn,
       extra,
+      track,
     });
     if (json) output(record(result.task));
     else {
@@ -852,6 +892,158 @@ async function main(): Promise<void> {
           stdoutSymbols,
         ),
       );
+    return;
+  }
+
+  if (command === "start") {
+    const identifier = args.positionals[0];
+    if (!identifier)
+      throw new WorkspaceError("invalid_input", "Usage: task start <task-id> [--track]");
+    const result = await updateTask(context, identifier, {
+      status: "in-progress",
+      track: args.options.has("track"),
+    });
+    if (json) output(record(result.task));
+    else
+      line(
+        renderMessage(
+          "success",
+          `Started ${result.task.metadata.id} · ${result.task.metadata.name}${args.options.has("track") ? " · tracking git changes" : ""}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+    return;
+  }
+
+  if (command === "changes") {
+    const identifier = args.positionals[0];
+    if (!identifier)
+      throw new WorkspaceError("invalid_input", "Usage: task changes <task-id> [--diff <path>]");
+    const task = findDocument(await readWorkspaceIndex(context), identifier);
+    const segments = task.metadata.extra?.tracking?.segments ?? [];
+    if (!segments.length)
+      throw new WorkspaceError(
+        "not_found",
+        `${task.metadata.id} has no tracked changes; use task start ${task.metadata.id} --track`,
+      );
+    const diffPath = optionString(args, "diff");
+    if (diffPath !== undefined) {
+      const segmentOption = optionString(args, "segment");
+      const result = await getTaskFileDiff(
+        context,
+        segments,
+        segmentOption === undefined ? segments.length - 1 : Number(segmentOption),
+        diffPath,
+      );
+      if (json) output(result);
+      else process.stdout.write(result.diff);
+      return;
+    }
+    const changes = await getTaskChanges(context, segments);
+    if (json) output(changes);
+    else if (!changes.available) line(`Tracking unavailable: ${changes.reason}`, "requested");
+    else {
+      const statusLetter = {
+        added: "A",
+        modified: "M",
+        deleted: "D",
+        renamed: "R",
+        copied: "C",
+        other: "?",
+      };
+      for (const file of changes.files)
+        line(
+          `${statusLetter[file.status]}  ${file.path}${file.denied ? " (contents hidden)" : ""}  +${file.insertions} -${file.deletions}`,
+          "requested",
+        );
+      line(
+        `${changes.totals.files} file(s) · +${changes.totals.insertions} -${changes.totals.deletions} · ${Math.round(changes.durationMs / 60000)} min in progress${changes.segments.some((segment) => segment.live) ? " · live" : ""}`,
+        "requested",
+      );
+      for (const [name, summary] of Object.entries(changes.byDirectory))
+        line(
+          `  ${name}: ${summary.files} file(s) +${summary.insertions} -${summary.deletions}`,
+          "requested",
+        );
+    }
+    return;
+  }
+
+  if (command === "delete") {
+    const identifier = args.positionals[0];
+    if (!identifier) throw new WorkspaceError("invalid_input", "Usage: task delete <id>");
+    if (!args.options.has("yes")) {
+      if (json || !process.stdin.isTTY || !process.stdout.isTTY)
+        throw new WorkspaceError(
+          "invalid_input",
+          "Deleting requires --yes outside an interactive terminal",
+        );
+      const accepted = await confirm({
+        message: `Delete ${identifier}? It moves to the OS temp folder and can be restored with task undelete until that folder is cleared.`,
+      });
+      if (isCancel(accepted) || !accepted) return line("Cancelled", "requested");
+    }
+    const options = { force: args.options.has("force"), cascade: args.options.has("cascade") };
+    let entry: Awaited<ReturnType<typeof deleteTask>>;
+    try {
+      if (identifier.startsWith("GRP-")) throw new WorkspaceError("not_found", identifier);
+      const found = findDocument(await readWorkspaceIndex(context), identifier);
+      entry =
+        found.metadata.type === "task"
+          ? await deleteTask(context, identifier, options)
+          : await deleteDocument(context, identifier);
+    } catch (error) {
+      if (!(error instanceof WorkspaceError) || error.code !== "not_found") throw error;
+      entry = await deleteTaskGroup(context, identifier, options);
+    }
+    if (json) output(entry);
+    else {
+      line(
+        renderMessage(
+          "success",
+          `Deleted ${entry.name} · ${entry.originalPath}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+      line(
+        `  ${stdoutStyle.muted(`Undo with: task undelete ${entry.trashId} (temporary; the OS may clear ${entry.trashPath})`)}`,
+        "requested",
+      );
+    }
+    return;
+  }
+
+  if (command === "undelete") {
+    const trashId = args.positionals[0];
+    if (!trashId) throw new WorkspaceError("invalid_input", "Usage: task undelete <trash-id>");
+    const entry = await restoreFromTrash(context, trashId);
+    if (json) output(entry);
+    else
+      line(
+        renderMessage(
+          "success",
+          `Restored ${entry.name} · ${entry.originalPath}`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
+    return;
+  }
+
+  if (command === "trash") {
+    if ((args.positionals[0] ?? "list") !== "list")
+      throw new WorkspaceError("invalid_input", "Usage: task trash list");
+    const entries = await listTrash(context);
+    if (json) output(entries);
+    else if (!entries.length) line("Trash is empty", "requested");
+    else
+      for (const entry of entries)
+        line(`${entry.trashId}  ${entry.kind}  ${entry.name}  ${entry.originalPath}`, "requested");
     return;
   }
 

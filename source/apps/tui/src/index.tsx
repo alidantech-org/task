@@ -2,12 +2,15 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import type { DocumentSummary, TaskGroup, WorkspaceContext } from "@task/workspace";
 import {
+  deleteDocument,
+  deleteTask,
   getDocument,
   listDocuments,
   listTaskGroups,
   listTasks,
   readWorkspaceIndex,
   resolveWorkspace,
+  restoreFromTrash,
 } from "@task/workspace";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -172,6 +175,9 @@ function WorkspaceTui({
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<DocumentSummary | undefined>();
+  const [lastTrashId, setLastTrashId] = useState("");
+  const [status, setStatus] = useState("");
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
   const section: NavigationSection = navigationSections[sectionIndex] ?? "Tasks";
@@ -226,6 +232,14 @@ function WorkspaceTui({
     visibleAgents.length,
   ]);
 
+  const reload = () =>
+    loadWorkspace().then((next) => {
+      setWorkspaceData(next);
+      setWorkspaceError(undefined);
+    });
+  const selectedGuidance = (items: DocumentSummary[]): DocumentSummary | undefined =>
+    items[clampIndex(selectedIndex, items.length)];
+
   useKeyboard((key) => {
     if (showHelp && (key.name === "escape" || key.name === "?")) {
       setShowHelp(false);
@@ -252,6 +266,30 @@ function WorkspaceTui({
       }
       return;
     }
+    if (pendingDelete) {
+      const target = pendingDelete;
+      setPendingDelete(undefined);
+      if (key.name !== "y") {
+        setStatus("Delete cancelled");
+        return;
+      }
+      const context = workspaceData?.context;
+      if (!context) return;
+      void (
+        target.metadata.type === "task"
+          ? deleteTask(context, target.metadata.id)
+          : deleteDocument(context, target.metadata.id)
+      )
+        .then(async (entry) => {
+          setLastTrashId(entry.trashId);
+          setStatus(`Deleted ${target.metadata.name} · press u to undo`);
+          await reload();
+        })
+        .catch((reason: unknown) =>
+          setStatus(reason instanceof Error ? reason.message : String(reason)),
+        );
+      return;
+    }
     if (key.name === "escape") {
       renderer.destroy();
       return;
@@ -270,6 +308,37 @@ function WorkspaceTui({
           setWorkspaceData(undefined);
           setWorkspaceError(reason instanceof Error ? reason.message : String(reason));
         });
+      return;
+    }
+    if (key.name === "d") {
+      const target =
+        section === "Tasks"
+          ? selectedTask
+          : section === "Docs"
+            ? selectedDocument
+            : section === "Rules"
+              ? selectedGuidance(visibleRules)
+              : section === "Agents"
+                ? selectedGuidance(visibleAgents)
+                : undefined;
+      if (target) {
+        setPendingDelete(target);
+        setStatus(`Delete "${target.metadata.name}"? Press y to confirm, any other key cancels`);
+      }
+      return;
+    }
+    if (key.name === "u") {
+      const context = workspaceData?.context;
+      if (!lastTrashId || !context) return;
+      void restoreFromTrash(context, lastTrashId)
+        .then(async () => {
+          setLastTrashId("");
+          setStatus("Restored");
+          await reload();
+        })
+        .catch((reason: unknown) =>
+          setStatus(reason instanceof Error ? reason.message : String(reason)),
+        );
       return;
     }
     if (key.name === "?" || (key.name === "/" && key.shift)) {
@@ -660,13 +729,14 @@ function WorkspaceTui({
       {showHelp ? (
         <box style={{ border: true, borderColor: "#38BDF8", paddingX: 1 }}>
           <text fg="#E2E8F0">
-            ? Help · ←/→ Sections · ↑/↓ Select · / Search · r Refresh · q Quit
+            ? Help · ←/→ Sections · ↑/↓ Select · / Search · r Refresh · d Delete · u Undo · q Quit
           </text>
         </box>
       ) : null}
+      {status ? <text fg="#FBBF24"> {status}</text> : null}
       <box style={{ flexDirection: "row", justifyContent: "space-between", paddingX: 1 }}>
         <text fg="#64748B">←/→ Sections · ↑/↓ Select · / Search · r Refresh · ? Help</text>
-        <text fg="#64748B">q Quit · Read only</text>
+        <text fg="#64748B">d Delete · u Undo · q Quit</text>
       </box>
     </box>
   );

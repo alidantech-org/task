@@ -1,13 +1,15 @@
 "use client";
 
 import { Button } from "@task/ui";
-import { ArrowLeft, RotateCcw, Save } from "lucide-react";
+import { ArrowLeft, RotateCcw, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { restartSectionEntrance } from "@/lib/entrance";
+import { buildLinkContext } from "@/lib/link-context";
 import { toggleMarkdownCheckbox } from "@/lib/markdown";
 
 type HeadingEntry = { level: number; title: string; id: string };
@@ -55,9 +57,11 @@ export function DocumentReaderPage() {
   const {
     activeSelected,
     detail,
+    workspace,
     records,
     openRecord,
     saveBody,
+    deleteRecord,
     setNotice,
     documentDraft: draft,
     setDocumentDraft: setDraft,
@@ -65,6 +69,7 @@ export function DocumentReaderPage() {
     documentConflict,
     resolveDocumentConflict,
   } = useWorkspaceApp();
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [mode, setMode] = useState<"read" | "edit" | "split">("read");
@@ -143,6 +148,20 @@ export function DocumentReaderPage() {
         <span className="gap" />
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {dirty && <span className="pill document-dirty">Unsaved</span>}
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Delete document"
+            onClick={() =>
+              void deleteRecord({ id: documentId, name: activeSelected.name }, "document").then(
+                (deleted) => {
+                  if (deleted) router.push("/documents");
+                },
+              )
+            }
+          >
+            <Trash2 className="size-4" /> Delete
+          </Button>
           {mode !== "read" && (
             <>
               <Button
@@ -255,6 +274,8 @@ export function DocumentReaderPage() {
                 body={detail.body}
                 className="mdb"
                 headingAnchors
+                linkContext={buildLinkContext(workspace, records, activeSelected.path)}
+                onNavigate={(href) => router.push(href)}
                 knownWikiLinks={records.map((record) => record.id)}
                 onWikiLink={(id) => {
                   const record = records.find((item) => item.id === id);
@@ -301,6 +322,8 @@ export function DocumentReaderPage() {
                   body={draft}
                   className="mdb"
                   headingAnchors
+                  linkContext={buildLinkContext(workspace, records, activeSelected.path)}
+                  onNavigate={(href) => router.push(href)}
                   knownWikiLinks={records.map((record) => record.id)}
                   onWikiLink={(id) => {
                     const record = records.find((item) => item.id === id);
