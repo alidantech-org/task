@@ -1572,3 +1572,95 @@ html[data-theme="dark"] .code-token,
   padding: 0;
   background: none;
 }
+
+/* Task cards: two-line title, tiny one-line group, tidy footer, hover open button */
+.card-shell {
+  position: relative;
+  margin-bottom: 8px;
+}
+.card-shell .card {
+  margin-bottom: 0;
+  padding: 10px 12px 10px;
+}
+.card-shell .ct {
+  display: -webkit-box;
+  margin-bottom: 4px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.card-shell .cg {
+  margin-bottom: 8px;
+  overflow: hidden;
+  font-size: 10.5px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--mut);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-shell .cf {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--mut);
+}
+.card-shell .cf-end {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.card-shell .bar {
+  margin-top: 8px;
+}
+.card-open {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--ln);
+  border-radius: 8px;
+  background: var(--pn);
+  color: var(--mut);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.card-shell:hover .card-open,
+.card-shell:focus-within .card-open,
+.mini:hover .card-open,
+.mini:focus-within .card-open,
+.card-open:focus-visible {
+  opacity: 1;
+}
+.card-open:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+@media (hover: none) {
+  .card-open {
+    opacity: 1;
+  }
+}
+.mini {
+  position: relative;
+}
+.mini .card-open {
+  top: 50%;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+}
+.card-shell .ct {
+  padding-right: 20px;
+}

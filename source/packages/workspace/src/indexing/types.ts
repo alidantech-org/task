@@ -53,6 +53,8 @@ export type DocumentSummary = {
   contentHash: string;
   changeTime: number;
   fileId: string;
+  /** Checkbox progress of a task body, computed while indexing. */
+  checklist?: { completed: number; total: number };
 };
 export type ValidationCategory =
   | "metadata"

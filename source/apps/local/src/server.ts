@@ -330,6 +330,7 @@ async function snapshot(index: WorkspaceIndex): Promise<object> {
       modifiedAt: document.modifiedAt,
       contentHash: document.contentHash,
       classification: document.classification,
+      checklist: document.checklist,
     })),
     diagnostics: index.diagnostics,
   };

@@ -109,20 +109,7 @@ export function TasksPageContent() {
                 {displayed
                   .filter((task) => task.status === status)
                   .map((task) => (
-                    <BoardTask
-                      key={task.id}
-                      task={{
-                        ...task,
-                        groupName:
-                          groups.find(
-                            (item) =>
-                              task.path === item.path || task.path.startsWith(`${item.path}/`),
-                          )?.name ??
-                          task.project ??
-                          "Ungrouped",
-                      }}
-                      onSelect={() => openRecord(task)}
-                    />
+                    <BoardTask key={task.id} task={task} onSelect={() => openRecord(task)} />
                   ))}
                 {displayed.every((task) => task.status !== status) && (
                   <p className="sub text-center" style={{ padding: "30px 0" }}>
@@ -135,12 +122,7 @@ export function TasksPageContent() {
         ) : (
           <div>
             {displayed.map((task) => {
-              const groupName =
-                groups.find(
-                  (item) => task.path === item.path || task.path.startsWith(`${item.path}/`),
-                )?.name ??
-                task.project ??
-                "Ungrouped";
+              const groupName = task.groupName ?? "Ungrouped";
               const statusColor =
                 task.status === "blocked"
                   ? "var(--bl)"

@@ -1,8 +1,9 @@
 import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { discoverMarkdown } from "@task/workspace/discovery/scan";
+import { checklistProgress } from "@task/workspace/documents/checklist";
 import { classifyDocument } from "@task/workspace/documents/classify";
-import { hashContent, parseMetadata } from "@task/workspace/indexing/metadata";
+import { hashContent, parseFrontmatter, parseMetadata } from "@task/workspace/indexing/metadata";
 import type {
   DocumentSummary,
   ValidationDiagnostic,
@@ -52,6 +53,9 @@ async function scanWorkspaceIndex(
         contentHash,
         changeTime: stat.ctimeMs,
         fileId: `${stat.dev}:${stat.ino}`,
+        ...(metadata.type === "task"
+          ? { checklist: checklistProgress(parseFrontmatter(content).body) }
+          : {}),
       });
     } catch (error) {
       diagnostics.push({

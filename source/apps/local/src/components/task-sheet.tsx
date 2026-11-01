@@ -33,6 +33,7 @@ import { TaskChanges } from "@/components/task-changes";
 import { TaskOverview } from "@/components/task-overview";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CustomSelect } from "@/components/ui/select";
+import { groupForTask } from "@/lib/group";
 import { buildLinkContext, internalHref } from "@/lib/link-context";
 import {
   clampStoredWidth,
@@ -103,7 +104,7 @@ function formatDate(value: string | undefined): string {
 export function TaskSheet() {
   const {
     archivedTasks,
-    groups,
+    allGroups,
     workspace,
     records,
     openRecord,
@@ -219,7 +220,7 @@ export function TaskSheet() {
   const compact = effectiveWidth < compactTabsBelow;
   const compactEditors = effectiveWidth < compactEditorsBelow;
   const archived = archivedTasks.some((candidate) => candidate.id === task.id);
-  const group = groups.find((item) => task.path.startsWith(`${item.path}/`));
+  const group = groupForTask(task, allGroups);
   const quality = workspace?.quality ?? defaultQuality;
   const findings = quality.mode === "off" ? [] : assessTaskBody(body, quality);
   const linkContext = buildLinkContext(workspace, records, task.path);

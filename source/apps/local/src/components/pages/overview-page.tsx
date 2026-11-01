@@ -36,18 +36,6 @@ function DayTarget({ date, count, onOpen }: DayTargetProps) {
   );
 }
 
-function groupForTask(
-  path: string,
-  project: string | undefined,
-  groups: { name: string; path: string }[],
-): string {
-  return (
-    groups.find((group) => path === group.path || path.startsWith(`${group.path}/`))?.name ??
-    project ??
-    "Ungrouped"
-  );
-}
-
 function timeAgo(timestamp: number): string {
   const minutes = Math.round((Date.now() - timestamp) / 60_000);
   if (!Number.isFinite(minutes)) return "Completed";
@@ -59,7 +47,7 @@ function timeAgo(timestamp: number): string {
 
 export function OverviewPage() {
   const router = useRouter();
-  const { workspace, tasks, allTasks, groups, openRecord, updateTaskStatus } = useWorkspaceApp();
+  const { workspace, tasks, allTasks, openRecord, updateTaskStatus } = useWorkspaceApp();
   const active = tasks.filter((task) => task.status !== "completed" && task.status !== "archived");
   const todayKey = dateKey(new Date());
   const blocked = active.filter((task) => task.status === "blocked");
@@ -228,7 +216,7 @@ export function OverviewPage() {
                 <button type="button" className="t" onClick={() => openRecord(task)}>
                   <b>{task.name}</b>
                   <small>
-                    {task.id} · {groupForTask(task.path, task.project, groups)}
+                    {task.id} · {task.groupName ?? "Ungrouped"}
                     {task.due_at
                       ? ` · ${new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(`${task.due_at}T12:00:00`))}`
                       : ""}

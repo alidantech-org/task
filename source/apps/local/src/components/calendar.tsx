@@ -1,12 +1,12 @@
 "use client";
 
 import { useDraggable, useDroppable } from "@dnd-kit/react";
-import { ChevronLeft, PanelRight, Plus } from "lucide-react";
+import { ChevronLeft, PanelRight, PanelRightOpen, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
 import { restartSectionEntrance } from "@/lib/entrance";
-import { markdownChecklistProgress } from "@/lib/markdown";
+import { isOneOf, usePersistentState } from "@/lib/persistent-state";
 
 export type CalendarTask = {
   id: string;
@@ -20,10 +20,29 @@ export type CalendarTask = {
   priority?: string;
   assignee?: string;
   contentHash?: string;
+  checklist?: { completed: number; total: number };
 };
 
 function statusClass(status?: string): string {
   return `s-${status ?? "planned"}`;
+}
+
+function OpenButton({ onOpen, label }: { onOpen(): void; label: string }) {
+  return (
+    <button
+      type="button"
+      className="card-open"
+      aria-label={label}
+      title="Open task"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+    >
+      <PanelRightOpen className="size-3.5" />
+    </button>
+  );
 }
 
 function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): void }) {
@@ -46,6 +65,7 @@ function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): 
       >
         {task.name}
       </button>
+      <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
     </div>
   );
 }
@@ -139,8 +159,16 @@ export function CalendarView({
   );
   const appliedRequestedDate = useRef(requestedDate);
   const pendingRequestedDate = useRef<string | null>(null);
-  const [mode, setMode] = useState<"month" | "week">("month");
-  const [unscheduledVisibility, setUnscheduledVisibility] = useState<boolean | null>(null);
+  const [mode, setMode] = usePersistentState<"month" | "week">(
+    "calendar:mode",
+    "month",
+    isOneOf(["month", "week"] as const),
+  );
+  const [unscheduledVisibility, setUnscheduledVisibility] = usePersistentState<boolean | null>(
+    "calendar:tray",
+    null,
+    (value): value is boolean | null => value === null || typeof value === "boolean",
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the section entrance when switching calendar modes.
   useEffect(() => {
     restartSectionEntrance(document.querySelector<HTMLElement>(".body"));
@@ -259,7 +287,6 @@ export function CalendarView({
 }
 
 export function BoardTask({ task, onSelect }: { task: CalendarTask; onSelect(): void }) {
-  const [progress, setProgress] = useState(0);
   const { ref, handleRef, isDragging } = useDraggable({
     id: `task:${task.id}`,
     data: { taskId: task.id },
@@ -271,74 +298,74 @@ export function BoardTask({ task, onSelect }: { task: CalendarTask; onSelect(): 
   const overdue = Boolean(
     task.due_at && task.due_at < dateKey(new Date()) && task.status !== "completed",
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-fetch checklist state when the task record hash changes.
-  useEffect(() => {
-    let active = true;
-    setProgress(0);
-    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(task.id)}`, {
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as { document?: { body: string } };
-        if (!active || !response.ok || !payload.document) return;
-        const checklist = markdownChecklistProgress(payload.document.body);
-        setProgress(
-          checklist.total ? Math.round((checklist.completed / checklist.total) * 100) : 0,
-        );
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [task.contentHash, task.id]);
+  const progress = task.checklist?.total
+    ? Math.round((task.checklist.completed / task.checklist.total) * 100)
+    : 0;
   return (
-    <button
-      type="button"
-      ref={(element) => {
-        ref(element);
-        handleRef(element);
-      }}
-      data-tid={task.id}
-      className={`card w-full text-left ${isDragging ? "drag" : ""}`}
-      aria-label={`Open task ${task.id}: ${task.name}`}
-      onClick={onSelect}
-    >
-      <div className="ct">{task.name}</div>
-      <div className="cm">
-        <span className="tag">{task.groupName ?? task.project ?? "Ungrouped"}</span>
-        {task.due_at && (
-          <span className={`due ${overdue ? "late" : ""}`}>
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" />
-            </svg>
-            {new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
-              new Date(`${task.due_at}T12:00:00`),
-            )}
-          </span>
-        )}
-        {task.priority && <i className={`pri ${priorityClass}`} title={priorityLabel} />}
-        {task.assignee && <b className="av">{task.assignee.slice(0, 2).toLocaleUpperCase()}</b>}
-      </div>
-      <div
-        className="bar"
-        role="progressbar"
-        aria-label="Checklist completion"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress}
+    <div className="card-shell">
+      <button
+        type="button"
+        ref={(element) => {
+          ref(element);
+          handleRef(element);
+        }}
+        data-tid={task.id}
+        className={`card w-full text-left ${isDragging ? "drag" : ""}`}
+        aria-label={`Open task ${task.id}: ${task.name}`}
+        onClick={onSelect}
       >
-        <b style={{ width: `${progress}%` }} />
-      </div>
-    </button>
+        <div className="ct" title={task.name}>
+          {task.name}
+        </div>
+        <div className="cg" title={task.groupName}>
+          {task.groupName ?? task.project ?? "Ungrouped"}
+        </div>
+        <div className="cf">
+          {task.due_at ? (
+            <span className={`due ${overdue ? "late" : ""}`}>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              {new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
+                new Date(`${task.due_at}T12:00:00`),
+              )}
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className="cf-end">
+            {task.assignee && (
+              <b className="av" title={task.assignee}>
+                {task.assignee.slice(0, 2).toLocaleUpperCase()}
+              </b>
+            )}
+            {task.priority && <i className={`pri ${priorityClass}`} title={priorityLabel} />}
+          </span>
+        </div>
+        {task.checklist?.total ? (
+          <div
+            className="bar"
+            role="progressbar"
+            aria-label="Checklist completion"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <b style={{ width: `${progress}%` }} />
+          </div>
+        ) : null}
+      </button>
+      <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
+    </div>
   );
 }
 

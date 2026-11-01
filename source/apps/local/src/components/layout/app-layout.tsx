@@ -40,6 +40,7 @@ import { CustomSelect } from "@/components/ui/select";
 import { dateKey } from "@/lib/calendar";
 import { taskDropUpdate } from "@/lib/drop-mutation";
 import { restartSectionEntrance } from "@/lib/entrance";
+import { groupLabel } from "@/lib/group";
 import {
   clampSidebarWidth,
   isArchivedTask,
@@ -49,6 +50,7 @@ import {
   sortCompletedTasks,
   toggleSidebarPreference,
 } from "@/lib/overview";
+import { isOneOf, isString, isStringOrNull, usePersistentState } from "@/lib/persistent-state";
 import { parseQuickAdd } from "@/lib/quick-add";
 
 type RecordItem = {
@@ -67,7 +69,10 @@ type RecordItem = {
   updated_at?: string;
   archived_at?: string;
   depends_on?: string[];
+  groupName?: string;
+  checklist?: { completed: number; total: number };
   extra?: {
+    group_id?: string;
     status_history?: readonly StatusChange[];
     hidden_from_recent?: boolean;
     archived_from?: string;
@@ -144,6 +149,8 @@ type WorkspaceAppContextValue = {
   archivedTasks: RecordItem[];
   docs: RecordItem[];
   groups: Group[];
+  /** Every group including finished and archived ones, for naming a task's group. */
+  allGroups: Group[];
   connectionStatus: "connected" | "offline";
   workspaceError: string | null;
   taskFilter: string | null;
@@ -317,9 +324,17 @@ export function App({
   const pageBodyRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<Workspace | null>(rawWorkspace as Workspace | null);
   const section = sectionFromPath(pathname);
-  const [taskView, setTaskView] = useState<"List" | "Board" | "Calendar">("Board");
-  const [taskFilter, setTaskFilter] = useState<string | null>(null);
-  const [taskGroupFilter, setTaskGroupFilter] = useState("");
+  const [taskView, setTaskView] = usePersistentState<"List" | "Board" | "Calendar">(
+    "task:view",
+    "Board",
+    isOneOf(["List", "Board", "Calendar"] as const),
+  );
+  const [taskFilter, setTaskFilter] = usePersistentState<string | null>(
+    "task:filter",
+    null,
+    isStringOrNull,
+  );
+  const [taskGroupFilter, setTaskGroupFilter] = usePersistentState("task:group", "", isString);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [, setSearching] = useState(false);
@@ -358,7 +373,15 @@ export function App({
   const creatingDocument = useRef(false);
   const pendingTaskSelection = useRef<string | null>(null);
   const openDocumentRef = useRef({ id: "", editing: false, draft: "", body: "", hash: "" });
-  const records = workspace?.documents ?? [];
+  const records = useMemo(
+    () =>
+      (workspace?.documents ?? []).map((item) =>
+        item.type === "task"
+          ? { ...item, groupName: groupLabel(item, workspace?.groups ?? []) }
+          : item,
+      ),
+    [workspace],
+  );
   useEffect(() => {
     workspaceRef.current = workspace;
   }, [workspace]);
@@ -1474,6 +1497,7 @@ export function App({
           archivedTasks,
           docs,
           groups: (workspace?.groups ?? []).filter((group) => !group.archived && !group.finished),
+          allGroups: workspace?.groups ?? [],
           connectionStatus,
           workspaceError,
           taskFilter,
