@@ -1,5 +1,5 @@
 ---
-{id: TSK-401ABE12933F,name: "Task sheet tabs, filters, saved views, bulk actions and templates",type: task,status: planned,priority: high,created_at: 2026-11-01T04:27:38.200Z,updated_at: 2026-11-01T04:48:05.501Z,due_at: 2026-11-01,order: 6144}
+{id: TSK-401ABE12933F,name: "Task sheet tabs, filters, saved views, bulk actions and templates",type: task,status: completed,priority: high,created_at: 2026-11-01T04:27:38.200Z,updated_at: 2026-11-01T06:07:32.762Z,due_at: 2026-11-01,order: 6144,extra: {status_history: [{from: planned,to: completed,at: 2026-11-01T06:07:32.762Z}]}}
 ---
 
 # Task sheet tabs, filters, saved views, bulk actions and templates

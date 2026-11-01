@@ -46,6 +46,14 @@ Folders are created when first needed. The workspace location is set in `task.ya
 | `task delete <id> --yes` | Move a task, group (`--cascade`) or document to the OS temp trash; `--force` overrides dependents |
 | `task undelete <trash-id>` / `task trash list` | Restore or list deleted items (temporary: the OS may clear the trash) |
 | `task search <query>` | Search metadata and text |
+| `task comment <id> --text "…"` / `task comments <id>` | Add or read comments (stored under `## Comments` in the task) |
+| `task move <id> --before <id> \| --after <id> \| --group <id>` | Reorder a task within its group or move it to another group |
+| `task update <id> --parent <id> --link blocks:<id> --estimate N --add-watcher name --repeat week:2 --start YYYY-MM-DD` | Set hierarchy, relations, estimate, watchers, recurrence and start date (`none` clears) |
+| `task attach <id> <file\|url>` / `task detach <id> <name>` | Attach small files (up to 1 MB) or links |
+| `task template create --title … --body-file …` / `task create --template <id>` | Reusable task templates |
+| `task bulk <id…> --status … --priority … --group …` | Change many tasks; each result is reported |
+| `task activity <id>` | Timeline of status changes, comments, tracked changes and files |
+| `task list --mine --watching --parent <id> --sort order` | Filter and order tasks |
 | `task validate` | Validate frontmatter, links and references |
 | `task run` | Start the local dashboard |
 | `task tui` | Open the terminal interface |

@@ -165,3 +165,20 @@ Future work may define:
 
 - [Decision 0002: Frontmatter applies only inside the configured Task workspace](../../decisions/0002-markdown-frontmatter-contract.md)
 - [Decision 0003: Structured and extensible Markdown frontmatter schema](../../decisions/0003-structured-frontmatter-schema.md)
+
+## Optional task fields for ordering, hierarchy and collaboration
+
+Decided in [Decision 0016](../../decisions/0016-task-fields-ordering-and-relations.md) and [Decision 0017](../../decisions/0017-comments-and-attachments.md). All are optional top-level keys on `type: task` files and are validated strictly.
+
+| Field | Meaning |
+| --- | --- |
+| `order` | Finite number; a task's rank within its group. Older tasks fall back to the numeric file prefix (`NNN-`) scaled by 1024. |
+| `parent` | Id of another task (never itself, no cycles). Children are derived. |
+| `estimate` | Story points, zero or more. |
+| `links` | List of `{type: blocks \| relates \| duplicates, task: TSK-…}`; targets must exist. `depends_on` is unchanged. |
+| `watchers` | Unique names that follow the task. |
+| `attachments` | List of `{kind: file \| link, name, path \| url, size?, added_at, added_by?}`. Files live under `<workspace>/attachments/<task id>/`, are at most 1 MB and are not scanned as workspace Markdown. |
+| `recurrence` | `{every: day \| week \| month, interval, until?}`. Completing the task creates the next occurrence with a fresh checklist. |
+
+Comments are not frontmatter: they are `### <ISO time> · <author>` blocks under `## Comments` in the body. Templates are documents of type `task-template` under `<workspace>/templates/` with their defaults in `extra.defaults`.
+
