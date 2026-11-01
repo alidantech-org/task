@@ -46,7 +46,7 @@ export function CustomSelect({
             style={{ backgroundColor: options.find((option) => option.value === value)?.color }}
           />
         )}
-        <span className={compact ? "sr-only" : "contents"}>
+        <span className={compact ? "sr-only" : "cs-value"}>
           <Select.Value placeholder={placeholder} />
         </span>
         {!compact && (

@@ -148,7 +148,6 @@ export function TaskSheet() {
   const [viewer, setViewer] = useState<ViewerTarget | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
   const [changeCount, setChangeCount] = useState(0);
   const open = selected?.type === "task" && detail !== null;
@@ -166,7 +165,9 @@ export function TaskSheet() {
   useEffect(() => {
     if (tab === "edit") setEditorOpen(true);
   }, [tab]);
-  useEffect(() => setDraft(detail?.body ?? ""), [detail?.body]);
+  useEffect(() => {
+    if (!editorOpen) setDraft(detail?.body ?? "");
+  }, [detail?.body, editorOpen]);
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth);
     update();
@@ -273,16 +274,8 @@ export function TaskSheet() {
   const segments = task.extra?.tracking?.segments ?? [];
   const due = describeDue(task.due_at, task.status, Date.now());
 
-  async function save() {
-    setSaving(true);
-    try {
-      if (await saveBody(draft)) {
-        setEditorOpen(false);
-        setTab("details");
-      }
-    } finally {
-      setSaving(false);
-    }
+  async function autosave(): Promise<boolean> {
+    return saveBody(draft, "");
   }
   function openHref(href: string) {
     router.push(href);
@@ -575,7 +568,7 @@ export function TaskSheet() {
                     segments={segments}
                     findings={findings.length}
                     groupName={group?.name}
-                    disabled={saving}
+                    disabled={false}
                     onReadMore={() => setTab("details")}
                     onShowChanges={() => setTab("changes")}
                     onChecklist={checklistChange}
@@ -763,9 +756,8 @@ export function TaskSheet() {
               value={draft}
               savedValue={body}
               onChange={setDraft}
-              onSave={save}
+              onSave={autosave}
               onError={setNotice}
-              saving={saving}
               onClose={() => {
                 setEditorOpen(false);
                 if (tab === "edit") setTab("details");

@@ -2385,8 +2385,18 @@ button.more:hover {
 .ed-dirty { padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--mut); font-size: 11px; white-space: nowrap; }
 .ed-modes button { display: inline-flex; align-items: center; gap: 6px; }
 .task-sheet.compact .ed-modes button span { display: none; }
-.task-sheet-subhead:has(.ed-toolbar) { display: block; padding: 6px 12px; overflow-x: auto; }
-.ed-toolbar { display: flex; align-items: center; gap: 4px; min-width: max-content; }
+.task-sheet-subhead:has(.ed-toolbar) { display: block; padding: 6px 12px; }
+.ed-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-width: 0; }
+.ed-tools, .ed-right { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ed-right { flex: none; }
+.ed-capsule { display: inline-flex; margin: 0 0 0 6px; padding: 2px; border: 1px solid var(--ln); border-radius: 99px; background: var(--soft); }
+.ed-capsule button { width: 30px; height: 28px; border-radius: 99px; }
+.ed-capsule button.on { background: var(--bg, var(--background)); color: var(--acc); box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
+.ed-toolbar button:disabled { opacity: 0.4; cursor: default; }
+.ed-more [role="menuitem"] { display: flex; align-items: center; gap: 8px; }
+.ed-state { margin-left: 8px; font-size: 11px; color: var(--mut); }
+.ed-state.error { color: var(--bl); }
+.task-sheet-meta { display: flex; align-items: center; min-width: 0; }
 .ed-group { display: flex; gap: 2px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--ln); }
 .ed-group:last-child { border-right: 0; }
 .ed-toolbar button { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; }
@@ -2431,9 +2441,9 @@ button.more:hover {
 .task-edit-launch { display: grid; justify-items: start; gap: 12px; padding: 8px 0; }
 
 /* Filters sheet. */
-.fb-more { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border: 1px solid var(--ln); border-radius: 12px; background: var(--soft); color: var(--ink); cursor: pointer; }
+.fb-more { position: relative; display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border: 1px solid var(--ln); border-radius: 9px; background: var(--soft); color: var(--ink); cursor: pointer; }
 .fb-more.on { border-color: var(--acc); }
-.fb-more b { min-width: 18px; padding: 0 5px; border-radius: 99px; background: var(--acc); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.fb-more b { position: absolute; top: -6px; right: -6px; min-width: 16px; padding: 0 4px; border-radius: 99px; background: var(--acc); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
 .fs { display: grid; gap: 22px; }
 .fs section { display: grid; gap: 10px; }
 .fs h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mut); }
@@ -2552,3 +2562,19 @@ button.more:hover {
 .pg-card li:hover { background: var(--soft); }
 .pg-card li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-card li small { flex: none; color: var(--mut); }
+
+.cs-value { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-bar .fb-search, .filter-bar .fb-select { height: 32px; min-height: 32px; }
+.filter-bar .fb-select { max-width: 200px; }
+
+/* Rich editor: floating selection toolbar and selection colours. */
+.md-rich .milkdown .milkdown-toolbar { background: var(--bg, var(--background)); border: 1px solid var(--ln); box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); }
+.md-rich .milkdown .milkdown-toolbar .toolbar-item svg { color: var(--ink); fill: var(--ink); }
+.md-rich .milkdown .milkdown-toolbar .toolbar-item.active svg { color: var(--acc); fill: var(--acc); }
+.md-rich .milkdown .milkdown-toolbar .divider { background: var(--ln); }
+.md-rich .milkdown .ProseMirror ::selection { background: color-mix(in srgb, var(--acc) 28%, transparent); }
+.md-rich .milkdown .ProseMirror .selected, .md-rich .milkdown .ProseMirror-selectednode { background: transparent; outline: 2px solid color-mix(in srgb, var(--acc) 50%, transparent); }
+.md-source { overflow: hidden; }
+.md-source .cm-editor { height: 100%; }
+.md-source { padding: 0; }
+.md-split { overflow: hidden; }

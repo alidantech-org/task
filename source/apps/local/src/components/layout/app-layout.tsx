@@ -220,7 +220,8 @@ type WorkspaceAppContextValue = {
     selector: { items?: readonly number[]; section?: string; all?: boolean },
     checked: boolean,
   ): Promise<void>;
-  saveBody(body: string): Promise<boolean>;
+  /** An empty `successMessage` saves quietly: no toast and the draft is left untouched. */
+  saveBody(body: string, successMessage?: string): Promise<boolean>;
   setNotice(message: string): void;
   refresh(): Promise<void>;
   validate(): Promise<void>;
@@ -872,9 +873,9 @@ export function App({
       }
       if (payload.document) {
         setDetail(payload.document);
-        setDocumentDraft(payload.document.body);
+        if (successMessage) setDocumentDraft(payload.document.body);
       }
-      setNotice(successMessage);
+      if (successMessage) setNotice(successMessage);
       return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save Markdown");

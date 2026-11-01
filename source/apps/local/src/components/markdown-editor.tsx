@@ -1,6 +1,26 @@
 "use client";
 
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  redo,
+  undo,
+} from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { EditorSelection, EditorState } from "@codemirror/state";
+import {
+  drawSelection,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { Crepe } from "@milkdown/crepe";
+import { redoCommand, undoCommand } from "@milkdown/kit/plugin/history";
 import {
   createCodeBlockCommand,
   insertHrCommand,
@@ -35,7 +55,7 @@ export type EditorAction =
   | "table"
   | "rule";
 /** What the toolbar calls; each surface registers how it applies an action. */
-export type EditorController = { run(action: EditorAction): void };
+export type EditorController = { run(action: EditorAction): void; undo(): void; redo(): void };
 
 type SurfaceProps = {
   value: string;
@@ -151,6 +171,12 @@ function RichSurface({ value, onChange, onError, controller }: SurfaceProps) {
         }
       });
     controller.current = {
+      undo() {
+        if (ready) editor.editor.action(callCommand(undoCommand.key));
+      },
+      redo() {
+        if (ready) editor.editor.action(callCommand(redoCommand.key));
+      },
       run(action) {
         if (!ready) return;
         const apply = (callback: Parameters<typeof editor.editor.action>[0]) =>
@@ -182,60 +208,143 @@ function RichSurface({ value, onChange, onError, controller }: SurfaceProps) {
   return <div ref={root} className="md-rich" />;
 }
 
+const markdownHighlight = HighlightStyle.define([
+  { tag: tags.heading1, color: "var(--acc)", fontWeight: "700", fontSize: "1.25em" },
+  { tag: tags.heading2, color: "var(--acc)", fontWeight: "700", fontSize: "1.12em" },
+  {
+    tag: [tags.heading3, tags.heading4, tags.heading5, tags.heading6],
+    color: "var(--acc)",
+    fontWeight: "700",
+  },
+  { tag: tags.strong, fontWeight: "700", color: "var(--ink)" },
+  { tag: tags.emphasis, fontStyle: "italic", color: "var(--ink)" },
+  { tag: tags.strikethrough, textDecoration: "line-through", color: "var(--mut)" },
+  { tag: tags.link, color: "oklch(0.62 0.15 250)", textDecoration: "underline" },
+  { tag: tags.url, color: "oklch(0.62 0.15 250)" },
+  {
+    tag: tags.monospace,
+    color: "oklch(0.64 0.14 40)",
+    fontFamily: "ui-monospace, Menlo, monospace",
+  },
+  { tag: tags.quote, color: "oklch(0.6 0.1 150)", fontStyle: "italic" },
+  { tag: tags.list, color: "oklch(0.65 0.16 320)" },
+  { tag: [tags.processingInstruction, tags.meta, tags.contentSeparator], color: "var(--mut)" },
+]);
+
+const sourceTheme = EditorView.theme({
+  "&": { height: "100%", backgroundColor: "transparent", color: "var(--ink)", fontSize: "13.5px" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    lineHeight: "1.7",
+    overflow: "auto",
+  },
+  ".cm-content": { padding: "16px 0 80px", caretColor: "var(--acc)" },
+  ".cm-line": { padding: "0 24px 0 8px" },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    color: "var(--mut)",
+    border: "none",
+    opacity: "0.7",
+  },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--soft) 70%, transparent)" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--ink)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "color-mix(in srgb, var(--acc) 28%, transparent)",
+  },
+});
+
+/** A VS Code-style Markdown source editor: highlighting, line numbers, word wrap and undo history. */
 function CodeSurface({ value, onChange, controller }: SurfaceProps) {
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  const valueRef = useRef(value);
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
-  valueRef.current = value;
   onChangeRef.current = onChange;
 
   useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const editor = new EditorView({
+      parent: element,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          history(),
+          drawSelection(),
+          lineNumbers(),
+          highlightActiveLine(),
+          EditorView.lineWrapping,
+          markdown(),
+          syntaxHighlighting(markdownHighlight),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          sourceTheme,
+          EditorView.contentAttributes.of({ "aria-label": "Markdown source editor" }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
+    });
+    view.current = editor;
     controller.current = {
+      undo: () => {
+        undo(editor);
+        editor.focus();
+      },
+      redo: () => {
+        redo(editor);
+        editor.focus();
+      },
       run(action) {
-        const field = textarea.current;
-        if (!field) return;
-        const current = valueRef.current;
-        const change = onChangeRef.current;
-        const start = field.selectionStart;
-        const end = field.selectionEnd;
         const wrapper = wrappers[action];
         const prefix = prefixes[action];
         const snippet = snippets[action];
-        if (wrapper) {
-          const text = `${wrapper[0]}${current.slice(start, end) || "text"}${wrapper[1]}`;
-          change(`${current.slice(0, start)}${text}${current.slice(end)}`);
-          window.requestAnimationFrame(() => {
-            field.focus();
-            field.setSelectionRange(start, start + text.length);
-          });
-        } else if (prefix) {
-          const lineStart = current.lastIndexOf("\n", start - 1) + 1;
-          change(`${current.slice(0, lineStart)}${prefix}${current.slice(lineStart)}`);
-          window.requestAnimationFrame(() => {
-            field.focus();
-            field.setSelectionRange(start + prefix.length, start + prefix.length);
-          });
-        } else if (snippet) {
-          change(`${current.slice(0, end)}${snippet}${current.slice(end)}`);
-          window.requestAnimationFrame(() => field.focus());
-        }
+        editor.dispatch(
+          editor.state.changeByRange((range) => {
+            if (wrapper) {
+              const text = editor.state.sliceDoc(range.from, range.to) || "text";
+              const insertion = `${wrapper[0]}${text}${wrapper[1]}`;
+              return {
+                changes: { from: range.from, to: range.to, insert: insertion },
+                range: EditorSelection.range(
+                  range.from + wrapper[0].length,
+                  range.from + wrapper[0].length + text.length,
+                ),
+              };
+            }
+            if (prefix) {
+              const line = editor.state.doc.lineAt(range.from);
+              return {
+                changes: { from: line.from, insert: prefix },
+                range: EditorSelection.range(
+                  range.anchor + prefix.length,
+                  range.head + prefix.length,
+                ),
+              };
+            }
+            if (snippet) return { changes: { from: range.to, insert: snippet }, range };
+            return { range };
+          }),
+        );
+        editor.focus();
       },
     };
     return () => {
       controller.current = null;
+      view.current = null;
+      editor.destroy();
     };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: The editor is created once; later values sync below.
   }, [controller]);
 
-  return (
-    <textarea
-      ref={textarea}
-      className="md-source"
-      aria-label="Markdown source editor"
-      spellCheck={false}
-      value={value}
-      onChange={(event) => onChange(event.currentTarget.value)}
-    />
-  );
+  // Keep the document in step when the value is replaced from outside, for example by Revert.
+  useEffect(() => {
+    const editor = view.current;
+    if (editor && editor.state.doc.toString() !== value)
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
+  }, [value]);
+
+  return <div ref={host} className="md-source" />;
 }
 
 /** The editing area itself: it fills its container and has no padding, border or card. */

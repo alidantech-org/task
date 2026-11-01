@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, CheckSquare, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Bookmark, CheckSquare, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Switch } from "radix-ui";
 import { useState } from "react";
 import { useDialogs } from "@/components/dialogs";
@@ -144,9 +144,11 @@ export function TaskFilterBar({
         <button
           type="button"
           className={`fb-more ${advanced > 0 || selecting ? "on" : ""}`}
+          title="More filters, views and selection"
+          aria-label="More filters"
           onClick={() => setSheet(true)}
         >
-          <SlidersHorizontal className="size-4" /> Filters
+          <MoreHorizontal className="size-4" />
           {advanced > 0 ? <b>{advanced}</b> : null}
         </button>
         {active && (

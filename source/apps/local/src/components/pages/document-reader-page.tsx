@@ -43,7 +43,6 @@ export function DocumentReaderPage() {
     resolveDocumentConflict,
   } = useWorkspaceApp();
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
@@ -114,16 +113,8 @@ export function DocumentReaderPage() {
     );
   const documentId = activeSelected.id;
   const linkContext = buildLinkContext(workspace, records, activeSelected.path);
-  async function save() {
-    setSaving(true);
-    try {
-      if (await saveBody(draft)) {
-        setEditing(false);
-        setEditorOpen(false);
-      }
-    } finally {
-      setSaving(false);
-    }
+  async function autosave(): Promise<boolean> {
+    return saveBody(draft, "");
   }
   async function toggle(index: number, checked: boolean) {
     if (!detail) return;
@@ -262,7 +253,7 @@ export function DocumentReaderPage() {
                   else setNotice(`No file named ${id}`);
                 }}
                 onToggleTask={(index, checked) => void toggle(index, checked)}
-                taskUpdatesDisabled={saving}
+                taskUpdatesDisabled={editorOpen}
               />
             </div>
             <aside className="toc">
@@ -360,9 +351,8 @@ export function DocumentReaderPage() {
           value={draft}
           savedValue={detail.body}
           onChange={setDraft}
-          onSave={save}
+          onSave={autosave}
           onError={setNotice}
-          saving={saving}
           banner={conflictBanner}
           onClose={closeEditor}
           preview={
