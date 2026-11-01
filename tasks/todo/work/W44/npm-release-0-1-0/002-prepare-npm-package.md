@@ -1,5 +1,5 @@
 ---
-{id: TSK-NPM-PACKAGE-010,name: Prepare the npm package for standalone installation,type: task,status: planned,priority: high,created_at: 2026-10-31,updated_at: 2026-11-01T01:05:05.899Z,tags: [release,npm,packaging],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: in-progress,at: 2026-10-31T21:00:04.552Z},{from: in-progress,to: blocked,at: 2026-10-31T21:06:55.246Z},{from: blocked,to: completed,at: 2026-10-31T21:06:58.072Z},{from: completed,to: blocked,at: 2026-11-01T00:40:43.467Z},{from: blocked,to: planned,at: 2026-11-01T01:05:05.899Z}]},due_at: 2026-11-14}
+{id: TSK-NPM-PACKAGE-010,name: Prepare the npm package for standalone installation,type: task,status: completed,priority: high,created_at: 2026-10-31,updated_at: 2026-11-01T02:52:01.670Z,tags: [release,npm,packaging],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: in-progress,at: 2026-10-31T21:00:04.552Z},{from: in-progress,to: blocked,at: 2026-10-31T21:06:55.246Z},{from: blocked,to: completed,at: 2026-10-31T21:06:58.072Z},{from: completed,to: blocked,at: 2026-11-01T00:40:43.467Z},{from: blocked,to: planned,at: 2026-11-01T01:05:05.899Z},{from: planned,to: completed,at: 2026-11-01T02:52:01.670Z}]},due_at: 2026-11-14}
 ---
 
 # Prepare the npm package for standalone installation

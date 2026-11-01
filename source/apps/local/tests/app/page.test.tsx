@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
+
 mock.module("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({
@@ -16,6 +17,7 @@ mock.module("next/navigation", () => ({
 }));
 
 const { WorkspacePage } = await import("@/components/workspace-page");
+
 import { closeLocalWorkspace, configureWorkspace, createLocalServer } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;
