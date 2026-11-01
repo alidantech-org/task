@@ -82,10 +82,15 @@ function FileDiff({
 export function TaskChanges({
   taskId,
   refreshKey,
+  showEmpty = false,
+  trackedHint = false,
 }: {
   taskId: string;
   /** Changes whenever the task record changes so the list reloads. */
   refreshKey: string;
+  /** Explain the empty state instead of rendering nothing. */
+  showEmpty?: boolean;
+  trackedHint?: boolean;
 }) {
   const [payload, setPayload] = useState<ChangesPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +118,15 @@ export function TaskChanges({
     };
   }, [taskId, refreshKey]);
   if (error) return <p role="alert">{error}</p>;
-  if (!payload?.tracked) return null;
+  if (!payload && showEmpty && !error) return <p className="sub">Loading changes…</p>;
+  if (!payload?.tracked)
+    return showEmpty ? (
+      <p className="sub">
+        {trackedHint
+          ? "No snapshots could be read for this task."
+          : "File changes are recorded automatically while a task is in progress. Move this task to In progress to start recording."}
+      </p>
+    ) : null;
   if (!payload.changes.available)
     return <p className="sub">Git changes unavailable: {payload.changes.reason}</p>;
   const { files, totals, segments, byDirectory, durationMs } = payload.changes;

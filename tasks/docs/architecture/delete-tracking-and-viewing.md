@@ -19,9 +19,21 @@ Accepted in [Decision 0012](../../decisions/0012-task-git-change-tracking.md) an
 
 `task delete <id> --yes` (tasks, task groups with `--cascade`, documents) moves the item into `os.tmpdir()/taskcode-trash/<project-hash>/<timestamp>-<id>/` (override with `TASK_TRASH_DIR`) with a `manifest.json`. `task undelete <trash-id>` restores it to its original path if that path is free and the content hash still matches; `task trash list` shows what can be restored. Deleting something other tasks depend on needs `--force`; structural documents and group ids passed to the document route are refused. The trash is temporary and may be cleared by the OS. Runtime routes: `DELETE /workspace/task|document|task-groups/:id`, `GET /workspace/trash`, `POST /workspace/trash/:id/restore`.
 
-## Git change tracking
+## Automatic change tracking
 
-`task start <id> --track` (or `task update <id> --status in-progress --track`) records a snapshot of the working tree in `extra.tracking.segments`. Leaving `in-progress` closes the segment with an end snapshot and a files/insertions/deletions summary; re-entering opens a new segment. Snapshots are commits built with a temporary index and pinned under `refs/task/tracking/<task-id>/`, so the user's index, branches and working tree are untouched. The workspace `todo/` folder is excluded. `task changes <id>` lists changed files with line counts and per-folder totals (live while a segment is open); `--diff <path>` prints one file's diff. Tracking measures a time window, not authorship: concurrent tasks and human edits appear in every overlapping window. Runtime routes: `GET /workspace/task/:id/changes` and `/changes/diff?path=&segment=`.
+Accepted in [Decision 0014](../../decisions/0014-private-tracking-store.md). Moving a task to `in-progress` opens a snapshot window automatically and leaving it closes the window with an end snapshot and a cached summary (`extra.tracking.segments`); re-entering opens a new segment. Snapshots are commits in a private bare git repository per project under the tool data directory (`TASK_DATA_DIR`, otherwise the XDG data directory, `~/Library/Application Support/taskcode` or `%LOCALAPPDATA%\\taskcode`), used with the project as its work tree so `.gitignore` files apply. The project's own `.git` is never written and the project does not need to be a repository; only the `git` executable is required. The store directory has mode 0700, symlinked store paths are refused, built-in ignores and size/file-count limits apply (truncated snapshots are labelled), and the workspace `todo/` folder is excluded. `tracking.enabled: false` in `task.yaml` turns tracking off; `--track` is accepted for compatibility and has no effect. Segments recorded under Decision 0012 (`refs/task/**` in the project repository) stay readable. Tracking measures a time window, not authorship. `task changes <id>` lists files with line counts and per-folder totals (live while a segment is open) and `--diff <path>` prints one file's diff; runtime routes are `GET /workspace/task/:id/changes` and `/changes/diff?path=&segment=`.
+
+## Content-quality policy
+
+Accepted in [Decision 0015](../../decisions/0015-content-quality-policy.md). `task.yaml` `quality` (`mode` reject | warn | off, `minTaskWords`, `minChecklistItems`, `minGroupDocWords`) gates a planned task: a status change out of `planned` fails with `validation_failed` (HTTP 422) unless the task body has a Goal-like and an Acceptance-like section, enough words and checkboxes, no empty headings and no placeholder text, and its group has detailed `goal.md` and `plan.md`. `task validate` reports the same findings with a severity (error in reject mode, warning in warn mode; only errors set a failing exit code). Completed and archived work is exempt. Creating work writes a scaffold, or a full document with `task create --body-file` and `task group create --goal-file/--plan-file`. `task init` writes `rules/task-writing.md` for agents. Implementation: `operations/quality.ts` (pure assessment), `operations/quality-check.ts` (workspace checks), and the gate in `updateTask`.
+
+## Checklists
+
+`documents/checklist.ts` is the single fence-aware, heading-aware checkbox engine shared by the CLI, runtime and dashboard. `task checklist <id>`, `task check|uncheck <id> (--item N | --section "Heading" | --all)` and `GET|POST /workspace/task/:id/checklist` read and tick checkboxes through the safe document replace with an optimistic hash.
+
+## Task sheet
+
+The dashboard task sheet (`components/task-sheet.tsx`) is a Radix dialog over a blurred backdrop, closable with its button, Escape or a backdrop click (with a guard for unsaved edits) and expandable (remembered in `localStorage`). Tabs: Overview, Checklist (checkboxes grouped by heading with progress and bulk controls), Changes (automatic tracking with expandable diffs), Edit, Docs (group goal and plan, dependencies, mentions and links) and Quality (findings against the policy).
 
 ## Viewing files and diffs
 
@@ -30,5 +42,5 @@ Accepted in [Decision 0012](../../decisions/0012-task-git-change-tracking.md) an
 ## Not yet done
 
 - TUI rendering of diffs and highlighted files (the TUI supports delete and undo).
-- Pruning `refs/task/**` for tasks that were permanently removed.
+- Pruning the private tracking store and old `refs/task/**` refs for tasks that were permanently removed.
 - Split (side-by-side) diff view and editing code files in the dashboard.

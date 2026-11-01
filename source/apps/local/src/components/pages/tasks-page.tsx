@@ -1,30 +1,10 @@
 "use client";
 
-import { Button } from "@task/ui";
-import {
-  Archive,
-  ArchiveRestore,
-  Columns3,
-  Eye,
-  EyeOff,
-  List,
-  Pencil,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { Archive, Columns3, List } from "lucide-react";
+import { useMemo } from "react";
 import { BoardTask, StatusDropZone } from "@/components/calendar";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
-import { MarkdownBody } from "@/components/markdown-body";
-import { MarkdownEditor } from "@/components/markdown-editor";
-import { TaskChanges } from "@/components/task-changes";
-import { DatePicker } from "@/components/ui/date-picker";
-import { CustomSelect } from "@/components/ui/select";
-import { buildLinkContext } from "@/lib/link-context";
-import { markdownChecklistProgress, toggleMarkdownCheckbox } from "@/lib/markdown";
+import { TaskSheet } from "@/components/task-sheet";
 
 const columns = ["planned", "in-progress", "blocked", "completed"] as const;
 const labels: Record<string, string> = {
@@ -34,20 +14,10 @@ const labels: Record<string, string> = {
   completed: "Completed",
   archived: "Archived",
 };
-function openSegment(task: {
-  extra?: { tracking?: { segments: readonly { ended_at?: string }[] } };
-}): boolean {
-  const last = task.extra?.tracking?.segments.at(-1);
-  return Boolean(last && !last.ended_at);
-}
-
 export function TasksPageContent() {
-  const [drawerHost, setDrawerHost] = useState<HTMLElement | null>(null);
   const {
     archivedTasks,
     groups,
-    workspace,
-    records,
     visibleTasks,
     taskFilter,
     setTaskFilter,
@@ -56,236 +26,13 @@ export function TasksPageContent() {
     taskView,
     setTaskView,
     openRecord,
-    updateTaskStatus,
-    updateTaskDue,
-    updateTaskPriority,
-    setTaskHiddenFromRecent,
-    setTaskArchived,
-    deleteRecord,
-    startTaskTracking,
-    selected,
-    detail,
-    saveBody,
-    setNotice,
   } = useWorkspaceApp();
-  const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const checklist = markdownChecklistProgress(detail?.body ?? "");
-  useEffect(() => {
-    setDraft(detail?.body ?? "");
-    setEditing(false);
-  }, [detail?.body]);
-  useEffect(() => {
-    setDrawerHost(document.querySelector<HTMLElement>('[data-slot="task-panel"]'));
-  }, []);
   const displayed = useMemo(() => {
     const group = groups.find((item) => item.id === groupFilter);
     return visibleTasks.filter(
       (task) => !group || task.path === group.path || task.path.startsWith(`${group.path}/`),
     );
   }, [visibleTasks, groups, groupFilter]);
-  const availableStatuses = selected?.status === "archived" ? [...columns, "archived"] : columns;
-  async function saveTaskBody(body: string) {
-    setSaving(true);
-    try {
-      if (await saveBody(body)) setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-  const taskDrawerOpen = selected?.type === "task" && detail !== null;
-  const taskDrawer = (
-    <aside
-      className={`dr task-detail-drawer ${taskDrawerOpen ? "on" : ""}`}
-      aria-label="Task details"
-      aria-hidden={!taskDrawerOpen}
-      inert={!taskDrawerOpen}
-    >
-      {selected?.type === "task" && detail ? (
-        <>
-          <header className="task-drawer-head">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                {selected.id} · {selected.path}
-              </p>
-              <h2>{selected.name}</h2>
-            </div>
-            <div className="flex gap-2">
-              <CustomSelect
-                label="Task status"
-                value={selected.status ?? "planned"}
-                onValueChange={(status) => void updateTaskStatus(selected, status)}
-                options={availableStatuses.map((status) => ({
-                  value: status,
-                  label: labels[status],
-                  color:
-                    status === "blocked"
-                      ? "var(--bl)"
-                      : status === "completed"
-                        ? "var(--dn)"
-                        : status === "in-progress"
-                          ? "var(--ip)"
-                          : "var(--pl)",
-                }))}
-              />
-              {selected.status === "completed" &&
-                !archivedTasks.some((task) => task.id === selected.id) && (
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      void setTaskHiddenFromRecent(selected, !selected.extra?.hidden_from_recent)
-                    }
-                  >
-                    {selected.extra?.hidden_from_recent ? (
-                      <Eye className="size-4" />
-                    ) : (
-                      <EyeOff className="size-4" />
-                    )}
-                    {selected.extra?.hidden_from_recent ? "Show in recent" : "Hide in recent"}
-                  </Button>
-                )}
-              <Button
-                variant="ghost"
-                aria-label="Close task details"
-                onClick={() => openRecord(null)}
-              >
-                <X className="size-4" />
-              </Button>
-              {!openSegment(selected) && selected.status !== "completed" && (
-                <Button variant="outline" onClick={() => void startTaskTracking(selected)}>
-                  Track changes
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                aria-label="Delete task"
-                onClick={() => void deleteRecord({ id: selected.id, name: selected.name }, "task")}
-              >
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void setTaskArchived(
-                    selected,
-                    !archivedTasks.some((task) => task.id === selected.id),
-                  )
-                }
-              >
-                {archivedTasks.some((task) => task.id === selected.id) ? (
-                  <ArchiveRestore className="size-4" />
-                ) : (
-                  <Archive className="size-4" />
-                )}
-                {archivedTasks.some((task) => task.id === selected.id) ? "Restore" : "Archive"}
-              </Button>
-            </div>
-          </header>
-          <div className="task-detail-fields">
-            <div>
-              <span className="fld">Priority</span>
-              <CustomSelect
-                label="Task priority"
-                value={selected.priority ?? "medium"}
-                onValueChange={(priority) => void updateTaskPriority(selected, priority)}
-                options={[
-                  { value: "high", label: "High", color: "var(--bl)" },
-                  { value: "medium", label: "Medium", color: "var(--ip)" },
-                  { value: "low", label: "Low", color: "var(--pl)" },
-                ]}
-              />
-            </div>
-            <div>
-              <span className="fld">Due date</span>
-              <DatePicker
-                label="Task due date"
-                value={selected.due_at ?? ""}
-                onValueChange={(dueDate) => void updateTaskDue(selected, dueDate || null)}
-              />
-            </div>
-            <div>
-              <span className="fld">Group</span>
-              <p>
-                {groups.find(
-                  (item) =>
-                    selected.path === item.path || selected.path.startsWith(`${item.path}/`),
-                )?.name ??
-                  selected.project ??
-                  "Ungrouped"}
-              </p>
-            </div>
-          </div>
-          <div className="fld dh2 task-description-head" style={{ marginBottom: 6 }}>
-            <span className="flex-1">
-              Description · {checklist.completed}/{checklist.total} done
-            </span>
-            {editing ? (
-              <>
-                <Button
-                  variant="outline"
-                  className="btn2"
-                  onClick={() => {
-                    setDraft(detail.body);
-                    setEditing(false);
-                  }}
-                >
-                  <X className="size-4" /> Cancel
-                </Button>
-                <Button
-                  className="btn2 pr"
-                  disabled={saving || draft === detail.body}
-                  onClick={() => void saveTaskBody(draft)}
-                >
-                  <Save className="size-4" /> {saving ? "Saving…" : "Save"}
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                className="btn2"
-                onClick={() => {
-                  setDraft(detail.body);
-                  setEditing(true);
-                }}
-              >
-                <Pencil className="size-4" /> Edit
-              </Button>
-            )}
-          </div>
-          <TaskChanges taskId={selected.id} refreshKey={`${selected.contentHash}`} />
-          {editing ? (
-            <MarkdownEditor
-              key={`${selected.id}:${detail.contentHash}`}
-              value={draft}
-              onError={setNotice}
-              onChange={setDraft}
-            />
-          ) : (
-            <MarkdownBody
-              body={detail.body}
-              className="mdb sm"
-              linkContext={buildLinkContext(workspace, records, selected.path)}
-              onNavigate={(href) => router.push(href)}
-              knownWikiLinks={records.map((record) => record.id)}
-              onWikiLink={(id) => {
-                const record = records.find((item) => item.id === id);
-                if (record) openRecord(record);
-                else setNotice(`No file named ${id}`);
-              }}
-              onToggleTask={(index, checked) => {
-                const next = toggleMarkdownCheckbox(detail.body, index, checked);
-                if (next !== detail.body) void saveBody(next);
-              }}
-              taskUpdatesDisabled={saving}
-            />
-          )}
-        </>
-      ) : null}
-    </aside>
-  );
   return (
     <div className="tasks-page-shell">
       <div className="tasks-match">
@@ -442,7 +189,7 @@ export function TasksPageContent() {
           </div>
         )}
       </div>
-      {drawerHost ? createPortal(taskDrawer, drawerHost) : null}
+      <TaskSheet />
     </div>
   );
 }

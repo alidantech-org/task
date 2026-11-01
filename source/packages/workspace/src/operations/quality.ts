@@ -33,8 +33,12 @@ export function resolveQuality(config?: WorkspaceConfig): ResolvedQuality {
 const goalHeading = /^(goal|goals|context|purpose|background|objective|objectives|why)\b/i;
 const acceptanceHeading =
   /^(acceptance|acceptance criteria|checklist|done when|definition of done|steps|deliverables)\b/i;
-const placeholder =
-  /\b(todo|tbd|fixme|lorem ipsum|to be written|to be defined|describe here|fill (?:this|me) in|placeholder)\b/i;
+const placeholderMarkers = /\b(?:TODO|TBD|FIXME)\b/;
+const placeholderPhrases =
+  /\b(?:lorem ipsum|to be (?:written|defined|determined)|describe here|fill (?:this|me) in)\b/i;
+function isPlaceholder(line: string): boolean {
+  return placeholderMarkers.test(line) || placeholderPhrases.test(line);
+}
 const fence = /^\s*(```|~~~)/;
 const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 
@@ -94,7 +98,7 @@ function sharedFindings(body: string, minWords: number, label: string): QualityF
         message: `${label}: the section "${section.title}" is empty. Fill it in or remove it.`,
       });
   }
-  const leftover = proseLines(body).find((line) => placeholder.test(line));
+  const leftover = proseLines(body).find(isPlaceholder);
   if (leftover)
     findings.push({
       code: "placeholder_text",

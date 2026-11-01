@@ -2,6 +2,7 @@ export default function AppLoading() {
   return (
     <div
       className="mx-auto w-full max-w-[1600px] animate-pulse space-y-5 px-4 py-8 sm:px-7 xl:px-10"
+      role="status"
       aria-label="Loading workspace"
     >
       <div className="h-8 w-56 rounded-lg bg-soft" />

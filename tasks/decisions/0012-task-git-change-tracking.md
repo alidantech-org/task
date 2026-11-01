@@ -11,6 +11,7 @@ created_at: 2026-11-01
 - **Status:** Accepted
 - **Date:** 2026-11-01
 - **Scope:** Git integration for tasks, runtime file reads outside the Markdown workspace
+- **Superseded in part by:** [Decision 0014](0014-private-tracking-store.md) (snapshot storage)
 - **Refines:** Decision 0007 (Git stays optional and must not interfere with user-managed history)
 
 ## Context

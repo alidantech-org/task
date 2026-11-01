@@ -827,3 +827,251 @@ html[data-theme="dark"] .code-token,
 .diff-stat-del {
   color: rgb(220 38 38);
 }
+
+/* Task sheet */
+.task-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(10 14 24 / 0.38);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: task-sheet-fade 0.2s ease both;
+}
+.task-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  width: min(580px, 100vw);
+  padding: 20px 22px 0;
+  background: var(--pn);
+  color: var(--ink);
+  border-left: 1px solid var(--ln);
+  box-shadow: var(--sh);
+  overflow: hidden;
+  transition: width 0.25s ease;
+  animation: task-sheet-in 0.25s ease both;
+}
+.task-sheet.expanded {
+  width: min(1120px, calc(100vw - 32px));
+}
+.task-sheet:focus {
+  outline: none;
+}
+@keyframes task-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes task-sheet-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-sheet,
+  .task-sheet-overlay {
+    animation: none;
+    transition: none;
+  }
+}
+@media (max-width: 640px) {
+  .task-sheet,
+  .task-sheet.expanded {
+    width: 100vw;
+    padding: 16px 16px 0;
+  }
+}
+.task-sheet-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.task-sheet-head h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.task-sheet-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+}
+.task-sheet .task-detail-fields {
+  margin: 14px 0 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .task-sheet .task-detail-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.task-sheet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 12px;
+  align-self: flex-start;
+}
+.task-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 2px 28px;
+}
+.task-edit-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.task-sheet-menu {
+  z-index: 70;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--ln);
+  border-radius: 10px;
+  background: var(--pn);
+  box-shadow: var(--sh);
+}
+.task-sheet-menu [role="menuitem"] {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.task-sheet-menu [role="menuitem"][data-highlighted] {
+  background: var(--soft);
+  outline: none;
+}
+.task-sheet-menu [role="menuitem"].danger {
+  color: var(--bl);
+}
+.check-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.check-progress {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--soft);
+}
+.check-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--dn);
+  transition: width 0.2s ease;
+}
+.check-group {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ln);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.check-group > header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.check-group h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.check-group > header button {
+  font-size: 12px;
+  color: var(--acc);
+}
+.check-group ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.check-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 4px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 14px;
+}
+.check-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.check-input:focus-visible + .check-box {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+.check-row {
+  position: relative;
+  cursor: pointer;
+}
+.check-row:hover {
+  background: var(--pn);
+}
+.check-row.done > span:last-child {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+.check-box {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--mut);
+  border-radius: 6px;
+  color: var(--pn);
+}
+.check-row.done .check-box {
+  border-color: var(--dn);
+  background: var(--dn);
+}
+.task-docs section,
+.task-quality ul {
+  margin-bottom: 14px;
+}
+.task-docs h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mut);
+}
+.task-docs ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.toast {
+  z-index: 80;
+  max-width: min(640px, calc(100vw - 32px));
+  pointer-events: auto;
+  white-space: pre-line;
+}
+.bad-link {
+  color: var(--bl);
+  text-decoration: line-through;
+}

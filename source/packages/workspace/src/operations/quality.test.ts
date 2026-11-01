@@ -46,6 +46,12 @@ describe("quality assessment", () => {
     expect(countWords("<!-- ignore me please -->\n```\ncode words here\n```\nreal words")).toBe(2);
     const findings = assessTaskBody(`${good}\nTODO fill later`, defaultQuality);
     expect(findings.map((finding) => finding.code)).toEqual(["placeholder_text"]);
+    expect(
+      assessTaskBody(
+        `${good}\nThe todo folder and the word placeholder are fine here.`,
+        defaultQuality,
+      ),
+    ).toEqual([]);
   });
 
   test("applies configurable thresholds and group document rules", () => {

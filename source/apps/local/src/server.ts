@@ -28,6 +28,7 @@ import {
   readProjectFile,
   readWorkspaceIndex,
   replaceDocumentBody,
+  resolveQuality,
   resolveWorkspace,
   restoreFromTrash,
   restoreTask,
@@ -296,6 +297,7 @@ async function snapshot(index: WorkspaceIndex): Promise<object> {
     projectRoot: workspace.projectRoot,
     workspaceRoot: workspace.root,
     workspaceDirectory: workspace.config.workspace,
+    quality: resolveQuality(workspace.config),
     organization: {
       weekStart: workspace.config.organization?.weekStart ?? 1,
       autoArchiveAfterDays:

@@ -66,6 +66,7 @@ type RecordItem = {
   created_at?: string;
   updated_at?: string;
   archived_at?: string;
+  depends_on?: string[];
   extra?: {
     status_history?: readonly StatusChange[];
     hidden_from_recent?: boolean;
@@ -81,6 +82,7 @@ type Group = {
   name: string;
   slug: string;
   path: string;
+  goalId?: string;
   archived: boolean;
   finished?: boolean;
   total: number;
@@ -93,6 +95,12 @@ type Workspace = {
   projectRoot: string;
   workspaceRoot: string;
   workspaceDirectory: string;
+  quality?: {
+    mode: "reject" | "warn" | "off";
+    minTaskWords: number;
+    minChecklistItems: number;
+    minGroupDocWords: number;
+  };
   organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
   source: string;
   scannedAt: number;
@@ -170,7 +178,11 @@ type WorkspaceAppContextValue = {
     kind: "task" | "document" | "task-group",
   ): Promise<boolean>;
   undoDelete(): Promise<void>;
-  startTaskTracking(task: RecordItem): Promise<void>;
+  setChecklist(
+    task: RecordItem,
+    selector: { items?: readonly number[]; section?: string; all?: boolean },
+    checked: boolean,
+  ): Promise<void>;
   saveBody(body: string): Promise<boolean>;
   setNotice(message: string): void;
   refresh(): Promise<void>;
@@ -986,21 +998,35 @@ export function App({
       return false;
     }
   }
-  async function startTaskTracking(task: RecordItem): Promise<void> {
+  async function setChecklist(
+    task: RecordItem,
+    selector: { items?: readonly number[]; section?: string; all?: boolean },
+    checked: boolean,
+  ): Promise<void> {
     try {
-      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          status: "in-progress",
-          track: true,
-          expectedHash: task.contentHash,
-        }),
-      });
+      const response = await fetch(
+        `/api/runtime/workspace/task/${encodeURIComponent(task.id)}/checklist`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...selector,
+            checked,
+            expectedHash: detail?.contentHash ?? task.contentHash,
+          }),
+        },
+      );
       await acceptWorkspaceResponse(response);
-      setNotice("Tracking git changes for this task");
+      const latest = await fetch(`/api/runtime/workspace/document/${encodeURIComponent(task.id)}`, {
+        cache: "no-store",
+      });
+      const payload = (await latest.json()) as { document?: { body: string; contentHash: string } };
+      if (latest.ok && payload.document) {
+        setDetail(payload.document);
+        setDocumentDraft(payload.document.body);
+      }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not start tracking");
+      setNotice(error instanceof Error ? error.message : "Could not update the checklist");
     }
   }
   async function undoDelete(): Promise<void> {
@@ -1479,7 +1505,7 @@ export function App({
           setTaskArchived,
           deleteRecord,
           undoDelete,
-          startTaskTracking,
+          setChecklist,
           saveBody: persistDocumentBody,
           setNotice,
           refresh,
