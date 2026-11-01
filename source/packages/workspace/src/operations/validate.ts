@@ -7,6 +7,7 @@ import type {
   ValidationDiagnostic,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
+import { qualityDiagnostics } from "@task/workspace/operations/quality-check";
 
 export type ValidationScope = "all" | "tasks" | "docs" | "links" | "references";
 
@@ -26,6 +27,11 @@ function push(
   category: ValidationCategory,
 ): void {
   diagnostics.push({ path, message, category });
+}
+
+/** Diagnostics without an explicit severity are errors. */
+export function isErrorDiagnostic(diagnostic: ValidationDiagnostic): boolean {
+  return diagnostic.severity !== "warning";
 }
 
 export async function validateWorkspace(
@@ -54,6 +60,36 @@ export async function validateWorkspace(
     for (const dependency of task.metadata.depends_on ?? []) {
       if (!taskIds.has(dependency)) {
         push(diagnostics, task.path, `Unknown dependency task ID: ${dependency}`, "reference");
+      }
+    }
+    const parent = task.metadata.parent;
+    if (parent !== undefined) {
+      if (parent === task.metadata.id)
+        push(diagnostics, task.path, "A task cannot be its own parent", "reference");
+      else if (!taskIds.has(parent))
+        push(diagnostics, task.path, `Unknown parent task ID: ${parent}`, "reference");
+      else {
+        const seen = new Set([task.metadata.id]);
+        for (let ancestor: string | undefined = parent; ancestor; ) {
+          if (seen.has(ancestor)) {
+            push(diagnostics, task.path, "Task parents form a cycle", "dependency");
+            break;
+          }
+          seen.add(ancestor);
+          ancestor = taskIds.get(ancestor)?.metadata.parent;
+        }
+      }
+    }
+    for (const link of task.metadata.links ?? []) {
+      if (!taskIds.has(link.task))
+        push(diagnostics, task.path, `Unknown linked task ID: ${link.task}`, "reference");
+    }
+    for (const attachment of task.metadata.attachments ?? []) {
+      if (attachment.kind !== "file" || !attachment.path) continue;
+      try {
+        await access(resolve(context.root, attachment.path));
+      } catch {
+        push(diagnostics, task.path, `Attachment file is missing: ${attachment.path}`, "reference");
       }
     }
   }
@@ -89,11 +125,17 @@ export async function validateWorkspace(
         "group",
       );
     }
-    if (
-      !/^todo\/(?:_(?:completed|archived|archive)\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[^/]+|[^/]+)\/\d{3,}-[a-z0-9-]+\.md$/i.test(
+    const taskFilename = "\\d{3,}-[a-z0-9-]+\\.md";
+    const validPath =
+      new RegExp(`^todo/work/(?:W\\d{2}|\\d{4}/W\\d{2})/[^/]+/${taskFilename}$`, "i").test(
         task.path,
-      )
-    ) {
+      ) ||
+      new RegExp(
+        `^todo/_(?:completed|archived|archive)/\\d{4}/\\d{2}/\\d{4}-\\d{2}-[^/]+/${taskFilename}$`,
+        "i",
+      ).test(task.path) ||
+      new RegExp(`^todo/[^/]+/${taskFilename}$`, "i").test(task.path);
+    if (!validPath) {
       push(
         diagnostics,
         task.path,
@@ -121,21 +163,6 @@ export async function validateWorkspace(
           "Task group must have a plan.md with a GRP- group ID",
           "group",
         );
-    }
-    if (
-      groupPath.startsWith("todo/") &&
-      !groupPath.startsWith("todo/_completed/") &&
-      !groupPath.startsWith("todo/_archived/") &&
-      !groupPath.startsWith("todo/_archive/") &&
-      groupTasks.length > 0 &&
-      groupTasks.every((task) => task.metadata.status === "completed")
-    ) {
-      push(
-        diagnostics,
-        groupPath,
-        "All tasks are completed; archive this group with task archive",
-        "group",
-      );
     }
   }
 
@@ -169,6 +196,7 @@ export async function validateWorkspace(
     }
   }
 
+  diagnostics.push(...(await qualityDiagnostics(context)));
   if (scope === "all") return diagnostics;
   if (scope === "tasks")
     return diagnostics.filter((diagnostic) => {
@@ -177,6 +205,7 @@ export async function validateWorkspace(
         diagnostic.category !== "link" &&
         (document?.metadata.type === "task" ||
           diagnostic.category === "group" ||
+          diagnostic.category === "quality" ||
           diagnostic.category === "dependency" ||
           diagnostic.category === "reference")
       );

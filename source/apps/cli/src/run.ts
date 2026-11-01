@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WorkspaceError } from "@task/workspace";
 
@@ -22,7 +22,9 @@ interface LocalAssets {
 function packageRootFrom(moduleDirectory: string): string {
   let current = resolve(moduleDirectory);
   for (let depth = 0; depth < 8; depth += 1) {
-    if (existsSync(join(current, "package.json"))) return current;
+    if (basename(current) !== "dist" && existsSync(join(current, "package.json"))) {
+      return current;
+    }
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
@@ -258,7 +260,8 @@ export async function runLocalDashboard(
 
 export function resolveTuiEntry(): string {
   const cliRoot = packageRootFrom(dirname(fileURLToPath(import.meta.url)));
+  if (repositoryRootFrom(cliRoot)) return fileURLToPath(import.meta.resolve("@task/tui"));
   const bundledEntry = join(cliRoot, "dist/tui-entry.js");
   if (existsSync(bundledEntry)) return bundledEntry;
-  return fileURLToPath(import.meta.resolve("@task/tui"));
+  throw new WorkspaceError("filesystem_error", "The packaged Task TUI is not available");
 }

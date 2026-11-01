@@ -1,20 +1,38 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { type ChecklistSelector, setChecklistItems } from "@task/workspace/documents/checklist";
+import { stripComments } from "@task/workspace/documents/comments";
 import { WorkspaceError } from "@task/workspace/errors";
+import { endTracking, startTracking, trackingEnabled } from "@task/workspace/git/tracking";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
 import { parseFrontmatter, serializeMarkdown } from "@task/workspace/indexing/metadata";
 import type {
   DocumentCreateInput,
   DocumentSummary,
+  Recurrence,
   TaskCreateInput,
   TaskGroup,
+  TaskLink,
+  TaskPriority,
   TaskStatus,
+  TaskTracking,
   TaskUpdateInput,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
+import { nextOrder } from "@task/workspace/operations/order";
+import { formatFindings, resolveQuality } from "@task/workspace/operations/quality";
+import { taskQualityFindings } from "@task/workspace/operations/quality-check";
 import { findDocument, findGroup, listTaskGroups } from "@task/workspace/operations/query";
+import { nextOccurrence } from "@task/workspace/operations/recurrence";
 import { resolveSafeWorkspacePath } from "@task/workspace/paths/safe-path";
+
+function existingTracking(extra: Record<string, unknown>): TaskTracking | undefined {
+  const tracking = extra.tracking;
+  return typeof tracking === "object" && tracking !== null && "segments" in tracking
+    ? (tracking as TaskTracking)
+    : undefined;
+}
 
 function id(prefix: "TSK" | "GRP" | "DOC"): string {
   return `${prefix}-${randomBytes(6).toString("hex").toUpperCase()}`;
@@ -37,7 +55,11 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
-async function createFile(context: WorkspaceContext, path: string, content: string): Promise<void> {
+export async function createFile(
+  context: WorkspaceContext,
+  path: string,
+  content: string,
+): Promise<void> {
   const absolute = await resolveSafeWorkspacePath(context.root, path);
   await mkdir(dirname(absolute), { recursive: true });
   await resolveSafeWorkspacePath(context.root, path);
@@ -60,7 +82,7 @@ async function createFile(context: WorkspaceContext, path: string, content: stri
   }
 }
 
-async function replaceFile(
+export async function replaceFile(
   context: WorkspaceContext,
   path: string,
   content: string,
@@ -125,8 +147,72 @@ async function replaceFile(
   }
 }
 
-function taskBody(title: string, description?: string): string {
-  return `# ${title}\n${description?.trim() ? `\n${description.trim()}\n` : "\n"}`;
+function taskBody(title: string, description?: string, body?: string): string {
+  if (body?.trim()) return `${body.trimEnd()}\n`;
+  return [
+    `# ${title}`,
+    "",
+    "## Goal",
+    "",
+    ...(description?.trim() ? [description.trim(), ""] : []),
+    "<!-- Why this work matters and the outcome it must produce. Write full sentences. -->",
+    "",
+    "## Context",
+    "",
+    "<!-- Background, constraints, related documents and decisions. -->",
+    "",
+    "## Acceptance checklist",
+    "",
+    '<!-- One concrete "- [ ]" step per deliverable. Keep all steps in this one file. -->',
+    "",
+  ].join("\n");
+}
+
+function groupScaffold(name: string, kind: "goal" | "plan"): string {
+  return kind === "goal"
+    ? `# ${name} goal\n\n## Goal\n\n<!-- What this group of work achieves and why. -->\n\n## Success criteria\n\n<!-- Observable results that mean the goal is met. -->\n\n## Scope\n\n<!-- What is in and out of scope. -->\n`
+    : `# ${name} plan\n\n## Approach\n\n<!-- How the work will be done. -->\n\n## Milestones\n\n<!-- Ordered steps or phases. -->\n\n## Risks and open questions\n\n<!-- Unknowns and how to resolve them. -->\n`;
+}
+
+export function getTaskGroupWeekPath(
+  date: Date,
+  weekStart = 1,
+  currentYear = new Date().getUTCFullYear(),
+): string {
+  if (!Number.isInteger(weekStart) || weekStart < 1 || weekStart > 7) {
+    throw new WorkspaceError("invalid_input", "Week start must be an integer from 1 to 7");
+  }
+  const weekday = (date.getUTCDay() + 6) % 7;
+  const startOffset = (weekday - (weekStart - 1) + 7) % 7;
+  const start = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - startOffset),
+  );
+  const anchor = new Date(start);
+  anchor.setUTCDate(anchor.getUTCDate() + ((4 - weekStart + 7) % 7));
+  const year = anchor.getUTCFullYear();
+  const first = new Date(Date.UTC(year, 0, 1));
+  first.setUTCDate(first.getUTCDate() + ((4 - first.getUTCDay() + 7) % 7));
+  const firstOffset = (first.getUTCDay() + 6 - (weekStart - 1) + 7) % 7;
+  first.setUTCDate(first.getUTCDate() - firstOffset);
+  const number = Math.floor((start.getTime() - first.getTime()) / 604_800_000) + 1;
+  const prefix = year === currentYear ? "" : `${year}/`;
+  return `todo/work/${prefix}W${String(number).padStart(2, "0")}`;
+}
+
+export async function migrateLegacyGroups(context: WorkspaceContext): Promise<TaskGroup[]> {
+  const index = await buildWorkspaceIndex(context);
+  const moved: TaskGroup[] = [];
+  for (const group of await listTaskGroups(context)) {
+    if (!/^todo\/[^/]+$/.test(group.path)) continue;
+    const plan = index.documents.get(`${group.path}/plan.md`);
+    const created = plan?.metadata.extra?.created_at;
+    const createdAt =
+      typeof created === "string" ? new Date(created) : new Date(plan?.modifiedAt ?? Date.now());
+    const destination = `${getTaskGroupWeekPath(createdAt, context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
+    await moveDirectory(context, group.path, destination);
+    moved.push({ ...group, path: destination });
+  }
+  return moved;
 }
 
 async function validateDependencies(
@@ -168,11 +254,48 @@ async function validateDependencies(
   }
 }
 
-export async function createTaskGroup(context: WorkspaceContext, name: string): Promise<TaskGroup> {
+async function validateRelations(
+  context: WorkspaceContext,
+  currentId: string | undefined,
+  relations: { parent?: string | null; links?: readonly TaskLink[] },
+): Promise<void> {
+  const index = await buildWorkspaceIndex(context);
+  const tasks = new Map(
+    [...index.documents.values()]
+      .filter((document) => document.metadata.type === "task")
+      .map((document) => [document.metadata.id, document]),
+  );
+  if (relations.parent) {
+    if (relations.parent === currentId)
+      throw new WorkspaceError("validation_failed", "A task cannot be its own parent");
+    if (!tasks.has(relations.parent))
+      throw new WorkspaceError("validation_failed", `Unknown parent task ID: ${relations.parent}`);
+    let ancestor: string | undefined = relations.parent;
+    for (let depth = 0; ancestor && depth < 100; depth += 1) {
+      if (currentId && ancestor === currentId)
+        throw new WorkspaceError("validation_failed", "Task parents cannot contain cycles");
+      ancestor = tasks.get(ancestor)?.metadata.parent;
+    }
+  }
+  for (const link of relations.links ?? []) {
+    if (link.task === currentId)
+      throw new WorkspaceError("validation_failed", "A task cannot link to itself");
+    if (!tasks.has(link.task))
+      throw new WorkspaceError("validation_failed", `Unknown linked task ID: ${link.task}`);
+  }
+}
+
+export async function createTaskGroup(
+  context: WorkspaceContext,
+  name: string,
+  options: { goal?: string; plan?: string } = {},
+): Promise<TaskGroup> {
   const cleanName = name.trim();
   if (!cleanName) throw new WorkspaceError("invalid_input", "Group name is required");
   const slug = slugify(cleanName);
-  const relativePath = `todo/${slug}`;
+  const groupId = id("GRP");
+  const weekPath = getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1);
+  const relativePath = `${weekPath}/${slug}--${groupId.slice(-6).toLowerCase()}`;
   const groupPath = await resolveSafeWorkspacePath(context.root, relativePath);
   await mkdir(dirname(groupPath), { recursive: true });
   try {
@@ -182,20 +305,39 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
       throw new WorkspaceError("already_exists", `Task group already exists: ${slug}`);
     throw error;
   }
-  const groupId = id("GRP");
   const plan = {
     id: groupId,
     name: cleanName,
     type: "documentation",
+    extra: { created_at: new Date().toISOString() },
+  };
+  const goalId = `GOAL-${groupId}`;
+  const goal = {
+    id: goalId,
+    name: `${cleanName} goal`,
+    type: "documentation",
+    extra: { created_at: new Date().toISOString(), group: groupId },
   };
   try {
     await createFile(
       context,
       `${relativePath}/plan.md`,
-      serializeMarkdown(plan, `# ${cleanName}\n\n## Goal\n\n## Scope\n\n## Notes\n`),
+      serializeMarkdown(
+        plan,
+        options.plan?.trim() ? `${options.plan.trimEnd()}\n` : groupScaffold(cleanName, "plan"),
+      ),
+    );
+    await createFile(
+      context,
+      `${relativePath}/goal.md`,
+      serializeMarkdown(
+        goal,
+        options.goal?.trim() ? `${options.goal.trimEnd()}\n` : groupScaffold(cleanName, "goal"),
+      ),
     );
   } catch (error) {
     await rm(join(groupPath, "plan.md"), { force: true });
+    await rm(join(groupPath, "goal.md"), { force: true });
     await rmdir(groupPath).catch(() => undefined);
     throw error;
   }
@@ -204,9 +346,12 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
     name: cleanName,
     slug,
     path: relativePath,
+    goalId,
     archived: false,
     total: 0,
     completed: 0,
+    archivedTasks: 0,
+    resolved: 0,
   };
 }
 
@@ -232,6 +377,10 @@ export async function createTask(
   const taskId = id("TSK");
   const dependencies = input.dependsOn ?? [];
   await validateDependencies(context, undefined, dependencies);
+  await validateRelations(context, undefined, { parent: input.parent, links: input.links });
+  const siblings = [...(await buildWorkspaceIndex(context)).documents.values()].filter(
+    (document) => document.metadata.type === "task" && dirname(document.path) === group.path,
+  );
   const directory = resolve(context.root, group.path);
   const entries = await readdir(directory, { withFileTypes: true });
   const numbers = entries
@@ -255,6 +404,12 @@ export async function createTask(
     ...(input.startAt ? { start_at: input.startAt } : {}),
     ...(input.dueAt ? { due_at: input.dueAt } : {}),
     ...(dependencies.length ? { depends_on: [...dependencies] } : {}),
+    order: input.order ?? nextOrder(siblings),
+    ...(input.parent ? { parent: input.parent } : {}),
+    ...(input.estimate !== undefined ? { estimate: input.estimate } : {}),
+    ...(input.links?.length ? { links: input.links.map((link) => ({ ...link })) } : {}),
+    ...(input.watchers?.length ? { watchers: [...input.watchers] } : {}),
+    ...(input.recurrence ? { recurrence: { ...input.recurrence } } : {}),
     ...(input.extra ? { extra: { ...input.extra } } : {}),
   };
   while (true) {
@@ -264,7 +419,7 @@ export async function createTask(
       await createFile(
         context,
         path,
-        serializeMarkdown(values, taskBody(title, input.description)),
+        serializeMarkdown(values, taskBody(title, input.description, input.body)),
       );
       const index = await buildWorkspaceIndex(context);
       const summary = index.documents.get(path);
@@ -289,29 +444,11 @@ export async function updateTask(
   identifier: string,
   input: TaskUpdateInput,
   expectedHash?: string,
-): Promise<{ task: DocumentSummary; completedGroup?: TaskGroup }> {
-  let index = await buildWorkspaceIndex(context);
-  let task = findDocument(index, identifier);
+): Promise<{ task: DocumentSummary; completedGroup?: TaskGroup; warnings?: string[] }> {
+  const index = await buildWorkspaceIndex(context);
+  const task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
     throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
-  if (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_archive/"))
-    throw new WorkspaceError(
-      "invalid_input",
-      "Restore the archived task or group before updating it",
-    );
-  if (
-    task.path.startsWith("todo/_completed/") &&
-    input.status !== undefined &&
-    input.status !== "completed"
-  ) {
-    const group = (await listTaskGroups(context)).find(
-      (candidate) => candidate.path === dirname(task.path) && candidate.finished,
-    );
-    if (!group) throw new WorkspaceError("not_found", "Completed task group was not found");
-    await reopenCompletedGroup(context, group.id);
-    index = await buildWorkspaceIndex(context);
-    task = findDocument(index, identifier);
-  }
   if (expectedHash !== undefined && task.contentHash !== expectedHash) {
     throw new WorkspaceError("conflict", `Task changed since it was loaded: ${task.path}`);
   }
@@ -320,6 +457,25 @@ export async function updateTask(
   const parsed = parseFrontmatter(content);
   const values = { ...parsed.values };
   const previousStatus = (values.status ?? "planned") as TaskStatus;
+  let warnings: string[] | undefined;
+  if (
+    input.status !== undefined &&
+    previousStatus === "planned" &&
+    ["in-progress", "blocked", "completed"].includes(input.status)
+  ) {
+    const quality = resolveQuality(context.config);
+    if (quality.mode !== "off") {
+      const findings = await taskQualityFindings(context, task, parsed.body, quality);
+      if (findings.length > 0) {
+        if (quality.mode === "reject")
+          throw new WorkspaceError(
+            "validation_failed",
+            formatFindings(`Task ${task.metadata.id}`, findings),
+          );
+        warnings = findings.map((finding) => finding.message);
+      }
+    }
+  }
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new WorkspaceError("invalid_input", "Task title cannot be empty");
@@ -330,11 +486,42 @@ export async function updateTask(
   if (input.assignee !== undefined) values.assignee = input.assignee;
   if (input.project !== undefined) values.project = input.project;
   if (input.startAt !== undefined) values.start_at = input.startAt;
-  if (input.dueAt !== undefined) values.due_at = input.dueAt;
+  if (input.dueAt === null) delete values.due_at;
+  else if (input.dueAt !== undefined) values.due_at = input.dueAt;
   if (input.tags !== undefined) values.tags = [...input.tags];
   if (input.dependsOn !== undefined) {
     await validateDependencies(context, task.metadata.id, input.dependsOn);
     values.depends_on = [...input.dependsOn];
+  }
+  if (input.order !== undefined) {
+    if (input.order === null) delete values.order;
+    else values.order = input.order;
+  }
+  if (input.parent !== undefined || input.links !== undefined) {
+    await validateRelations(context, task.metadata.id, {
+      parent: input.parent === undefined ? undefined : input.parent,
+      links: input.links,
+    });
+  }
+  if (input.parent !== undefined) {
+    if (input.parent === null) delete values.parent;
+    else values.parent = input.parent;
+  }
+  if (input.estimate !== undefined) {
+    if (input.estimate === null) delete values.estimate;
+    else values.estimate = input.estimate;
+  }
+  if (input.links !== undefined) {
+    if (input.links.length === 0) delete values.links;
+    else values.links = input.links.map((link) => ({ ...link }));
+  }
+  if (input.watchers !== undefined) {
+    if (input.watchers.length === 0) delete values.watchers;
+    else values.watchers = [...input.watchers];
+  }
+  if (input.recurrence !== undefined) {
+    if (input.recurrence === null) delete values.recurrence;
+    else values.recurrence = { ...input.recurrence };
   }
   const updatedAt = new Date().toISOString();
   const existingExtra =
@@ -356,6 +543,28 @@ export async function updateTask(
       { from: previousStatus, to: input.status, at: updatedAt },
     ];
   }
+  const nextStatus = input.status ?? previousStatus;
+  const segments = [...(existingTracking(existingExtra)?.segments ?? [])];
+  const open = segments.at(-1);
+  if (open && !open.ended_at && nextStatus !== "in-progress") {
+    segments[segments.length - 1] = await endTracking(context, task.metadata.id, open);
+    nextExtra.tracking = { segments };
+  } else if (
+    nextStatus === "in-progress" &&
+    !(open && !open.ended_at) &&
+    trackingEnabled(context) &&
+    ((input.status === "in-progress" && previousStatus !== "in-progress") || input.track === true)
+  ) {
+    try {
+      segments.push(await startTracking(context, task.metadata.id));
+      nextExtra.tracking = { segments };
+    } catch (error) {
+      warnings = [
+        ...(warnings ?? []),
+        `Change tracking is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      ];
+    }
+  }
   if (Object.keys(nextExtra).length > 0) values.extra = nextExtra;
   values.updated_at = updatedAt;
   const next = serializeMarkdown(values, parsed.body);
@@ -368,36 +577,108 @@ export async function updateTask(
       { cause: error },
     );
   }
+  if (
+    input.status === "completed" &&
+    previousStatus !== "completed" &&
+    typeof values.recurrence === "object" &&
+    values.recurrence !== null
+  ) {
+    await spawnNextOccurrence(context, task, values, parsed.body);
+  }
   await replaceFile(context, task.path, next, task.contentHash);
-  const updatedIndex = await buildWorkspaceIndex(context);
+  let updatedIndex = await buildWorkspaceIndex(context);
   let updatedTask = findDocument(updatedIndex, task.metadata.id);
-  let completedGroup: TaskGroup | undefined;
-  if (updatedTask.metadata.status === "completed") {
-    const groupPath = dirname(updatedTask.path);
+  if (
+    (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_completed/")) &&
+    input.status !== undefined &&
+    !["completed", "archived"].includes(input.status)
+  ) {
     const group = (await listTaskGroups(context)).find(
-      (candidate) => candidate.path === groupPath && !candidate.archived && !candidate.finished,
+      (candidate) => candidate.path === dirname(task.path),
     );
-    const groupTasks = [...updatedIndex.documents.values()].filter(
-      (document) => document.metadata.type === "task" && dirname(document.path) === groupPath,
-    );
-    if (
-      group &&
-      groupTasks.length > 0 &&
-      groupTasks.every((record) => record.metadata.status === "completed")
-    ) {
-      try {
-        completedGroup = await completeGroup(context, group.id);
-        updatedTask = findDocument(await buildWorkspaceIndex(context), task.metadata.id);
-      } catch (error) {
-        throw new WorkspaceError(
-          "filesystem_error",
-          `Task status was saved, but its group could not move to completed. Retry the update after checking 'task validate'.`,
-          { cause: error },
+    if (group?.archived) {
+      await restoreGroup(context, group.id);
+      updatedIndex = await buildWorkspaceIndex(context);
+      updatedTask = findDocument(updatedIndex, task.metadata.id);
+    } else if (group && task.path.startsWith("todo/_completed/")) {
+      const destination = `${getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
+      await moveDirectory(context, group.path, destination);
+      updatedIndex = await buildWorkspaceIndex(context);
+      updatedTask = findDocument(updatedIndex, task.metadata.id);
+    } else if (task.path.startsWith("todo/_archived/")) {
+      const originalPath = task.metadata.extra?.archived_from;
+      if (typeof originalPath === "string" && originalPath.startsWith("todo/")) {
+        const source = await resolveSafeWorkspacePath(context.root, task.path);
+        const destination = await resolveSafeWorkspacePath(context.root, originalPath);
+        await mkdir(dirname(destination), { recursive: true });
+        await resolveSafeWorkspacePath(context.root, originalPath);
+        try {
+          await lstat(destination);
+          throw new WorkspaceError(
+            "already_exists",
+            `Restore destination already exists: ${originalPath}`,
+          );
+        } catch (error) {
+          if (error instanceof WorkspaceError) throw error;
+          if (errorCode(error) !== "ENOENT") throw error;
+        }
+        const currentText = await Bun.file(source).text();
+        const restoredMetadata = parseFrontmatter(currentText);
+        delete restoredMetadata.values.archived_at;
+        const extra = restoredMetadata.values.extra as Record<string, unknown> | undefined;
+        if (extra) {
+          delete extra.archived_from;
+          if (Object.keys(extra).length === 0) delete restoredMetadata.values.extra;
+        }
+        await replaceFile(
+          context,
+          task.path,
+          serializeMarkdown(restoredMetadata.values, restoredMetadata.body),
+          updatedTask.contentHash,
         );
+        await rename(source, destination);
+        updatedIndex = await buildWorkspaceIndex(context);
+        updatedTask = findDocument(updatedIndex, task.metadata.id);
       }
     }
   }
-  return { task: updatedTask, ...(completedGroup ? { completedGroup } : {}) };
+  return { task: updatedTask, ...(warnings ? { warnings } : {}) };
+}
+
+/** Creates the next occurrence of a recurring task, with a fresh checklist and no comments. */
+async function spawnNextOccurrence(
+  context: WorkspaceContext,
+  task: DocumentSummary,
+  values: Record<string, unknown>,
+  body: string,
+): Promise<void> {
+  const recurrence = values.recurrence as Recurrence;
+  const base =
+    typeof values.due_at === "string" ? values.due_at : new Date().toISOString().slice(0, 10);
+  const due = nextOccurrence(base, recurrence);
+  if (!due) return;
+  const group = (await listTaskGroups(context)).find(
+    (candidate) => candidate.path === dirname(task.path),
+  );
+  if (!group) return;
+  const reset = setChecklistItems(stripComments(body), { all: true }, false).body;
+  await createTask(context, {
+    title: String(values.name),
+    group: group.id,
+    body: reset,
+    priority: values.priority as TaskPriority | undefined,
+    assignee: typeof values.assignee === "string" ? values.assignee : undefined,
+    project: typeof values.project === "string" ? values.project : undefined,
+    tags: Array.isArray(values.tags) ? (values.tags as string[]) : undefined,
+    estimate: typeof values.estimate === "number" ? values.estimate : undefined,
+    parent: typeof values.parent === "string" ? values.parent : undefined,
+    links: Array.isArray(values.links) ? (values.links as TaskLink[]) : undefined,
+    watchers: Array.isArray(values.watchers) ? (values.watchers as string[]) : undefined,
+    recurrence,
+    order: typeof values.order === "number" ? values.order : undefined,
+    dueAt: due,
+    extra: { recurred_from: task.metadata.id },
+  });
 }
 
 export async function replaceDocumentBody(
@@ -413,6 +694,37 @@ export async function replaceDocumentBody(
   const parsed = parseFrontmatter(current);
   await replaceFile(context, document.path, serializeMarkdown(parsed.values, body), expectedHash);
   return findDocument(await buildWorkspaceIndex(context), identifier);
+}
+
+/** Checks or unchecks checklist items in a document body and saves it with an optimistic hash check. */
+export async function setDocumentChecklist(
+  context: WorkspaceContext,
+  identifier: string,
+  selector: ChecklistSelector,
+  checked: boolean,
+  expectedHash?: string,
+): Promise<{ document: DocumentSummary; changed: number; selected: number }> {
+  const document = findDocument(await buildWorkspaceIndex(context), identifier);
+  const path = await resolveSafeWorkspacePath(context.root, document.path);
+  const parsed = parseFrontmatter(await Bun.file(path).text());
+  let result: ReturnType<typeof setChecklistItems>;
+  try {
+    result = setChecklistItems(parsed.body, selector, checked);
+  } catch (error) {
+    throw new WorkspaceError(
+      "invalid_input",
+      error instanceof Error ? error.message : "Invalid checklist selection",
+      { cause: error },
+    );
+  }
+  if (result.changed === 0) return { document, changed: 0, selected: result.selected };
+  const updated = await replaceDocumentBody(
+    context,
+    identifier,
+    result.body,
+    expectedHash ?? document.contentHash,
+  );
+  return { document: updated, changed: result.changed, selected: result.selected };
 }
 
 export async function createDocument(
@@ -439,15 +751,23 @@ export async function archiveGroup(
   identifier: string,
   requireComplete = false,
 ): Promise<TaskGroup> {
+  void requireComplete;
   const group = await findGroup(context, identifier);
   if (group.archived) throw new WorkspaceError("invalid_input", "Task group is already archived");
-  if (group.total === 0 || (requireComplete && group.completed !== group.total)) {
-    throw new WorkspaceError("validation_failed", "Only non-empty groups can be archived");
+  if (group.total === 0 || group.resolved !== group.total) {
+    throw new WorkspaceError(
+      "validation_failed",
+      "Only groups with completed or archived tasks can be archived",
+    );
   }
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
   const archivedAt = now.toISOString();
-  const destination = datedGroupPath("_archived", day, group.slug);
+  const destination = datedGroupPath(
+    "_archived",
+    day,
+    `${group.slug}--${group.id.slice(-6).toLowerCase()}`,
+  );
   const index = await buildWorkspaceIndex(context);
   for (const task of index.documents.values()) {
     if (task.metadata.type !== "task" || !task.path.startsWith(`${group.path}/`)) continue;
@@ -492,28 +812,7 @@ export async function completeGroup(
   context: WorkspaceContext,
   identifier: string,
 ): Promise<TaskGroup> {
-  const group = await findGroup(context, identifier);
-  if (group.archived || group.finished)
-    throw new WorkspaceError("invalid_input", "Only active groups can be completed");
-  if (group.total === 0 || group.completed !== group.total) {
-    throw new WorkspaceError("validation_failed", "Every task must be completed first");
-  }
-  const day = new Date().toISOString().slice(0, 10);
-  const destination = datedGroupPath("_completed", day, group.slug);
-  await moveDirectory(context, group.path, destination);
-  return { ...group, path: destination, finished: true };
-}
-
-async function reopenCompletedGroup(
-  context: WorkspaceContext,
-  identifier: string,
-): Promise<TaskGroup> {
-  const group = await findGroup(context, identifier);
-  if (!group.finished)
-    throw new WorkspaceError("invalid_input", "Task group is not in completed storage");
-  const destination = `todo/${group.slug}`;
-  await moveDirectory(context, group.path, destination);
-  return { ...group, path: destination, finished: false };
+  return archiveGroup(context, identifier, true);
 }
 
 export async function restoreGroup(
@@ -523,15 +822,7 @@ export async function restoreGroup(
   const group = await findGroup(context, identifier);
   if (!group.archived) throw new WorkspaceError("invalid_input", "Task group is not archived");
   const index = await buildWorkspaceIndex(context);
-  const tasks = [...index.documents.values()].filter(
-    (task) => task.metadata.type === "task" && task.path.startsWith(`${group.path}/`),
-  );
-  const finished = tasks.length > 0 && tasks.every((task) => task.metadata.status === "completed");
-  const archivedDay = basename(group.path).match(/^(\d{4}-\d{2}-\d{2})-/)?.[1];
-  const restoreDay = archivedDay ?? new Date().toISOString().slice(0, 10);
-  const destination = finished
-    ? datedGroupPath("_completed", restoreDay, group.slug)
-    : `todo/${group.slug}`;
+  const destination = `${getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
   const sourcePath = await resolveSafeWorkspacePath(context.root, group.path);
   const destinationPath = await resolveSafeWorkspacePath(context.root, destination);
   await mkdir(dirname(destinationPath), { recursive: true });
@@ -556,7 +847,7 @@ export async function restoreGroup(
     );
   }
   await rename(sourcePath, destinationPath);
-  return { ...group, path: destination, archived: false, finished };
+  return { ...group, path: destination, archived: false, finished: group.resolved === group.total };
 }
 
 export async function archiveTaskGroup(
@@ -566,43 +857,67 @@ export async function archiveTaskGroup(
   return archiveGroup(context, identifier, false);
 }
 
+export async function autoArchiveResolvedGroups(
+  context: WorkspaceContext,
+  afterDays: number | null | undefined,
+): Promise<TaskGroup[]> {
+  const delay = afterDays === null ? null : (afterDays ?? 2);
+  if (delay !== null && (!Number.isInteger(delay) || delay < 0)) {
+    throw new WorkspaceError(
+      "invalid_input",
+      "Auto-archive delay must be a non-negative integer or null",
+    );
+  }
+  const index = await buildWorkspaceIndex(context);
+  const archived: TaskGroup[] = [];
+  const currentYear = new Date().getUTCFullYear();
+  for (const group of await listTaskGroups(context)) {
+    const match = /^todo\/work\/(W\d{2})\/([^/]+)$/.exec(group.path);
+    if (!match) continue;
+    const plan = index.documents.get(`${group.path}/plan.md`);
+    const createdAtValue = plan?.metadata.extra?.created_at;
+    const createdAt =
+      typeof createdAtValue === "string"
+        ? Date.parse(createdAtValue)
+        : (plan?.modifiedAt ?? Number.NaN);
+    const groupYear = Number.isFinite(createdAt)
+      ? new Date(createdAt).getUTCFullYear()
+      : currentYear;
+    if (groupYear >= currentYear) continue;
+    if (group.total > 0 && group.resolved === group.total) {
+      archived.push(await archiveGroup(context, group.id));
+      continue;
+    }
+    const destination = `todo/work/${groupYear}/${match[1]}/${match[2]}`;
+    await moveDirectory(context, group.path, destination);
+  }
+  if (delay === null) return archived;
+  for (const group of await listTaskGroups(context)) {
+    if (group.archived || group.total === 0 || group.resolved !== group.total) continue;
+    const tasks = [...index.documents.values()].filter(
+      (document) => document.metadata.type === "task" && dirname(document.path) === group.path,
+    );
+    const resolutionTimes = tasks.map((task) => {
+      const changes = task.metadata.extra?.status_history ?? [];
+      const resolved = [...changes]
+        .reverse()
+        .find((change) => change.to === "completed" || change.to === "archived");
+      return Date.parse(resolved?.at ?? task.metadata.updated_at ?? task.metadata.created_at ?? "");
+    });
+    if (resolutionTimes.some((time) => !Number.isFinite(time))) continue;
+    const lastResolved = Math.max(...resolutionTimes);
+    if (Date.now() - lastResolved < delay * 86_400_000) continue;
+    archived.push(await archiveGroup(context, group.id));
+  }
+  return archived;
+}
+
 export async function archiveTask(
   context: WorkspaceContext,
   identifier: string,
   expectedHash?: string,
 ): Promise<DocumentSummary> {
-  const task = findDocument(await buildWorkspaceIndex(context), identifier);
-  if (task.metadata.type !== "task")
-    throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
-  if (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_archive/"))
-    throw new WorkspaceError("invalid_input", "Task is already archived");
-  if (expectedHash !== undefined && task.contentHash !== expectedHash)
-    throw new WorkspaceError("conflict", `Task changed since it was loaded: ${task.path}`);
-  const day = new Date().toISOString().slice(0, 10);
-  const destination = `${datedGroupPath("_archived", day, `task-${task.metadata.id.toLowerCase()}`)}/${basename(task.path)}`;
-  const currentPath = await resolveSafeWorkspacePath(context.root, task.path);
-  const content = await Bun.file(currentPath).text();
-  const parsed = parseFrontmatter(content);
-  const existingExtra =
-    typeof parsed.values.extra === "object" &&
-    parsed.values.extra !== null &&
-    !Array.isArray(parsed.values.extra)
-      ? (parsed.values.extra as Record<string, unknown>)
-      : {};
-  parsed.values.extra = { ...existingExtra, archived_from: task.path };
-  parsed.values.archived_at = new Date().toISOString();
-  await replaceFile(
-    context,
-    task.path,
-    serializeMarkdown(parsed.values, parsed.body),
-    task.contentHash,
-  );
-  const updated = findDocument(await buildWorkspaceIndex(context), task.metadata.id);
-  const absoluteDestination = await resolveSafeWorkspacePath(context.root, destination);
-  await mkdir(dirname(absoluteDestination), { recursive: true });
-  await resolveSafeWorkspacePath(context.root, destination);
-  await rename(currentPath, absoluteDestination);
-  return findDocument(await buildWorkspaceIndex(context), updated.metadata.id);
+  return (await updateTask(context, identifier, { status: "archived" }, expectedHash)).task;
 }
 
 export async function restoreTask(
@@ -611,6 +926,24 @@ export async function restoreTask(
   expectedHash?: string,
 ): Promise<DocumentSummary> {
   const task = findDocument(await buildWorkspaceIndex(context), identifier);
+  if (
+    task.metadata.type === "task" &&
+    task.metadata.status === "archived" &&
+    !task.path.startsWith("todo/_archived/") &&
+    !task.path.startsWith("todo/_archive/")
+  ) {
+    const archivedTransition = [...(task.metadata.extra?.status_history ?? [])]
+      .reverse()
+      .find((change) => change.to === "archived");
+    return (
+      await updateTask(
+        context,
+        identifier,
+        { status: archivedTransition?.from ?? "planned" },
+        expectedHash,
+      )
+    ).task;
+  }
   if (
     task.metadata.type !== "task" ||
     (!task.path.startsWith("todo/_archived/") && !task.path.startsWith("todo/_archive/"))

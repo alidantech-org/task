@@ -239,7 +239,7 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
   return { schemaVersion: 1, projectRoot: root, facts: normalizedFacts, findings };
 }
 
-async function renderTemplate(
+export async function renderTemplate(
   name: string,
   values: Record<string, unknown>,
   context: WorkspaceContext,
@@ -256,7 +256,7 @@ async function renderTemplate(
   return Handlebars.compile(template, { noEscape: true })(values);
 }
 
-function managedSection(target: string, content: string): string {
+export function managedSection(target: string, content: string): string {
   const marker = target.replace(/[^a-z0-9.-]/gi, "-").toUpperCase();
   return `<!-- BEGIN TASK MANAGED ${marker} -->\n${content.trim()}\n<!-- END TASK MANAGED ${marker} -->`;
 }
@@ -541,13 +541,13 @@ export async function applyProjectSetupPlan(
     let expectedHash: string | undefined;
     if (exists && change.mode === "managed-section") {
       const current = await readFile(target, "utf8");
-      const markers =
-        /<!-- BEGIN TASK MANAGED [A-Z0-9.-]+ -->[\s\S]*?<!-- END TASK MANAGED [A-Z0-9.-]+ -->/;
-      const matching =
-        change.path === "README.md"
-          ? /<!-- BEGIN TASK MANAGED LINKS -->[\s\S]*?<!-- END TASK MANAGED LINKS -->/
-          : markers;
-      if (matching.test(current)) content = current.replace(matching, change.content);
+      const marker = /<!-- BEGIN TASK MANAGED ([A-Z0-9.-]+) -->/.exec(change.content)?.[1];
+      if (!marker)
+        throw new WorkspaceError("invalid_input", `Managed section has no marker: ${change.path}`);
+      const matching = new RegExp(
+        `<!-- BEGIN TASK MANAGED ${marker.replaceAll(".", "\\.")} -->[\\s\\S]*?<!-- END TASK MANAGED ${marker.replaceAll(".", "\\.")} -->`,
+      );
+      if (matching.test(current)) content = current.replace(matching, () => change.content);
       else content = `${current.trimEnd()}\n\n${change.content}\n`;
       expectedHash = new Bun.CryptoHasher("sha256").update(current).digest("hex");
     } else if (exists) {

@@ -28,19 +28,7 @@ export function App({ apiStatus }: AppProps): JSX.Element {
   const connected = apiStatus === "connected";
 
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <header className="border-b">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-          <a href="#home" className="flex items-center gap-3" aria-label="Task home">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <span className="text-sm font-semibold">T</span>
-            </span>
-            <span className="text-base font-semibold tracking-tight">Task</span>
-          </a>
-          <span className="text-sm text-muted-foreground">Work, made clear</span>
-        </div>
-      </header>
-
+    <main className="bg-background text-foreground">
       <section id="home" className="mx-auto max-w-7xl px-5 pt-20 pb-16 sm:px-8 sm:pt-28 lg:pt-36">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">

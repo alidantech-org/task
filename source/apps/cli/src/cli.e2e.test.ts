@@ -5,12 +5,18 @@ import { join } from "node:path";
 
 let root = "";
 afterEach(async () => {
+  strictQuality = false;
   if (root) await rm(root, { recursive: true, force: true });
   root = "";
 });
 
+let strictQuality = false;
+
 async function cli(workspace: string, ...args: string[]) {
   const path = join(import.meta.dir, "index.ts");
+  const config = join(root, "task.yaml");
+  if (!strictQuality && !(await Bun.file(config).exists()))
+    await Bun.write(config, 'workspace: "tasks"\nquality:\n  mode: off\n');
   return Bun.spawnSync(["bun", "run", path, ...args], {
     cwd: root,
     env: { ...process.env, TASK_WORKSPACE_ROOT: workspace },
@@ -52,13 +58,13 @@ describe("workspace-connected CLI", () => {
     const completed = await cli(workspace, "update", task.id, "--status", "completed", "--json");
     expect(completed.exitCode).toBe(0);
     const completion = JSON.parse(completed.stdout.toString());
-    expect(completion.completedGroup.path).toMatch(/^todo\/_completed\//);
+    expect(completion.status).toBe("completed");
     const archived = await cli(workspace, "archive", group.id, "--json");
     expect(JSON.parse(archived.stdout.toString()).path).toMatch(/^todo\/_archived\//);
     const archivedList = await cli(workspace, "list", "--archived", "--json");
     expect(JSON.parse(archivedList.stdout.toString())).toHaveLength(1);
     const restored = await cli(workspace, "restore", group.id, "--json");
-    expect(JSON.parse(restored.stdout.toString()).path).toMatch(/^todo\/_completed\//);
+    expect(JSON.parse(restored.stdout.toString()).path).toMatch(/^todo\/work\//);
     const missing = await cli(workspace, "show", "missing-id", "--json");
     expect(missing.exitCode).toBe(1);
     expect(missing.stdout.toString()).toBe("");
@@ -73,6 +79,7 @@ describe("workspace-connected CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout.toString()).valid).toBe(true);
     await rm(workspace, { recursive: true, force: true });
+    await rm(join(root, "task.yaml"), { force: true });
     const missing = Bun.spawnSync(["bun", "run", join(import.meta.dir, "index.ts"), "info"], {
       cwd: root,
       env: { ...process.env, TASK_WORKSPACE_ROOT: "" },
@@ -124,6 +131,326 @@ describe("workspace-connected CLI", () => {
     expect(unsupported.stderr.toString()).toContain("Unknown option: --watch");
   });
 
+  test("delete moves items to the temp trash, requires --yes and can be undone", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-delete-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    process.env.TASK_TRASH_DIR = join(root, "trash");
+    try {
+      const group = JSON.parse(
+        (await cli(workspace, "group", "create", "--title", "Doomed", "--json")).stdout.toString(),
+      );
+      const task = JSON.parse(
+        (
+          await cli(workspace, "create", "--title", "Doomed task", "--group", group.id, "--json")
+        ).stdout.toString(),
+      );
+      const refused = await cli(workspace, "delete", task.id, "--json");
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stderr.toString() + refused.stdout.toString()).toContain("--yes");
+      const deleted = await cli(workspace, "delete", task.id, "--yes", "--json");
+      expect(deleted.exitCode).toBe(0);
+      const entry = JSON.parse(deleted.stdout.toString());
+      expect(entry.trashPath.startsWith(join(root, "trash"))).toBe(true);
+      const listed = JSON.parse(
+        (await cli(workspace, "trash", "list", "--json")).stdout.toString(),
+      );
+      expect(listed.map((item: { trashId: string }) => item.trashId)).toEqual([entry.trashId]);
+      const blocked = await cli(workspace, "delete", group.id, "--yes", "--json");
+      expect(blocked.exitCode).toBe(0);
+      const groupEntry = JSON.parse(blocked.stdout.toString());
+      expect(groupEntry.kind).toBe("task-group");
+      const restored = await cli(workspace, "undelete", groupEntry.trashId, "--json");
+      expect(restored.exitCode).toBe(0);
+      const missing = await cli(workspace, "undelete", "20200101T000000Z-TSK-000000", "--json");
+      expect(missing.exitCode).toBe(1);
+    } finally {
+      delete process.env.TASK_TRASH_DIR;
+    }
+  });
+
+  test("start --track records git changes until the task leaves in-progress", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-track-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", ...args], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    git("init", "-q");
+    await Bun.write(join(root, "app.txt"), "base\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "base");
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Track", "--json")).stdout.toString(),
+    );
+    const task = JSON.parse(
+      (
+        await cli(workspace, "create", "--title", "Tracked", "--group", group.id, "--json")
+      ).stdout.toString(),
+    );
+    expect((await cli(workspace, "changes", task.id, "--json")).exitCode).toBe(1);
+    expect((await cli(workspace, "start", task.id, "--track", "--json")).exitCode).toBe(0);
+    await Bun.write(join(root, "app.txt"), "base\nchanged\n");
+    await Bun.write(join(root, "added.txt"), "x\n");
+    const live = JSON.parse((await cli(workspace, "changes", task.id, "--json")).stdout.toString());
+    expect(live.segments[0].live).toBe(true);
+    expect(live.totals.files).toBe(2);
+    expect(
+      (await cli(workspace, "update", task.id, "--status", "completed", "--json")).exitCode,
+    ).toBe(0);
+    const done = JSON.parse((await cli(workspace, "changes", task.id, "--json")).stdout.toString());
+    expect(done.segments[0].live).toBe(false);
+    expect(done.files.map((file: { path: string }) => file.path)).toEqual(["added.txt", "app.txt"]);
+    const diff = await cli(workspace, "changes", task.id, "--diff", "app.txt");
+    expect(diff.stdout.toString()).toContain("+changed");
+    const text = await cli(workspace, "changes", task.id);
+    expect(text.stdout.toString()).toContain("2 file(s)");
+  });
+
+  test("the quality gate rejects scaffold-only tasks and accepts detailed ones", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-quality-"));
+    strictQuality = true;
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const words = (count: number) =>
+      Array.from({ length: count }, (_, index) => `detail${index}`).join(" ");
+    const doc = (title: string) => `# ${title}\n\n## Details\n${words(120)}\n`;
+    await Bun.write(join(root, "goal.md"), doc("Goal"));
+    await Bun.write(join(root, "plan.md"), doc("Plan"));
+    await Bun.write(
+      join(root, "body.md"),
+      `# Task\n\n## Goal\n${words(110)}\n\n## Context\n${words(40)}\n\n## Acceptance checklist\n- [ ] First concrete step\n- [ ] Second concrete step\n- [ ] Third concrete step\n`,
+    );
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Strict", "--json")).stdout.toString(),
+    );
+    const scaffold = JSON.parse(
+      (
+        await cli(workspace, "create", "--title", "Scaffold", "--group", group.id, "--json")
+      ).stdout.toString(),
+    );
+    const rejected = await cli(workspace, "update", scaffold.id, "--status", "in-progress");
+    expect(rejected.exitCode).toBe(1);
+    expect(rejected.stderr.toString()).toContain("not detailed enough");
+    const validation = await cli(workspace, "validate", "--json");
+    expect(validation.exitCode).toBe(1);
+    expect(
+      JSON.parse(validation.stdout.toString()).diagnostics.some(
+        (item: { category?: string }) => item.category === "quality",
+      ),
+    ).toBe(true);
+    const detailed = JSON.parse(
+      (
+        await cli(
+          workspace,
+          "create",
+          "--title",
+          "Detailed",
+          "--group",
+          group.id,
+          "--body-file",
+          join(root, "body.md"),
+          "--json",
+        )
+      ).stdout.toString(),
+    );
+    const stillBlocked = await cli(workspace, "update", detailed.id, "--status", "in-progress");
+    expect(stillBlocked.stderr.toString()).toContain("goal.md");
+    const goal = await Bun.file(join(workspace, group.path, "goal.md")).text();
+    expect(goal).toContain("## Goal");
+  });
+
+  test("checklist, check and uncheck update checkboxes without editing the file", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-checklist-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    await Bun.write(
+      join(root, "body.md"),
+      "# T\n\n## Design\n- [ ] one\n- [ ] two\n\n## Build\n- [ ] three\n",
+    );
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Boxes", "--json")).stdout.toString(),
+    );
+    const task = JSON.parse(
+      (
+        await cli(
+          workspace,
+          "create",
+          "--title",
+          "Boxes",
+          "--group",
+          group.id,
+          "--body-file",
+          join(root, "body.md"),
+          "--json",
+        )
+      ).stdout.toString(),
+    );
+    const listed = JSON.parse(
+      (await cli(workspace, "checklist", task.id, "--json")).stdout.toString(),
+    );
+    expect(listed.groups.map((entry: { heading: string }) => entry.heading)).toEqual([
+      "Design",
+      "Build",
+    ]);
+    const item = JSON.parse(
+      (await cli(workspace, "check", task.id, "--item", "2", "--json")).stdout.toString(),
+    );
+    expect(item).toMatchObject({ changed: 1, completed: 1, total: 3 });
+    const section = JSON.parse(
+      (await cli(workspace, "check", task.id, "--section", "build", "--json")).stdout.toString(),
+    );
+    expect(section.completed).toBe(2);
+    const all = JSON.parse(
+      (await cli(workspace, "check", task.id, "--all", "--json")).stdout.toString(),
+    );
+    expect(all.completed).toBe(3);
+    const cleared = JSON.parse(
+      (await cli(workspace, "uncheck", task.id, "--all", "--json")).stdout.toString(),
+    );
+    expect(cleared.completed).toBe(0);
+    expect((await cli(workspace, "check", task.id, "--json")).exitCode).toBe(1);
+    expect((await cli(workspace, "check", task.id, "--item", "9", "--json")).exitCode).toBe(1);
+  });
+
+  test("fields, ordering, comments, attachments, templates and bulk work from the command line", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-features-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const run = async (...args: string[]) => {
+      const result = await cli(workspace, ...args, "--json");
+      return {
+        code: result.exitCode,
+        data: result.stdout.toString() ? JSON.parse(result.stdout.toString()) : null,
+        err: result.stderr.toString(),
+      };
+    };
+    const group = (await run("group", "create", "--title", "Features")).data;
+    const make = async (title: string, ...extra: string[]) =>
+      (await run("create", "--title", title, "--group", group.id, ...extra)).data;
+    const a = await make("Alpha", "--estimate", "3", "--add-watcher", "ann");
+    const b = await make("Beta");
+    const c = await make("Gamma");
+    expect(a.estimate).toBe(3);
+    expect(a.watchers).toEqual(["ann"]);
+    const names = async () => (await run("list")).data.map((task: { name: string }) => task.name);
+    expect(await names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect((await run("move", c.id, "--before", a.id)).code).toBe(0);
+    expect(await names()).toEqual(["Gamma", "Alpha", "Beta"]);
+    expect((await run("move", c.id, "--after", b.id)).code).toBe(0);
+    expect(await names()).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect((await run("move", c.id)).code).toBe(1);
+
+    const updated = (
+      await run(
+        "update",
+        b.id,
+        "--parent",
+        a.id,
+        "--link",
+        `blocks:${c.id}`,
+        "--repeat",
+        "week:2",
+        "--add-watcher",
+        "peter",
+        "--start",
+        "2026-11-02",
+      )
+    ).data;
+    expect(updated).toMatchObject({
+      parent: a.id,
+      links: [{ type: "blocks", task: c.id }],
+      recurrence: { every: "week", interval: 2 },
+    });
+    expect(
+      (
+        await run(
+          "update",
+          b.id,
+          "--parent",
+          "none",
+          "--link",
+          "none",
+          "--repeat",
+          "none",
+          "--remove-watcher",
+          "peter",
+        )
+      ).data.parent,
+    ).toBeUndefined();
+    expect((await run("update", b.id, "--parent", b.id)).code).toBe(1);
+    expect((await run("list", "--parent", a.id)).data).toEqual([]);
+
+    process.env.TASK_AUTHOR = "Peter";
+    try {
+      expect((await run("comment", a.id, "--text", "First note @ann")).data.total).toBe(1);
+      const comments = (await run("comments", a.id)).data;
+      expect(comments[0]).toMatchObject({ author: "Peter", text: "First note @ann" });
+      expect((await run("comment", a.id)).code).toBe(1);
+    } finally {
+      delete process.env.TASK_AUTHOR;
+    }
+    expect(
+      (await run("activity", a.id)).data.map((entry: { kind: string }) => entry.kind),
+    ).toContain("comment");
+
+    await Bun.write(join(root, "note.txt"), "hello");
+    const attached = (await run("attach", a.id, join(root, "note.txt"))).data;
+    expect(attached.attachments[0]).toMatchObject({ kind: "file", name: "note.txt", size: 5 });
+    const linked = (await run("attach", a.id, "https://example.com/spec", "--name", "Spec")).data;
+    expect(linked.attachments).toHaveLength(2);
+    expect((await run("attach", a.id, join(root, "missing.txt"))).code).toBe(1);
+    expect((await run("detach", a.id, "note.txt")).data.attachments).toHaveLength(1);
+
+    await Bun.write(
+      join(root, "template.md"),
+      "# Template\n\n## Goal\nWhy.\n\n## Acceptance checklist\n- [ ] One\n",
+    );
+    expect(
+      (
+        await run(
+          "template",
+          "create",
+          "--title",
+          "Standard",
+          "--body-file",
+          join(root, "template.md"),
+          "--priority",
+          "high",
+          "--estimate",
+          "2",
+        )
+      ).code,
+    ).toBe(0);
+    const templates = (await run("template", "list")).data;
+    expect(templates.map((template: { name: string }) => template.name)).toEqual(["Standard"]);
+    const fromTemplate = (
+      await run(
+        "create",
+        "--title",
+        "From template",
+        "--group",
+        group.id,
+        "--template",
+        templates[0].id,
+      )
+    ).data;
+    expect(fromTemplate.priority).toBe("high");
+    expect(fromTemplate.estimate).toBe(2);
+
+    const other = (await run("group", "create", "--title", "Other")).data;
+    const bulk = (
+      await run("bulk", a.id, "TSK-NOPE", b.id, "--priority", "low", "--group", other.id)
+    ).data;
+    expect(bulk.map((result: { ok: boolean }) => result.ok)).toEqual([true, false, true]);
+    expect((await run("bulk", a.id, "TSK-NOPE", "--priority", "low")).code).toBe(1);
+    const moved = (await run("list", "--group", other.id)).data;
+    expect(moved.map((task: { name: string }) => task.name).sort()).toEqual(["Alpha", "Beta"]);
+  });
+
   test("init configures a fresh project and supports a custom workspace", async () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-init-"));
     const project = join(root, "custom-project");
@@ -134,7 +461,15 @@ describe("workspace-connected CLI", () => {
     );
     expect(initialized.exitCode).toBe(0);
     expect(JSON.parse(initialized.stdout.toString()).workspace).toBe(join(project, ".tasks"));
-    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+    const config = await Bun.file(join(project, "task.yaml")).text();
+    expect(config).toContain('\nworkspace: ".tasks"\n');
+    expect(config).toContain("managed with Task");
+    const guide = await Bun.file(join(project, ".tasks", "README.md")).text();
+    expect(guide.startsWith("---\n")).toBe(true);
+    expect(guide).toContain("type: workspace-guide");
+    const agents = await Bun.file(join(project, "AGENTS.md")).text();
+    expect(agents).toContain("<!-- BEGIN TASK MANAGED TASK-TOOL -->");
+    expect(agents).toContain(".tasks/README.md");
     const overview = await Bun.spawnSync(
       ["bun", "run", join(import.meta.dir, "index.ts"), "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
@@ -147,7 +482,19 @@ describe("workspace-connected CLI", () => {
     );
     expect(repeated.exitCode).toBe(1);
     expect(repeated.stderr.toString()).toContain("already exists");
-    expect(await Bun.file(join(project, "task.yaml")).text()).toBe('workspace: ".tasks"\n');
+    expect(await Bun.file(join(project, "task.yaml")).text()).toBe(config);
+    await Bun.write(join(project, "AGENTS.md"), `# Mine\n\n${agents}\n\nKeep this.\n`);
+    const refreshed = Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--refresh-docs", "--json"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(refreshed.exitCode).toBe(0);
+    const refreshedAgents = await Bun.file(join(project, "AGENTS.md")).text();
+    expect(refreshedAgents.match(/BEGIN TASK MANAGED TASK-TOOL/g)).toHaveLength(1);
+    expect(refreshedAgents).toContain("Keep this.");
+    expect(JSON.parse(refreshed.stdout.toString()).documentation.skipped).toContain(
+      join(project, ".tasks", "README.md"),
+    );
   });
 
   test("accepts the project root as an explicit workspace", async () => {

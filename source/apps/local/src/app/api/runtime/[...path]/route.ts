@@ -60,9 +60,21 @@ async function forward(
   }
   if (!response)
     return NextResponse.json({ error: { message: "Local runtime is offline" } }, { status: 503 });
-  const result = new NextResponse(await response.arrayBuffer(), {
+  const responseHeaders = new Headers({
+    "content-type": response.headers.get("content-type") ?? "application/json",
+    "cache-control": response.headers.get("cache-control") ?? "no-store",
+    "x-content-type-options": "nosniff",
+  });
+  const disposition = response.headers.get("content-disposition");
+  if (disposition) responseHeaders.set("content-disposition", disposition);
+  const isEventStream = response.headers.get("content-type")?.startsWith("text/event-stream");
+  if (isEventStream) {
+    responseHeaders.set("connection", "keep-alive");
+    responseHeaders.set("x-accel-buffering", "no");
+  }
+  const result = new NextResponse(isEventStream ? response.body : await response.arrayBuffer(), {
     status: response.status,
-    headers: { "content-type": response.headers.get("content-type") ?? "application/json" },
+    headers: responseHeaders,
   });
   if (refreshCapabilityCookie) {
     result.cookies.set("task_runtime_capability", capability, {

@@ -34,7 +34,7 @@ The CLI is the scriptable interface for people, shell scripts, automation, and A
 
 ### Local runtime — source/apps/local
 
-The runtime is the controlled bridge between the browser and one selected workspace. It calls the shared engine, exposes a narrow workspace-scoped HTTP API, publishes local change notifications over WebSocket, reconciles filesystem changes from CLI/agents/external editors, and enforces browser origin checks, runtime capability authorization, request validation, and path restrictions. It binds to loopback by default. It is an adapter, not the owner of workspace data or domain rules.
+The runtime is the controlled bridge between the browser and one selected workspace. It calls the shared engine, exposes a narrow workspace-scoped HTTP API, publishes reconciled local change invalidations over an authenticated Server-Sent Events stream, and enforces browser origin checks, runtime capability authorization, request validation, and path restrictions. It binds to loopback by default. It is an adapter, not the owner of workspace data or domain rules.
 
 ### Local dashboard — source/apps/local browser UI
 
@@ -42,7 +42,7 @@ The dashboard reads and mutates data only through the local runtime API. It rend
 
 The dashboard server renders its initial project snapshot from the selected local runtime, then the browser uses the same-origin proxy for subsequent reads and writes. The runtime resolves a project root to its configured managed workspace before building the index. If discovery fails, readiness reports the error rather than presenting an empty project as if it were loaded.
 
-Shared task updates append actual status transitions to the task's `extra.status_history` metadata. Each entry records the previous status, new status, and an ISO timestamp. The shared metadata reader validates this structure. Older tasks have no history until a status changes; consumers must not infer earlier transitions from `updated_at` or filesystem timestamps.
+Shared task updates append actual status transitions to the task's `extra.status_history` metadata. Each entry records the previous status, new status, and an ISO timestamp. Statuses are `planned`, `in-progress`, `blocked`, `completed`, and `archived`; task status is frontmatter and never requires moving the task file. Archived tasks stay in their group and can be restored to their last pre-archive status. Task Markdown checkboxes and timestamped comment entries remain in the body and are editable in the local UI. Older tasks have no history until a status changes; consumers must not infer earlier transitions from `updated_at` or filesystem timestamps.
 
 ### Other clients
 
@@ -106,7 +106,7 @@ A command such as:
 task update TASK-001 --status done
 ~~~
 
-calls the shared update operation directly. It validates the task and status, safely writes the file, and returns the new revision. The local runtime reconciles the change and emits a WebSocket event; the open dashboard updates without a manual refresh.
+calls the shared update operation directly. It validates the task and status, safely writes the file, and returns the new revision. The local runtime reconciles the change and emits an SSE invalidation; the open dashboard fetches a fresh authoritative snapshot without a manual refresh.
 
 For a dashboard edit, the browser sends an update request to the runtime, which calls the same shared operation. The file changes once; the next CLI read sees the updated value. A human and an agent are editing one project, not synchronizing two copies.
 
@@ -137,7 +137,7 @@ This is a future organizational direction, not a request to create empty folders
 | --- | --- |
 | Terminal formatting, prompts, shell completion, exit codes | CLI |
 | HTTP routes, DTO transport, local process lifecycle | Local runtime |
-| WebSocket connections, subscriptions, delivery | Local runtime |
+| Live SSE connections, subscriptions, delivery | Local runtime |
 | React views, browser state and interaction | Dashboard |
 | Hosted identity, organisations, cloud authorization/persistence | Hosted API |
 | Flutter/Dart behavior | Mobile app |
@@ -169,19 +169,19 @@ A process-local mutex is insufficient because other processes/editors can write 
 
 Watcher events are hints, not truth: they may be duplicated, reordered, coalesced, or missed. The runtime should debounce/coalesce notifications, reconcile actual filesystem state through shared operations, derive domain-level change descriptions, and publish them. If watcher overflow/restart creates uncertainty, perform broader reconciliation and issue a snapshot-reset notification. Dashboard-originated writes must also publish changes; do not rely solely on watcher behavior for runtime-owned writes.
 
-## 10. Local HTTP API and WebSocket
+## 10. Local HTTP API and live event stream
 
 The HTTP API exposes use cases, not arbitrary filesystem primitives. Expected categories are runtime health/workspace summary, workspace snapshot/query, task/document reads and mutations, validation/preflight, and snapshot version/change cursor.
 
 Do not expose arbitrary file read/write, arbitrary path traversal, shell execution, or unrestricted directory listing.
 
-WebSocket events describe domain changes, not raw OS watcher notifications. An event envelope should eventually include event type, workspace identity, stable record identity where relevant, resulting revision/change cursor, minimal change metadata, and a way to detect gaps and request a fresh snapshot. Exact routes, DTOs, event names and cursor format must be defined before dashboard integration. Clients must never assume every event was received.
+The runtime exposes `GET /workspace/events` as a capability-protected Server-Sent Events stream. Events describe reconciled domain changes, not raw OS watcher notifications. Each event includes event type, workspace identity, a process-local monotonic cursor, change kind, and minimal record/path metadata. New connections and workspace switches receive a reset invalidation. Events are not a durable change log: after any invalidation or reconnect, the dashboard fetches a fresh authoritative snapshot. Clients must never assume every event was received.
 
 ## 11. Live updates and recovery
 
-The initiating browser may apply a confirmed mutation response. Other browser sessions receive the event. CLI/agent/external-editor changes are reconciled and published. Duplicate events are safe to process; revisions/cursors let clients ignore stale events. On reconnect, cursor gap, overflow, or reset, the dashboard obtains a fresh authoritative snapshot. The UI distinguishes pending, saved, conflict, and disconnected states and never reports success before confirmation.
+The initiating browser may apply a confirmed mutation response. Other browser sessions receive an invalidation event. CLI/agent/external-editor changes are reconciled and published. Event IDs are process-local and are not replayed; every new connection receives a reset invalidation. The dashboard never treats the event stream as state and fetches a fresh authoritative snapshot for each invalidation. A periodic fallback snapshot covers a disconnected stream. The UI distinguishes saved, conflict, and disconnected states and never reports success before confirmation.
 
-WebSocket updates are local UI synchronization only. They are not Task Cloud's durable multi-device sync protocol, which has separate replica identities, cursors, authorization, and conflict handling.
+SSE updates are local UI synchronization only. They are not Task Cloud's durable multi-device sync protocol, which has separate replica identities, cursors, authorization, and conflict handling.
 
 ## 12. Local runtime security
 
@@ -189,7 +189,7 @@ Before exposing workspace data or mutations:
 
 - Bind to loopback by default.
 - Validate browser origins and protect against cross-origin request abuse.
-- Use a per-runtime capability/token or equivalent authorization for sensitive HTTP operations and WebSocket subscriptions.
+- Use a per-runtime capability/token or equivalent authorization for sensitive HTTP operations and SSE subscriptions.
 - Do not put reusable secrets in URLs, browser-visible logs, or workspace files.
 - Restrict operations to the runtime's selected workspace and managed boundary.
 - Defend against symlink escapes, including symlink changes between validation and use where practical.
@@ -232,7 +232,7 @@ Use temporary workspace fixtures and filesystem-level integration tests.
 4. CLI integration with human and machine-readable output.
 5. Local runtime HTTP adapter and origin/capability security before exposing data or mutations.
 6. Filesystem reconciliation and domain-level change descriptions.
-7. WebSocket event envelopes/cursors, duplicate/gap handling and snapshot recovery.
+7. SSE invalidation envelopes/cursors and snapshot recovery.
 8. Dashboard integration with server-confirmed operations and live updates.
 9. Cross-interface, external-editor, concurrency and offline verification.
 10. TUI reuse after the engine API stabilizes.
@@ -243,7 +243,7 @@ Do not build a second task model in the runtime/dashboard, route ordinary CLI co
 
 The CLI resolves a local workspace from `--workspace`, `TASK_WORKSPACE_ROOT`, nearest `task.yaml`, or nearest `tasks/` directory. It uses `@task/workspace` for Markdown indexing, task/document queries, search, validation, safe task/group creation and updates, and group archive/restore. There is no persistent index cache. Full-text search reads document bodies at query time.
 
-Task groups use `todo/<slug>/plan.md` and numbered task records. When every task in a group is completed, the group moves to `todo/_completed/YYYY/MM/YYYY-MM-DD-<slug>/`. Explicitly archived tasks or groups, including incomplete work, move to `todo/_archived/YYYY/MM/YYYY-MM-DD-<slug>/`. Individual task archives retain their original path in `extra.archived_from` and can be restored by task ID; group restore uses the stable group ID. Setup asks whether either history folder should be ignored by Git and does not modify `.gitignore` without user choice. Existing `todo/_archive/` records remain readable. CLI `edit` and `docs open` edit a temporary body copy and submit changes through the shared hash-checked write operation.
+New groups are created under `todo/work/Www/<slug>--<stable-id-suffix>/` for the current year, using ISO Monday week numbering by default. Older-year paths include the year, such as `todo/work/2026/W44/`. Group plans carry a creation timestamp so week grouping can be maintained across year rollover. Legacy `todo/<slug>/` groups stay readable; `task migrate` or the local Workspace Health action moves them into the week-based structure without changing IDs or Markdown contents. Fully resolved groups (all tasks completed or archived) move to `todo/_archived/YYYY/MM/YYYY-MM-DD-<slug>--<stable-id-suffix>/`, automatically after two days by default or when archived manually. `task.yaml` can select another week-start day and change or disable the auto-archive delay. The selected week start drives group folder numbering, calendar grids, and weekly completion history. Existing completed/archive paths remain readable, and group restore returns records to the current week folder. Group moves are ordinary Git-tracked renames; Git retains history. CLI `edit` and `docs open` edit a temporary body copy and submit changes through the shared hash-checked write operation.
 
 The local dashboard runtime stores explicitly trusted project roots in a user-level `task/trusted-projects.json` registry under the platform config directory (or `XDG_CONFIG_HOME`). The browser can list, trust, untrust, and select projects only through capability-protected runtime routes. Selection re-resolves the project workspace before replacing the active watcher; failed resolution leaves the current workspace active. Trust registry data is never written into project workspaces.
 

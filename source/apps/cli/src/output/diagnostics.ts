@@ -12,6 +12,10 @@ function category(message: string): string {
   return "Workspace";
 }
 
+function label(entry: ValidationDiagnostic): string {
+  return entry.category === "quality" ? "Quality" : category(entry.message);
+}
+
 export function renderDiagnostics(
   diagnostics: readonly ValidationDiagnostic[],
   style: Style,
@@ -26,14 +30,16 @@ export function renderDiagnostics(
   const lines: string[] = [];
   for (const [path, entries] of paths) {
     lines.push(`${style.strong(path)}`);
-    for (const entry of entries)
-      lines.push(
-        `  ${style.warning(symbols.warning)} ${category(entry.message)}: ${entry.message}`,
-      );
+    for (const entry of entries) {
+      const isWarning = entry.severity === "warning";
+      const mark = isWarning ? style.warning(symbols.warning) : style.error(symbols.error);
+      lines.push(`  ${mark} ${label(entry)}: ${entry.message}`);
+    }
   }
+  const warnings = sorted.filter((entry) => entry.severity === "warning").length;
+  const errors = sorted.length - warnings;
   lines.push("");
-  lines.push(
-    style.error(`${sorted.length} validation ${sorted.length === 1 ? "issue" : "issues"}.`),
-  );
+  const summary = `${errors} ${errors === 1 ? "error" : "errors"}, ${warnings} ${warnings === 1 ? "warning" : "warnings"}.`;
+  lines.push(errors > 0 ? style.error(summary) : style.warning(summary));
   return lines;
 }

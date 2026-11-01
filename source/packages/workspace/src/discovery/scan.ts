@@ -17,6 +17,8 @@ export async function discoverMarkdown(root: string): Promise<string[]> {
       if (entry.isSymbolicLink()) continue;
       const path = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
+        // Uploaded task attachments are files, not workspace documents.
+        if (relativeDirectory === "" && entry.name === "attachments") continue;
         if (!shouldIgnoreDirectory(entry.name)) await walk(resolve(directory, entry.name), path);
       } else if (entry.isFile() && /\.md$/i.test(entry.name)) {
         files.push(path);

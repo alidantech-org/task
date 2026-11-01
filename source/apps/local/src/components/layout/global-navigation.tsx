@@ -2,28 +2,34 @@
 
 import { Button, Input } from "@task/ui";
 import {
+  Calendar,
   Check,
-  FileText,
+  ChevronLeft,
+  File,
   Folder,
   FolderKanban,
-  Laptop,
-  LayoutDashboard,
-  ListTodo,
-  Moon,
-  Pencil,
-  Sun,
+  LayoutGrid,
+  ListChecks,
+  Sparkles,
   X,
 } from "lucide-react";
-import Image from "next/image";
-import type { Dispatch, SetStateAction } from "react";
+import {
+  type Dispatch,
+  Fragment,
+  type SetStateAction,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 type Project = { path: string; addedAt: string; active?: boolean };
 type WorkspaceProject = { projectName: string; projectRoot: string } | null;
-type ThemeChoice = "system" | "light" | "dark";
+type NavGroup = { id: string; name: string; path: string; total: number };
 type GlobalNavigationProps = {
   section: string;
   selectSection(label: string): void;
-  openCreate(date?: string): void;
   workspace: WorkspaceProject;
   projectSwitcherOpen: boolean;
   setProjectSwitcherOpen: Dispatch<SetStateAction<boolean>>;
@@ -33,21 +39,29 @@ type GlobalNavigationProps = {
   trustProjectPath(path: string): Promise<void>;
   switchProject(path: string): Promise<void>;
   removeProjectTrust(path: string): Promise<void>;
-  theme: ThemeChoice;
-  toggleTheme(): void;
+  sidebarCompact: boolean;
+  toggleSidebarCompact(): void;
+  taskCount: number;
+  documentCount: number;
+  taskGroups: NavGroup[];
+  taskGroupFilter: string;
+  selectTaskGroup(groupId: string): void;
+  documentPaths: string[];
+  documentFolder: string;
+  selectDocumentFolder(folder: string): void;
 };
 const globalNavigation = [
-  { label: "Overview", icon: LayoutDashboard },
-  { label: "Tasks", icon: ListTodo },
-  { label: "Groups", icon: FolderKanban },
-  { label: "Documents", icon: FileText },
+  { label: "Overview", icon: LayoutGrid },
+  { label: "Tasks", icon: ListChecks },
+  { label: "Calendar", icon: Calendar },
+  { label: "Groups", icon: Folder },
+  { label: "Documents", icon: File },
 ];
 
 export function GlobalNavigation(props: GlobalNavigationProps) {
   const {
     section,
     selectSection,
-    openCreate,
     workspace,
     projectSwitcherOpen,
     setProjectSwitcherOpen,
@@ -57,78 +71,217 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     trustProjectPath,
     switchProject,
     removeProjectTrust,
-    theme,
-    toggleTheme,
+    sidebarCompact,
+    toggleSidebarCompact,
+    taskCount,
+    documentCount,
+    taskGroups,
+    taskGroupFilter,
+    selectTaskGroup,
+    documentPaths,
+    documentFolder,
+    selectDocumentFolder,
   } = props;
+  const switcherRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    if (!projectSwitcherOpen) {
+      setPopoverPosition(null);
+      return;
+    }
+    const updatePosition = () => {
+      const trigger = switcherRef.current?.querySelector("button");
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+      const bounds = trigger.getBoundingClientRect();
+      const width = popover.getBoundingClientRect().width;
+      const height = popover.getBoundingClientRect().height;
+      const left =
+        bounds.right + 8 + width <= window.innerWidth
+          ? bounds.right + 8
+          : Math.max(8, bounds.left - width - 8);
+      const top = Math.max(8, Math.min(bounds.bottom - height, window.innerHeight - height - 8));
+      setPopoverPosition({ top, left });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [projectSwitcherOpen]);
+
+  useEffect(() => {
+    if (!projectSwitcherOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !switcherRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
+        setProjectSwitcherOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [projectSwitcherOpen, setProjectSwitcherOpen]);
+
   return (
-    <aside
-      data-slot="global-navigation"
-      className="sticky top-2 hidden h-[calc(100svh-1rem)] w-16 shrink-0 flex-col items-center self-start px-2 py-3 md:flex"
-    >
-      <span aria-label="Task" className="mb-5 grid size-10 place-items-center" role="img">
-        <Image src="/task-symbol.svg" alt="" width={36} height={36} priority />
-      </span>
-      <nav aria-label="Workspace navigation" className="flex w-full flex-col items-center gap-1">
+    <aside data-slot="global-navigation" className={`side ${sidebarCompact ? "msb" : ""}`}>
+      <div className="brand">
+        <button
+          type="button"
+          className="logo"
+          title="Collapse or expand sidebar"
+          aria-label="Collapse or expand sidebar"
+          onClick={toggleSidebarCompact}
+        >
+          T
+        </button>
+        <span className="lbl">Task</span>
+        <button
+          type="button"
+          className="ib sbc"
+          title={sidebarCompact ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={sidebarCompact ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={toggleSidebarCompact}
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <nav aria-label="Workspace navigation">
         {globalNavigation.map(({ label, icon: Icon }) => (
-          <Button
-            key={label}
-            variant={section === label ? "secondary" : "ghost"}
-            size="icon"
-            title={label}
-            aria-label={label}
-            aria-current={section === label ? "page" : undefined}
-            onClick={() => selectSection(label)}
-            className="size-10"
-          >
-            <Icon className="size-4" />
-          </Button>
+          <Fragment key={label}>
+            <button
+              type="button"
+              className={`nv ${section === label ? "on" : ""}`}
+              title={label}
+              aria-label={label}
+              aria-current={section === label ? "page" : undefined}
+              onClick={() => selectSection(label)}
+            >
+              <em className="ni">
+                <Icon className="size-[18px]" />
+              </em>
+              <span>{label}</span>
+              {label === "Tasks" && <i>{taskCount}</i>}
+              {label === "Documents" && <i>{documentCount}</i>}
+            </button>
+            {label === "Tasks" && section === "Tasks" && (
+              <div className="sub2">
+                <button
+                  type="button"
+                  className={`nv ${taskGroupFilter ? "" : "on"}`}
+                  onClick={() => selectTaskGroup("")}
+                >
+                  <span>All groups</span>
+                  <i>{taskCount}</i>
+                </button>
+                {taskGroups.map((group) => (
+                  <button
+                    type="button"
+                    key={group.id}
+                    className={`nv ${taskGroupFilter === group.id ? "on" : ""}`}
+                    onClick={() => selectTaskGroup(group.id)}
+                  >
+                    <span>{group.name}</span>
+                    <i>{group.total}</i>
+                  </button>
+                ))}
+              </div>
+            )}
+            {label === "Documents" && section === "Documents" && (
+              <div className="sub2">
+                <button
+                  type="button"
+                  className={`nv ${documentFolder ? "" : "on"}`}
+                  onClick={() => selectDocumentFolder("")}
+                >
+                  <span>All files</span>
+                  <i>{documentPaths.length}</i>
+                </button>
+                {[...new Set(documentPaths.map((path) => path.split("/")[0] ?? ""))]
+                  .filter(Boolean)
+                  .map((folder) => (
+                    <button
+                      type="button"
+                      key={folder}
+                      className={`nv ${documentFolder === folder ? "on" : ""}`}
+                      onClick={() => selectDocumentFolder(folder)}
+                    >
+                      <span>{folder}/</span>
+                      <i>{documentPaths.filter((path) => path.startsWith(`${folder}/`)).length}</i>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </Fragment>
         ))}
       </nav>
-      <div className="mt-3 w-full border-t border-border/60 pt-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Create task"
-          aria-label="Create task"
-          onClick={() => openCreate()}
-          className="mx-auto flex size-10"
+      <div className="shd">Workspace</div>
+      <nav aria-label="Workspace tools">
+        <button
+          type="button"
+          className={`nv ${section === "Agent prompts" ? "on" : ""}`}
+          title="Agent prompts"
+          aria-current={section === "Agent prompts" ? "page" : undefined}
+          onClick={() => selectSection("Agent prompts")}
         >
-          <Pencil className="size-4" />
-        </Button>
+          <em className="ni">
+            <Sparkles className="size-[18px]" />
+          </em>
+          <span>Agent prompts</span>
+        </button>
+      </nav>
+      <div className="gap" />
+      <div className="pj">
+        <div ref={switcherRef} className="relative w-full" data-slot="project-switcher">
+          <button
+            type="button"
+            onClick={() => setProjectSwitcherOpen((open) => !open)}
+            className="proj"
+            title={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
+            aria-label={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
+            aria-haspopup="dialog"
+            aria-expanded={projectSwitcherOpen}
+          >
+            <span className="grid size-[32px] shrink-0 place-items-center rounded-[9px] bg-accent text-primary">
+              <Folder className="size-4" />
+            </span>
+            <div className="project-label min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-semibold">
+                {workspace?.projectName ?? "Select project"}
+              </span>
+              <small className="block truncate">
+                {workspace?.projectRoot ?? "Local workspace"}
+              </small>
+            </div>
+            <span className="sr-only">Open project switcher</span>
+          </button>
+        </div>
       </div>
-      <div className="mt-auto mb-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Theme: ${theme}`}
-          title={`Theme: ${theme}`}
-          onClick={toggleTheme}
-          className="size-10"
-        >
-          {theme === "system" ? (
-            <Laptop className="size-4" />
-          ) : theme === "light" ? (
-            <Sun className="size-4" />
-          ) : (
-            <Moon className="size-4" />
-          )}
-        </Button>
-      </div>
-      <div className="relative" data-slot="project-switcher">
-        <Button
-          variant={projectSwitcherOpen ? "secondary" : "ghost"}
-          size="icon"
-          aria-label={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
-          aria-haspopup="menu"
-          aria-expanded={projectSwitcherOpen}
-          title={workspace?.projectName ?? "Project switcher"}
-          onClick={() => setProjectSwitcherOpen((open) => !open)}
-          className="size-10"
-        >
-          <FolderKanban className="size-4" />
-        </Button>
-        {projectSwitcherOpen && (
-          <div className="absolute bottom-0 left-12 z-50 w-[min(22rem,calc(100vw-5rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground">
+      {projectSwitcherOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            data-slot="project-switcher"
+            role="dialog"
+            aria-label="Trusted projects"
+            style={{
+              position: "fixed",
+              top: popoverPosition?.top ?? 8,
+              left: popoverPosition?.left ?? 64,
+              visibility: popoverPosition ? "visible" : "hidden",
+            }}
+            className="z-[100] max-h-[calc(100dvh-1rem)] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10"
+          >
             <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
               <span className="text-xs font-medium">Trusted projects</span>
             </div>
@@ -207,9 +360,9 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                 <p className="px-3 py-4 text-xs text-muted-foreground">No trusted projects yet.</p>
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
-      </div>
     </aside>
   );
 }

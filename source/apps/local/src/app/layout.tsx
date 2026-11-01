@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
-import Script from "next/script";
+import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "@/app/globals.css";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
+const heading = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["500", "700"],
+  variable: "--font-bricolage",
+});
+const body = Instrument_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-instrument",
+});
 
 export const metadata: Metadata = {
   title: "Task — Local workspace",
@@ -18,14 +26,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="en" className={cn("font-sans", heading.variable, body.variable)}>
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" sizes="any" />
       </head>
-      <body>
-        <Script src="/theme-init.js" strategy="beforeInteractive" />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

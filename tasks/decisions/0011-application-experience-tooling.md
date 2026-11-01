@@ -26,6 +26,7 @@ Task has multiple user-facing interfaces: hosted and local browser applications,
 6. **Preserve automation ergonomics.** CLI supports machine-readable output such as JSON, stable exit codes, predictable errors, and non-interactive operation. Do not force prompts or colour into scripts/pipes. task and tc remain equivalent command names.
 7. **Bun runtime compatibility.** OpenTUI requires Bun 1.3.14 or later for the supported native runtime. Pin the repository packageManager metadata accordingly and keep all TypeScript projects under the root Bun workspace.
 8. **Keep Flutter independent.** Flutter/Dart remains outside the Bun workspace and uses Flutter tooling. It is not a website and is not subject to the Next.js requirement.
+9. **Use persistent App Router route-group layouts.** Put browser screens under `src/app/(app)/` and shared application chrome in that group's `layout.tsx`. Keep API route handlers in the sibling `src/app/api/` tree. Prefer explicit section routes and use dynamic segments for resource-specific pages; route groups must not change public URLs.
 
 ## Consequences
 

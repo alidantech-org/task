@@ -1,76 +1,60 @@
 "use client";
 
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortable } from "@dnd-kit/react/sortable";
+import { Button, Input } from "@task/ui";
+import { Command as CommandMenu } from "cmdk";
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  InputGroup,
-  InputGroupInput,
-  Separator,
-} from "@task/ui";
-import {
-  Activity,
   AlertTriangle,
-  BookOpen,
+  Calendar,
   Check,
-  ChevronRight,
   type CircleDot,
-  Clock3,
-  Command,
-  EyeOff,
-  FileText,
+  File,
   Folder,
-  FolderKanban,
-  Gauge,
-  LayoutDashboard,
-  ListTodo,
-  PanelLeftOpen,
-  Pencil,
+  Folder as FolderIcon,
+  LayoutGrid,
+  ListChecks,
+  PanelLeft,
+  Plus,
   Search,
-  Timer,
+  Sun,
   X,
+  Zap,
 } from "lucide-react";
-import dynamic from "next/dynamic";
+import { usePathname, useRouter } from "next/navigation";
+import { Dialog } from "radix-ui";
 import {
+  createContext,
   type PointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { BoardTask, CalendarView, StatusDropZone } from "@/components/calendar";
-import { ContextualNavigation } from "@/components/layout/contextual-navigation";
 import { GlobalNavigation } from "@/components/layout/global-navigation";
-import { PromptBuilder } from "@/components/layout/prompt-builder";
 import { ShellFrame } from "@/components/layout/shell-frame";
-import { MarkdownBody } from "@/components/markdown-body";
+import { CustomSelect } from "@/components/ui/select";
 import { dateKey } from "@/lib/calendar";
 import { taskDropUpdate } from "@/lib/drop-mutation";
-import { listDocumentFolders, toggleMarkdownCheckbox } from "@/lib/markdown";
+import { restartSectionEntrance } from "@/lib/entrance";
+import { groupForTask, groupLabel } from "@/lib/group";
 import {
   clampSidebarWidth,
-  completionWeek,
-  getRecentCompletedTasks,
   isArchivedTask,
+  parseSidebarPreference,
+  type SidebarPreference,
   type StatusChange,
   sortCompletedTasks,
+  toggleSidebarPreference,
 } from "@/lib/overview";
+import { isOneOf, isString, isStringOrNull, usePersistentState } from "@/lib/persistent-state";
+import { parseQuickAdd } from "@/lib/quick-add";
 
-const MarkdownEditor = dynamic(
-  () => import("@/components/markdown-editor").then((module) => module.MarkdownEditor),
-  {
-    ssr: false,
-    loading: () => <div className="min-h-72 animate-pulse border-y border-border/60" />,
-  },
-);
-
-type RecordItem = {
+export type RecordItem = {
   path: string;
   id: string;
   name: string;
@@ -85,10 +69,30 @@ type RecordItem = {
   created_at?: string;
   updated_at?: string;
   archived_at?: string;
+  depends_on?: string[];
+  groupName?: string;
+  estimate?: number;
+  links?: { type: string; task: string }[];
+  recurrence?: { every: string; interval: number; until?: string };
+  attachments?: {
+    kind: "file" | "link";
+    name: string;
+    url?: string;
+    size?: number;
+    added_at: string;
+    added_by?: string;
+  }[];
+  order?: number;
+  parent?: string;
+  watchers?: string[];
+  commentCount?: number;
+  checklist?: { completed: number; total: number };
   extra?: {
+    group_id?: string;
     status_history?: readonly StatusChange[];
     hidden_from_recent?: boolean;
     archived_from?: string;
+    tracking?: { segments: readonly { ended_at?: string }[] };
   };
   size: number;
   modifiedAt: number;
@@ -99,16 +103,26 @@ type Group = {
   name: string;
   slug: string;
   path: string;
+  goalId?: string;
   archived: boolean;
   finished?: boolean;
   total: number;
   completed: number;
+  archivedTasks: number;
+  resolved: number;
 };
 type Workspace = {
   projectName: string;
   projectRoot: string;
   workspaceRoot: string;
   workspaceDirectory: string;
+  quality?: {
+    mode: "reject" | "warn" | "off";
+    minTaskWords: number;
+    minChecklistItems: number;
+    minGroupDocWords: number;
+  };
+  organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
   source: string;
   scannedAt: number;
   groups: Group[];
@@ -133,25 +147,97 @@ type SearchResult = {
   type: string;
   snippet: string;
 };
+type PaletteEntry = { key: string; label: string; detail: string; run(): void };
+type LiveChange = { id: string; name: string; status: string; changedAt: string; source: string };
+type DocumentConflict = { body: string; contentHash: string };
 type AppProps = {
   runtimeStatus: "connected" | "offline";
   workspace: Record<string, unknown> | null;
   workspaceError?: string | null;
+  initialPath?: string;
+  children?: ReactNode;
 };
+type WorkspaceAppContextValue = {
+  workspace: Workspace | null;
+  records: RecordItem[];
+  tasks: RecordItem[];
+  allTasks: RecordItem[];
+  archivedTasks: RecordItem[];
+  docs: RecordItem[];
+  groups: Group[];
+  /** Every group including finished and archived ones, for naming a task's group. */
+  allGroups: Group[];
+  connectionStatus: "connected" | "offline";
+  workspaceError: string | null;
+  taskFilter: string | null;
+  setTaskFilter(filter: string | null): void;
+  taskGroupFilter: string;
+  setTaskGroupFilter(filter: string): void;
+  selectTaskGroup(groupId: string): void;
+  taskView: "List" | "Board" | "Calendar";
+  setTaskView(view: "List" | "Board" | "Calendar"): void;
+  visibleTasks: RecordItem[];
+  selected: RecordItem | null;
+  activeSelected: RecordItem | null;
+  detail: { body: string; contentHash: string } | null;
+  documentDraft: string;
+  editingDocument: boolean;
+  setDocumentDraft(body: string): void;
+  setEditingDocument(editing: boolean): void;
+  documentConflict: DocumentConflict | null;
+  setDocumentConflict(conflict: DocumentConflict | null): void;
+  resolveDocumentConflict(choice: "reload" | "keep"): void;
+  documentFolder: string;
+  createDocument(): Promise<void>;
+  openCreate(date?: string): void;
+  openRecord(item: RecordItem | null): void;
+  updateTaskStatus(task: RecordItem, status: string): Promise<void>;
+  updateTaskDue(task: RecordItem, dueAt: string | null): Promise<void>;
+  updateTaskPriority(task: RecordItem, priority: string): Promise<void>;
+  setTaskHiddenFromRecent(task: RecordItem, hidden: boolean): Promise<void>;
+  setTaskArchived(task: RecordItem, archived: boolean): Promise<void>;
+  deleteRecord(
+    record: { id: string; name: string },
+    kind: "task" | "document" | "task-group",
+  ): Promise<boolean>;
+  undoDelete(): Promise<void>;
+  /** Saves any task fields (assignee, tags, estimate, parent, links, group, …) with the stale-edit check. */
+  updateTaskFields(task: RecordItem, patch: Record<string, unknown>): Promise<boolean>;
+  /** Adds a subtask in the same group as its parent. */
+  createSubtask(parent: RecordItem, title: string): Promise<boolean>;
+  /** Applies a board drop: optionally a new status, then a position next to a neighbour. */
+  moveOnBoard(
+    task: RecordItem,
+    status: string | undefined,
+    plan: { before: string } | { after: string } | null,
+  ): Promise<void>;
+  setChecklist(
+    task: RecordItem,
+    selector: { items?: readonly number[]; section?: string; all?: boolean },
+    checked: boolean,
+  ): Promise<void>;
+  saveBody(body: string): Promise<boolean>;
+  setNotice(message: string): void;
+  refresh(): Promise<void>;
+  validate(): Promise<void>;
+  migrate(): Promise<void>;
+};
+const WorkspaceAppContext = createContext<WorkspaceAppContextValue | null>(null);
+export function useWorkspaceApp(): WorkspaceAppContextValue {
+  const value = useContext(WorkspaceAppContext);
+  if (!value) throw new Error("Workspace page must be rendered inside the persistent app layout");
+  return value;
+}
 type ThemeChoice = "system" | "light" | "dark";
 
 const navigation = [
-  { label: "Overview", icon: LayoutDashboard },
-  { label: "Tasks", icon: ListTodo },
-  { label: "Groups", icon: FolderKanban },
-  { label: "Documents", icon: FileText },
+  { label: "Overview", icon: LayoutGrid },
+  { label: "Tasks", icon: ListChecks },
+  { label: "Calendar", icon: Calendar },
+  { label: "Groups", icon: FolderIcon },
+  { label: "Documents", icon: File },
 ];
-const operations = [
-  { label: "Agent prompts", icon: BookOpen },
-  { label: "Activity", icon: Activity },
-  { label: "Workspace health", icon: Gauge },
-];
-const statuses = ["planned", "in-progress", "blocked", "completed"] as const;
+const _statuses = ["planned", "in-progress", "blocked", "completed", "archived"] as const;
 const statusNames: Record<string, string> = {
   planned: "Planned",
   "in-progress": "In progress",
@@ -160,7 +246,50 @@ const statusNames: Record<string, string> = {
   archived: "Archived",
 };
 
-function statusVariant(status?: string): "success" | "warning" | "destructive" | "secondary" {
+function sectionFromPath(path: string): string {
+  const first = path.split("?")[0]?.split("/")[1] ?? "";
+  if (first === "tasks") return "Tasks";
+  if (first === "calendar") return "Calendar";
+  if (first === "groups") return "Groups";
+  if (first === "documents") return "Documents";
+  if (first === "activity") return "Activity";
+  if (first === "prompts") return "Agent prompts";
+  if (first === "health") return "Workspace health";
+  return "Overview";
+}
+function sectionPath(label: string): string {
+  if (label === "Tasks") return "/tasks";
+  if (label === "Calendar") return "/calendar";
+  if (label === "Groups") return "/groups";
+  if (label === "Documents") return "/documents";
+  if (label === "Activity") return "/activity";
+  if (label === "Agent prompts") return "/prompts";
+  if (label === "Workspace health") return "/health";
+  return "/";
+}
+function documentIdFromPath(path: string): string | null {
+  const match = path.match(/^\/documents\/([^/]+)$/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+function folderFromPath(path: string): string {
+  const match = path.match(/^\/documents\/folder\/(.+)$/);
+  if (!match?.[1]) return "";
+  try {
+    return match[1].split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return "";
+  }
+}
+function encodePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function _statusVariant(status?: string): "success" | "warning" | "destructive" | "secondary" {
   if (status === "completed") return "success";
   if (status === "in-progress") return "warning";
   if (status === "blocked") return "destructive";
@@ -168,7 +297,7 @@ function statusVariant(status?: string): "success" | "warning" | "destructive" |
 }
 function formatDate(date?: string): string {
   if (!date) return "No date";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -179,9 +308,11 @@ function applyTheme(choice: ThemeChoice) {
     choice === "dark" ||
     (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
+  if (choice === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.dataset.theme = choice;
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
-function Metric({
+function _Metric({
   label,
   value,
   icon: Icon,
@@ -206,12 +337,30 @@ export function App({
   runtimeStatus,
   workspace: rawWorkspace,
   workspaceError: initialWorkspaceError = null,
+  initialPath = "/",
+  children,
 }: AppProps) {
+  const router = useRouter();
+  const pathname = usePathname() ?? initialPath;
   const [workspace, setWorkspace] = useState<Workspace | null>(rawWorkspace as Workspace | null);
   const [connectionStatus, setConnectionStatus] = useState(runtimeStatus);
-  const [section, setSection] = useState("Overview");
-  const [taskView, setTaskView] = useState<"List" | "Board" | "Calendar">("List");
-  const [taskFilter, setTaskFilter] = useState<string | null>(null);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
+  const [liveFlashId, setLiveFlashId] = useState<string | null>(null);
+  const pageBodyRef = useRef<HTMLElement | null>(null);
+  const workspaceRef = useRef<Workspace | null>(rawWorkspace as Workspace | null);
+  const section = sectionFromPath(pathname);
+  const [taskView, setTaskView] = usePersistentState<"List" | "Board" | "Calendar">(
+    "task:view",
+    "Board",
+    isOneOf(["List", "Board", "Calendar"] as const),
+  );
+  const [taskFilter, setTaskFilter] = usePersistentState<string | null>(
+    "task:filter",
+    null,
+    isStringOrNull,
+  );
+  const [taskGroupFilter, setTaskGroupFilter] = usePersistentState("task:group", "", isString);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [, setSearching] = useState(false);
@@ -222,32 +371,66 @@ export function App({
   } | null>(null);
   const [editingDocument, setEditingDocument] = useState(false);
   const [documentDraft, setDocumentDraft] = useState("");
-  const [savingDocument, setSavingDocument] = useState(false);
-  const [documentFolder, setDocumentFolder] = useState("");
-  const [collapsedDocumentFolders, setCollapsedDocumentFolders] = useState<string[]>([]);
+  const [documentConflict, setDocumentConflict] = useState<DocumentConflict | null>(null);
+  const [_savingDocument, setSavingDocument] = useState(false);
+  const [documentFolder, setDocumentFolder] = useState(() => folderFromPath(pathname));
   const [sidebarCompact, setSidebarCompact] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [lastSidebarMode, setLastSidebarMode] = useState<"full" | "mini">("full");
   const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
   const [trustedProjects, setTrustedProjects] = useState<TrustedProject[]>([]);
   const [projectPathInput, setProjectPathInput] = useState("");
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
   const [workspaceError, setWorkspaceError] = useState(initialWorkspaceError);
   const [sidebarReady, setSidebarReady] = useState(false);
-  const [mobileNav, setMobileNav] = useState(false);
   const [mobileProjectOpen, setMobileProjectOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeChoice>("system");
   const [completedLimit, setCompletedLimit] = useState(5);
   const [completedLimitReady, setCompletedLimitReady] = useState(false);
   const [notice, setNotice] = useState("");
+  const [undoTrashId, setUndoTrashId] = useState("");
   const [dialog, setDialog] = useState(false);
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [group, setGroup] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [creating, setCreating] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const records = workspace?.documents ?? [];
+  const creatingDocument = useRef(false);
+  const pendingTaskSelection = useRef<string | null>(null);
+  const openDocumentRef = useRef({ id: "", editing: false, draft: "", body: "", hash: "" });
+  const records = useMemo(
+    () =>
+      (workspace?.documents ?? []).map((item) =>
+        item.type === "task"
+          ? { ...item, groupName: groupLabel(item, workspace?.groups ?? []) }
+          : item,
+      ),
+    [workspace],
+  );
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+  useEffect(() => {
+    if (!liveFlashId) return;
+    const matching = document.querySelectorAll(
+      `[data-tid="${CSS.escape(liveFlashId)}"], [data-fid="${CSS.escape(liveFlashId)}"]`,
+    );
+    for (const element of matching) element.classList.add("flash");
+    const timer = window.setTimeout(() => {
+      for (const element of matching) element.classList.remove("flash");
+      setLiveFlashId(null);
+    }, 2100);
+    return () => window.clearTimeout(timer);
+  }, [liveFlashId]);
+  useEffect(() => {
+    if (!notice) {
+      setUndoTrashId("");
+      return;
+    }
+    const timer = window.setTimeout(() => setNotice(""), 4500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const allTasks = records.filter((item) => item.type === "task");
   const completedTasks = useMemo(
     () =>
@@ -260,25 +443,12 @@ export function App({
     () => sortCompletedTasks(allTasks.filter(isArchivedTask)),
     [allTasks],
   );
-  const tasks = records.filter(
-    (item) =>
-      item.type === "task" &&
-      !item.path.startsWith("todo/_archived/") &&
-      !item.path.startsWith("todo/_completed/") &&
-      !item.path.startsWith("todo/_archive/"),
-  );
-  const completionByDay = useMemo(() => completionWeek(allTasks), [allTasks]);
-  const completedThisWeek = completionByDay.reduce((total, day) => total + day.count, 0);
-  const upcomingCount = tasks.filter((task) => {
-    if (!task.due_at || task.status === "completed") return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const through = new Date(today);
-    through.setDate(through.getDate() + 7);
-    return task.due_at >= dateKey(today) && task.due_at <= dateKey(through);
-  }).length;
-  const maxCompletion = Math.max(1, ...completionByDay.map((day) => day.count));
-  const draggingSidebar = useRef({ pointerId: -1, left: 0 });
+  const tasks = records.filter((item) => item.type === "task" && !isArchivedTask(item));
+  const draggingSidebar = useRef({
+    pointerId: -1,
+    left: 0,
+    width: 240,
+  });
   const visibleTasks = useMemo(() => {
     if (!taskFilter) return tasks;
     if (taskFilter === "completed") return completedTasks;
@@ -294,34 +464,57 @@ export function App({
     }
     return tasks.filter((task) => task.status === taskFilter);
   }, [archivedTasks, completedTasks, tasks, taskFilter]);
-  const recentCompletedTasks = getRecentCompletedTasks(allTasks, completedLimit);
-  const boardTasks = useMemo(() => {
-    const source = taskFilter ? visibleTasks : tasks.filter((task) => task.status !== "completed");
-    if (taskFilter && taskFilter !== "completed") return source;
-    const sourceIds = new Set(source.map((task) => task.id));
-    const combined = [...source, ...recentCompletedTasks.filter((task) => !sourceIds.has(task.id))];
-    const recentCompletedIds = new Set(recentCompletedTasks.map((task) => task.id));
-    return [
-      ...combined.filter((task) => task.status !== "completed" && !isArchivedTask(task)),
-      ...sortCompletedTasks(
-        combined.filter((task) => task.status === "completed" && recentCompletedIds.has(task.id)),
-      ),
-    ];
-  }, [recentCompletedTasks, tasks, taskFilter, visibleTasks]);
   const docs = records.filter((item) => item.type !== "task");
-  const documentFolders = useMemo(() => listDocumentFolders(docs.map((item) => item.path)), [docs]);
-  const visibleDocumentFolders = documentFolders.filter((folder) => {
-    const segments = folder.path.split("/");
-    return segments
-      .slice(0, -1)
-      .every(
-        (_segment, index) =>
-          !collapsedDocumentFolders.includes(segments.slice(0, index + 1).join("/")),
-      );
-  });
-  const visibleDocuments = documentFolder
-    ? docs.filter((item) => item.path.startsWith(`${documentFolder}/`))
-    : docs;
+  const routeDocumentId = documentIdFromPath(pathname);
+  const selectedFromRoute = routeDocumentId
+    ? (records.find((item) => item.id === routeDocumentId) ?? null)
+    : null;
+  const activeSelected = routeDocumentId ? selectedFromRoute : selected;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-run the entrance animation when the active view changes.
+  useEffect(() => {
+    restartSectionEntrance(pageBodyRef.current);
+  }, [documentFolder, routeDocumentId, section, taskView]);
+  useEffect(() => {
+    openDocumentRef.current = {
+      id: activeSelected?.type === "task" ? "" : (activeSelected?.id ?? ""),
+      editing: editingDocument,
+      draft: documentDraft,
+      body: detail?.body ?? "",
+      hash: detail?.contentHash ?? "",
+    };
+  }, [
+    activeSelected?.id,
+    activeSelected?.type,
+    detail?.body,
+    documentDraft,
+    editingDocument,
+    detail?.contentHash,
+  ]);
+
+  useEffect(() => {
+    const nextSection = sectionFromPath(pathname);
+    const nextFolder = folderFromPath(pathname);
+    setDocumentFolder(nextFolder);
+    const nextId = documentIdFromPath(pathname);
+    if (nextId) {
+      const match = records.find((item) => item.id === nextId);
+      if (match) setSelected(match);
+    } else {
+      const pendingId = pendingTaskSelection.current;
+      if (nextSection === "Tasks" && pendingId) {
+        const pendingTask = records.find((item) => item.id === pendingId && item.type === "task");
+        if (pendingTask) {
+          pendingTaskSelection.current = null;
+          setSelected(pendingTask);
+        }
+      } else {
+        if (nextSection !== "Tasks") pendingTaskSelection.current = null;
+        if (nextSection !== "Tasks" || selected?.type !== "task") setSelected(null);
+      }
+      setEditingDocument(false);
+      setDocumentConflict(null);
+    }
+  }, [pathname, records, selected]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("task-theme");
@@ -345,6 +538,33 @@ export function App({
     media.addEventListener("change", listener);
     return () => media.removeEventListener("change", listener);
   }, [theme]);
+
+  const toggleSidebar = useCallback((): void => {
+    const preference = toggleSidebarPreference({
+      mode: !sidebarVisible ? "hidden" : sidebarCompact ? "mini" : "full",
+      width: sidebarWidth,
+      last: lastSidebarMode,
+    });
+    setSidebarVisible(preference.mode !== "hidden");
+    setSidebarCompact(preference.mode === "mini");
+    setLastSidebarMode(preference.last);
+  }, [lastSidebarMode, sidebarCompact, sidebarVisible, sidebarWidth]);
+
+  const openPalette = useCallback(() => {
+    setQuery("");
+    setPaletteOpen(true);
+  }, []);
+
+  function toggleSidebarCompact(): void {
+    if (!sidebarVisible) {
+      setSidebarVisible(true);
+      setSidebarCompact(lastSidebarMode === "mini");
+      return;
+    }
+    const next = !sidebarCompact;
+    setSidebarCompact(next);
+    setLastSidebarMode(next ? "mini" : "full");
+  }
 
   useEffect(() => {
     let active = true;
@@ -383,15 +603,15 @@ export function App({
     const handleKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setPaletteOpen((open) => !open);
+        openPalette();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        setSidebarVisible((value) => !value);
+        toggleSidebar();
       }
       if (event.key === "Escape") {
         setPaletteOpen(false);
-        setMobileNav(false);
+        setLiveOpen(false);
         setMobileProjectOpen(false);
         setProjectSwitcherOpen(false);
         if (dialog) setDialog(false);
@@ -399,22 +619,35 @@ export function App({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  });
+  }, [openPalette, toggleSidebar, dialog]);
 
   useEffect(() => {
-    setSidebarCompact(window.localStorage.getItem("task-sidebar-compact") === "true");
-    setSidebarVisible(window.localStorage.getItem("task-sidebar-visible") !== "false");
-    const storedWidth = Number(window.localStorage.getItem("task-sidebar-width"));
-    if (Number.isFinite(storedWidth) && storedWidth > 0)
-      setSidebarWidth(clampSidebarWidth(storedWidth));
+    let preference: SidebarPreference = { mode: "full", width: 240, last: "full" };
+    try {
+      const storage = window.localStorage;
+      preference = parseSidebarPreference(storage.getItem("tsb"), {
+        compact: storage.getItem("task-sidebar-compact"),
+        visible: storage.getItem("task-sidebar-visible"),
+        width: storage.getItem("task-sidebar-width"),
+      });
+    } catch {
+      // Keep the default preferences when browser storage is unavailable.
+    }
+    setSidebarCompact(preference.mode === "mini");
+    setSidebarVisible(preference.mode !== "hidden");
+    setSidebarWidth(preference.width);
+    setLastSidebarMode(preference.last);
     setSidebarReady(true);
   }, []);
   useEffect(() => {
     if (!sidebarReady) return;
-    window.localStorage.setItem("task-sidebar-compact", String(sidebarCompact));
-    window.localStorage.setItem("task-sidebar-visible", String(sidebarVisible));
-    window.localStorage.setItem("task-sidebar-width", String(sidebarWidth));
-  }, [sidebarCompact, sidebarReady, sidebarVisible, sidebarWidth]);
+    const mode = !sidebarVisible ? "hidden" : sidebarCompact ? "mini" : "full";
+    try {
+      window.localStorage.setItem("tsb", JSON.stringify([mode, sidebarWidth, lastSidebarMode]));
+    } catch {
+      // Sidebar preferences are optional when browser storage is unavailable.
+    }
+  }, [lastSidebarMode, sidebarCompact, sidebarReady, sidebarVisible, sidebarWidth]);
   useEffect(() => {
     if (workspace) return;
     void fetch("/api/runtime/workspace", { cache: "no-store" })
@@ -437,6 +670,93 @@ export function App({
       });
   }, [workspace]);
   useEffect(() => {
+    let active = true;
+    let refreshing = false;
+    let refreshPending = false;
+    const poll = async () => {
+      if (refreshing) {
+        refreshPending = true;
+        return;
+      }
+      refreshing = true;
+      try {
+        const response = await fetch("/api/runtime/workspace", { cache: "no-store" });
+        const payload = (await response.json()) as { workspace?: Workspace };
+        if (!response.ok || !payload.workspace) throw new Error("Workspace unavailable");
+        if (active) {
+          setWorkspace(payload.workspace);
+          setConnectionStatus("connected");
+          setWorkspaceError(null);
+        }
+      } catch {
+        if (active) setConnectionStatus("offline");
+      } finally {
+        refreshing = false;
+        if (active && refreshPending) {
+          refreshPending = false;
+          void poll();
+        }
+      }
+    };
+    const events = new EventSource("/api/runtime/workspace/events", { withCredentials: true });
+    events.onopen = () => void poll();
+    events.addEventListener("workspace", (rawEvent) => {
+      let eventData: { recordId?: string; changedAt?: string; source?: string } = {};
+      try {
+        eventData = JSON.parse((rawEvent as MessageEvent<string>).data) as typeof eventData;
+      } catch {
+        void poll();
+        return;
+      }
+      const previous = workspaceRef.current;
+      void fetch("/api/runtime/workspace", { cache: "no-store" })
+        .then(async (response) => {
+          const payload = (await response.json()) as { workspace?: Workspace };
+          if (!response.ok || !payload.workspace) throw new Error("Workspace unavailable");
+          if (!active) return;
+          const next = payload.workspace;
+          workspaceRef.current = next;
+          setWorkspace(next);
+          setConnectionStatus("connected");
+          setWorkspaceError(null);
+          const before = eventData.recordId
+            ? previous?.documents.find((item) => item.id === eventData.recordId)
+            : undefined;
+          const after = eventData.recordId
+            ? next.documents.find((item) => item.id === eventData.recordId)
+            : undefined;
+          if (eventData.recordId && after && before?.contentHash !== after.contentHash) {
+            const source = eventData.source ?? "External";
+            const status = after.status ?? "updated";
+            const change: LiveChange = {
+              id: after.id,
+              name: after.name,
+              status,
+              changedAt: eventData.changedAt ?? new Date().toISOString(),
+              source,
+            };
+            setLiveChanges((current) => [change, ...current].slice(0, 3));
+            setLiveFlashId(after.id);
+            setNotice(
+              `${source} changed ${after.id}${after.status ? ` to ${statusNames[after.status] ?? after.status}` : ""}`,
+            );
+          }
+        })
+        .catch(() => {
+          if (active) setConnectionStatus("offline");
+        });
+    });
+    events.onerror = () => {
+      if (active) setConnectionStatus("offline");
+    };
+    const timer = window.setInterval(() => void poll(), 30_000);
+    return () => {
+      active = false;
+      events.close();
+      window.clearInterval(timer);
+    };
+  }, []);
+  useEffect(() => {
     void fetch("/api/runtime/projects/trusted", { cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json()) as {
@@ -453,14 +773,43 @@ export function App({
   }, []);
   useEffect(() => {
     let active = true;
-    if (!selected) {
+    if (!activeSelected) {
       setDetail(null);
       setEditingDocument(false);
+      setDocumentConflict(null);
+      return;
+    }
+    if (detail?.contentHash === activeSelected.contentHash) return;
+    const currentEdit = openDocumentRef.current;
+    if (
+      currentEdit.id === activeSelected.id &&
+      currentEdit.editing &&
+      currentEdit.draft !== currentEdit.body
+    ) {
+      void fetch(`/api/runtime/workspace/document/${encodeURIComponent(activeSelected.id)}`, {
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            document?: DocumentConflict;
+            error?: { message?: string };
+          };
+          if (!response.ok || !payload.document)
+            throw new Error(payload.error?.message ?? "Could not reload changed document");
+          if (active && payload.document.contentHash !== currentEdit.hash) {
+            setDocumentConflict(payload.document);
+          }
+        })
+        .catch((error: unknown) => {
+          if (active)
+            setNotice(error instanceof Error ? error.message : "Could not load changed document");
+        });
       return;
     }
     setDetail(null);
     setEditingDocument(false);
-    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(selected.id)}`, {
+    setDocumentConflict(null);
+    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(activeSelected.id)}`, {
       cache: "no-store",
     })
       .then(async (response) => {
@@ -480,7 +829,7 @@ export function App({
     return () => {
       active = false;
     };
-  }, [selected]);
+  }, [activeSelected, detail]);
 
   async function persistDocumentBody(
     body: string,
@@ -504,8 +853,16 @@ export function App({
       };
       if (!response.ok) {
         if (response.status === 409) {
+          const latest = await fetch(
+            `/api/runtime/workspace/document/${encodeURIComponent(selected.id)}`,
+            { cache: "no-store" },
+          );
+          const latestPayload = (await latest.json()) as {
+            document?: DocumentConflict;
+          };
+          if (latest.ok && latestPayload.document) setDocumentConflict(latestPayload.document);
           throw new Error(
-            "This Markdown file changed on disk. Copy your draft, reload the document, then reapply your changes.",
+            "This Markdown file changed on disk. Choose how to resolve the conflict above.",
           );
         }
         throw new Error(payload.error?.message ?? `Could not save document (${response.status})`);
@@ -532,14 +889,16 @@ export function App({
     }
   }
 
-  async function saveDocument(): Promise<void> {
-    if (await persistDocumentBody(documentDraft)) setEditingDocument(false);
-  }
-
-  async function toggleDocumentTask(index: number, checked: boolean): Promise<void> {
-    if (!detail) return;
-    const body = toggleMarkdownCheckbox(detail.body, index, checked);
-    if (body !== detail.body) await persistDocumentBody(body, "Checklist updated");
+  function resolveDocumentConflict(choice: "reload" | "keep"): void {
+    if (!documentConflict) return;
+    setDetail(documentConflict);
+    if (choice === "reload") {
+      setDocumentDraft(documentConflict.body);
+      setEditingDocument(false);
+    } else {
+      setEditingDocument(true);
+    }
+    setDocumentConflict(null);
   }
 
   async function acceptWorkspaceResponse(response: Response): Promise<void> {
@@ -612,6 +971,7 @@ export function App({
         throw new Error(payload.error?.message ?? "Could not select project");
       setWorkspace(payload.workspace);
       setTrustedProjects(payload.projects ?? []);
+      router.push("/");
       setSelected(null);
       setDetail(null);
       setProjectSwitcherOpen(false);
@@ -642,24 +1002,6 @@ export function App({
       setNotice(error instanceof Error ? error.message : "Could not remove project trust");
     }
   }
-  async function setCompletedHidden(task: RecordItem, hidden: boolean): Promise<void> {
-    try {
-      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          hiddenFromRecent: hidden,
-          expectedHash: task.contentHash,
-        }),
-      });
-      await acceptWorkspaceResponse(response);
-      setNotice(hidden ? "Hidden from recent completed tasks" : "Shown in recent completed tasks");
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : "Could not update completed task visibility",
-      );
-    }
-  }
   async function setTaskArchived(task: RecordItem, archived: boolean): Promise<void> {
     try {
       const action = archived ? "archive" : "restore";
@@ -677,6 +1019,197 @@ export function App({
       setNotice(error instanceof Error ? error.message : "Could not update task archive state");
     }
   }
+  async function deleteRecord(
+    record: { id: string; name: string },
+    kind: "task" | "document" | "task-group",
+  ): Promise<boolean> {
+    if (
+      !window.confirm(
+        `Delete "${record.name}"? It moves to the system temp folder and can be undone until that folder is cleared.`,
+      )
+    )
+      return false;
+    try {
+      const route = kind === "task-group" ? "task-groups" : kind;
+      const cascade = kind === "task-group" ? "?cascade=1" : "";
+      const response = await fetch(
+        `/api/runtime/workspace/${route}/${encodeURIComponent(record.id)}${cascade}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.clone().json()) as { trash?: { trashId: string } };
+      await acceptWorkspaceResponse(response);
+      openRecord(null);
+      setNotice(`Deleted ${record.name}`);
+      setUndoTrashId(payload.trash?.trashId ?? "");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not delete");
+      return false;
+    }
+  }
+  async function updateTaskFields(
+    task: RecordItem,
+    patch: Record<string, unknown>,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...patch, expectedHash: task.contentHash }),
+      });
+      await acceptWorkspaceResponse(response);
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not save the change");
+      return false;
+    }
+  }
+  async function createSubtask(parent: RecordItem, title: string): Promise<boolean> {
+    try {
+      const group = groupForTask(parent, workspace?.groups ?? []);
+      if (!group) throw new Error("This task is not in a group");
+      const response = await fetch("/api/runtime/workspace/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, group: group.id, parent: parent.id }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice("Subtask added");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not add the subtask");
+      return false;
+    }
+  }
+  async function moveOnBoard(
+    task: RecordItem,
+    status: string | undefined,
+    plan: { before: string } | { after: string } | null,
+  ): Promise<void> {
+    try {
+      if (status) {
+        const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status, expectedHash: task.contentHash }),
+        });
+        await acceptWorkspaceResponse(response);
+      }
+      if (plan) {
+        const response = await fetch(
+          `/api/runtime/workspace/task/${encodeURIComponent(task.id)}/reorder`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(plan),
+          },
+        );
+        await acceptWorkspaceResponse(response);
+      }
+      setNotice(status ? `Moved to ${statusNames[status] ?? status}` : "Order saved");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not move the task");
+    }
+  }
+  async function setChecklist(
+    task: RecordItem,
+    selector: { items?: readonly number[]; section?: string; all?: boolean },
+    checked: boolean,
+  ): Promise<void> {
+    try {
+      const response = await fetch(
+        `/api/runtime/workspace/task/${encodeURIComponent(task.id)}/checklist`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...selector,
+            checked,
+            expectedHash: detail?.contentHash ?? task.contentHash,
+          }),
+        },
+      );
+      await acceptWorkspaceResponse(response);
+      const latest = await fetch(`/api/runtime/workspace/document/${encodeURIComponent(task.id)}`, {
+        cache: "no-store",
+      });
+      const payload = (await latest.json()) as { document?: { body: string; contentHash: string } };
+      if (latest.ok && payload.document) {
+        setDetail(payload.document);
+        setDocumentDraft(payload.document.body);
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the checklist");
+    }
+  }
+  async function undoDelete(): Promise<void> {
+    const trashId = undoTrashId;
+    if (!trashId) return;
+    try {
+      const response = await fetch(
+        `/api/runtime/workspace/trash/${encodeURIComponent(trashId)}/restore`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+      );
+      await acceptWorkspaceResponse(response);
+      setNotice("Restored");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not restore");
+    }
+  }
+  async function updateTaskStatus(task: RecordItem, status: string): Promise<void> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status, expectedHash: task.contentHash }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice(`Moved to ${statusNames[status] ?? status}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Task update failed");
+    }
+  }
+  async function updateTaskMetadata(
+    task: RecordItem,
+    update: { dueAt?: string | null; priority?: string },
+  ): Promise<void> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...update, expectedHash: task.contentHash }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice(
+        update.dueAt === null
+          ? "Moved to Unscheduled"
+          : update.dueAt
+            ? `Scheduled for ${formatDate(update.dueAt)}`
+            : `Priority set to ${update.priority}`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Task update failed");
+    }
+  }
+  async function updateTaskDue(task: RecordItem, dueAt: string | null): Promise<void> {
+    await updateTaskMetadata(task, { dueAt });
+  }
+  async function updateTaskPriority(task: RecordItem, priority: string): Promise<void> {
+    await updateTaskMetadata(task, { priority });
+  }
+  async function setTaskHiddenFromRecent(task: RecordItem, hidden: boolean): Promise<void> {
+    try {
+      const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ hiddenFromRecent: hidden, expectedHash: task.contentHash }),
+      });
+      await acceptWorkspaceResponse(response);
+      setNotice(hidden ? "Hidden from recently finished" : "Shown in recently finished");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update recent task visibility");
+    }
+  }
   async function validate(): Promise<void> {
     try {
       const response = await fetch("/api/runtime/workspace/validate", {
@@ -692,87 +1225,197 @@ export function App({
       setNotice(error instanceof Error ? error.message : "Validation failed");
     }
   }
+  async function migrate(): Promise<void> {
+    try {
+      const response = await fetch("/api/runtime/workspace/migrate", { method: "POST" });
+      const payload = (await response.json()) as {
+        groups?: Group[];
+        workspace?: Workspace;
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(payload.error?.message ?? "Migration failed");
+      if (payload.workspace) setWorkspace(payload.workspace);
+      setNotice(`Moved ${payload.groups?.length ?? 0} legacy group(s) into week folders`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Migration failed");
+    }
+  }
   function selectSection(label: string) {
-    setSection(label);
+    router.push(sectionPath(label));
     if (label === "Tasks") setTaskFilter(null);
     setSelected(null);
-    setMobileNav(false);
     setPaletteOpen(false);
   }
-  function selectSavedView(filter: string) {
-    setTaskFilter(filter);
-    setSection("Tasks");
-    setSelected(null);
-    setMobileNav(false);
+  function selectTaskGroup(groupId: string): void {
+    setTaskGroupFilter(groupId);
+    if (section !== "Tasks") {
+      setTaskFilter(null);
+      router.push("/tasks");
+    }
   }
   function selectDocumentFolder(path: string) {
+    router.push(path ? `/documents/folder/${encodePath(path)}` : "/documents");
     setDocumentFolder(path);
     setSelected(null);
     setEditingDocument(false);
   }
+
+  function openRecord(item: RecordItem | null): void {
+    if (!item) {
+      router.push(
+        section === "Documents" && documentFolder
+          ? `/documents/folder/${encodePath(documentFolder)}`
+          : sectionPath(section),
+      );
+      setSelected(null);
+      return;
+    }
+    if (item.type === "task") {
+      if (section === "Tasks") {
+        setSelected(item);
+        return;
+      }
+      pendingTaskSelection.current = item.id;
+      router.push("/tasks");
+      return;
+    }
+    router.push(`/documents/${encodeURIComponent(item.id)}`);
+    setSelected(item);
+    setEditingDocument(false);
+  }
   function openCreate(date = "") {
     setTitle("");
-    setDescription("");
+    setNewGroup("");
     setDueDate(date);
     setGroup(workspace?.groups.find((item) => !item.archived && !item.finished)?.id ?? "");
     setDialog(true);
   }
 
+  async function createDocument(): Promise<void> {
+    if (creatingDocument.current) return;
+    creatingDocument.current = true;
+    try {
+      const path = `docs/note-${crypto.randomUUID().slice(0, 8)}.md`;
+      const response = await fetch("/api/runtime/workspace/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Untitled note",
+          path,
+          tags: [],
+          body: "## Summary\n\nStart writing here. Link other files with [[brief]].\n\n- [ ] First step\n",
+        }),
+      });
+      const payload = (await response.json()) as {
+        document?: { metadata?: { id?: string } };
+        workspace?: Workspace;
+        error?: { message?: string };
+      };
+      const id = payload.document?.metadata?.id;
+      if (!response.ok || !id)
+        throw new Error(payload.error?.message ?? "Could not create document");
+      if (payload.workspace) setWorkspace(payload.workspace);
+      setSelected(null);
+      setEditingDocument(false);
+      setDocumentConflict(null);
+      setPaletteOpen(false);
+      setNotice("Document created");
+      router.push(`/documents/${encodeURIComponent(id)}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not create document");
+    } finally {
+      creatingDocument.current = false;
+    }
+  }
+
+  function toggleTheme(): void {
+    const dark =
+      theme === "dark" ||
+      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const next: ThemeChoice = dark ? "light" : "dark";
+    setTheme(next);
+    window.localStorage.setItem("task-theme", next);
+    applyTheme(next);
+  }
+
   function resizeSidebar(event: PointerEvent<HTMLDivElement>): void {
     if (event.type === "pointerdown") {
       if (event.button !== 0) return;
+      const shell = event.currentTarget.parentElement;
+      if (!shell) return;
       draggingSidebar.current = {
         pointerId: event.pointerId,
-        left: event.currentTarget.parentElement?.getBoundingClientRect().left ?? 0,
+        left: shell.getBoundingClientRect().left,
+        width: sidebarWidth,
       };
       event.currentTarget.setPointerCapture(event.pointerId);
+      shell.classList.add("dg");
       event.preventDefault();
       return;
     }
     if (event.type === "pointermove") {
       if (draggingSidebar.current.pointerId !== event.pointerId) return;
       const requestedWidth = event.clientX - draggingSidebar.current.left;
-      if (requestedWidth < 208) {
-        setSidebarCompact(true);
-      } else {
-        setSidebarCompact(false);
-        setSidebarWidth(clampSidebarWidth(requestedWidth));
-      }
+      const shell = event.currentTarget.parentElement;
+      if (!shell) return;
+      const width = clampSidebarWidth(requestedWidth);
+      draggingSidebar.current.width = width;
+      shell.style.setProperty("--sw", `${width}px`);
+      shell.classList.remove("msb");
+      event.currentTarget.setAttribute("aria-valuenow", String(width));
       return;
     }
     if (draggingSidebar.current.pointerId !== event.pointerId) return;
+    const shell = event.currentTarget.parentElement;
+    const nextWidth = draggingSidebar.current.width;
     draggingSidebar.current.pointerId = -1;
+    shell?.classList.remove("dg");
+    setSidebarCompact(false);
+    setSidebarVisible(true);
+    setSidebarWidth(nextWidth);
+    setLastSidebarMode("full");
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
 
   function resizeSidebarByKeyboard(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (event.key === "Home") {
+      event.preventDefault();
+      setSidebarVisible(true);
+      setSidebarCompact(true);
+      setLastSidebarMode("mini");
+      return;
+    }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    if (event.key === "ArrowLeft") {
-      if (sidebarCompact) return;
-      const nextWidth = sidebarWidth - 24;
-      if (nextWidth < 208) setSidebarCompact(true);
-      else setSidebarWidth(clampSidebarWidth(nextWidth));
-      return;
-    }
-    if (sidebarCompact || !sidebarVisible) {
-      setSidebarCompact(false);
-      setSidebarVisible(true);
-      return;
-    }
-    setSidebarWidth(clampSidebarWidth(sidebarWidth + 24));
+    const adjustment = event.key === "ArrowLeft" ? -16 : 16;
+    setSidebarVisible(true);
+    setSidebarCompact(false);
+    setLastSidebarMode("full");
+    setSidebarWidth(clampSidebarWidth(sidebarWidth + adjustment));
+  }
+
+  function resetSidebarWidth(): void {
+    setSidebarVisible(true);
+    setSidebarCompact(false);
+    setSidebarWidth(240);
+    setLastSidebarMode("full");
   }
 
   async function createTask(): Promise<void> {
-    if (!title.trim()) {
+    const quickAdd = parseQuickAdd(
+      title,
+      (workspace?.groups ?? []).filter((item) => !item.archived && !item.finished),
+      dueDate,
+    );
+    if (!quickAdd.title) {
       setNotice("Enter a task title.");
       return;
     }
     setCreating(true);
     try {
-      let activeGroup = group;
+      let activeGroup = quickAdd.groupId || group;
       if (!activeGroup && newGroup.trim()) {
         const groupResponse = await fetch("/api/runtime/workspace/task-groups", {
           method: "POST",
@@ -792,14 +1435,12 @@ export function App({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          title: title.trim(),
-          description,
+          title: quickAdd.title,
           group: activeGroup,
-          ...(dueDate ? { dueAt: dueDate } : {}),
+          ...(quickAdd.dueDate ? { dueAt: quickAdd.dueDate } : {}),
         }),
       });
       const payload = (await response.json()) as {
-        task?: { metadata: { id: string } };
         workspace?: Workspace;
         error?: { message?: string };
       };
@@ -807,11 +1448,15 @@ export function App({
       if (payload.workspace) setWorkspace(payload.workspace);
       setDialog(false);
       setNewGroup("");
+      setSelected(null);
       setNotice("Task created");
-      const createdTask = payload.workspace?.documents.find(
-        (item) => item.id === payload.task?.metadata.id,
-      );
-      if (createdTask) setSelected(createdTask);
+      if (quickAdd.dueDate) {
+        router.push(`/calendar?date=${encodeURIComponent(quickAdd.dueDate)}`);
+      } else {
+        setTaskFilter(null);
+        setTaskView("Board");
+        router.push("/tasks");
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not create task");
     } finally {
@@ -824,15 +1469,21 @@ export function App({
     const source = operation.source;
     const target = operation.target;
     const taskId = source?.data.taskId;
-    const targetDate = target?.data.date;
+    if (source && isSortable(source)) return;
+    const targetDate =
+      typeof target?.data.date === "string"
+        ? target.data.date
+        : target?.data.clearDate === true
+          ? null
+          : undefined;
     const targetStatus = target?.data.status;
     if (typeof taskId !== "string") return;
-    const task = tasks.find((item) => item.id === taskId);
+    const task = allTasks.find((item) => item.id === taskId);
     if (!task) return;
     const update = taskDropUpdate(
       task,
       {
-        ...(typeof targetDate === "string" ? { date: targetDate } : {}),
+        ...(targetDate !== undefined ? { date: targetDate } : {}),
         ...(typeof targetStatus === "string" ? { status: targetStatus } : {}),
       },
       event.canceled,
@@ -846,9 +1497,11 @@ export function App({
       });
       await acceptWorkspaceResponse(response);
       setNotice(
-        update.dueAt
-          ? `Scheduled for ${formatDate(update.dueAt)}`
-          : `Moved to ${statusNames[update.status ?? ""] ?? update.status}`,
+        update.dueAt === null
+          ? "Moved to Unscheduled"
+          : update.dueAt
+            ? `Scheduled for ${formatDate(update.dueAt)}`
+            : `Moved to ${statusNames[update.status ?? ""] ?? update.status}`,
       );
     } catch (error) {
       setNotice(
@@ -857,227 +1510,269 @@ export function App({
     }
   }
 
-  const matchingSearch = useMemo(() => searchResults.slice(0, 8), [searchResults]);
-  const dueSoonCount = tasks.filter((task) => {
-    if (!task.due_at || task.status === "completed") return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const through = new Date(today);
-    through.setDate(through.getDate() + 7);
-    return task.due_at >= dateKey(today) && task.due_at <= dateKey(through);
-  }).length;
-  const mobileContextDrawer = mobileNav ? (
-    <div className="fixed inset-0 z-50 bg-foreground/25 md:hidden">
-      <button
-        type="button"
-        className="absolute inset-0 size-full"
-        aria-label="Close navigation drawer"
-        onClick={() => setMobileNav(false)}
-      />
-      <aside className="relative flex h-full w-[min(84vw,320px)] flex-col border-r border-border/60 bg-background px-3">
-        <div className="flex h-12 items-center justify-between border-b border-border/50">
-          <span className="text-sm font-medium">{section}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Close navigation drawer"
-            onClick={() => setMobileNav(false)}
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto py-3 [&_[data-slot=contextual-sidebar]]:!flex [&_[data-slot=contextual-sidebar]]:!w-full">
-          <ContextualNavigation
-            section={section}
-            taskFilter={taskFilter}
-            sidebarCompact={sidebarCompact}
-            sidebarVisible={sidebarVisible}
-            setSidebarCompact={setSidebarCompact}
-            setSidebarVisible={setSidebarVisible}
-            sidebarWidth={sidebarWidth}
-            tasks={tasks}
-            completedTasks={completedTasks}
-            archivedTasks={archivedTasks}
-            dueSoonCount={dueSoonCount}
-            selectSavedView={selectSavedView}
-            selectSection={selectSection}
-            docs={docs}
-            documentFolder={documentFolder}
-            selectDocumentFolder={selectDocumentFolder}
-            visibleDocumentFolders={visibleDocumentFolders}
-            collapsedDocumentFolders={collapsedDocumentFolders}
-            setCollapsedDocumentFolders={setCollapsedDocumentFolders}
-            groups={workspace?.groups ?? []}
-            resizeSidebar={resizeSidebar}
-            resizeSidebarByKeyboard={resizeSidebarByKeyboard}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setMobileProjectOpen(true)}
-          className="flex items-center gap-2 border-t border-border/60 py-3 text-left text-sm"
-        >
-          <FolderKanban className="size-4" />
-          {workspace?.projectName ?? "Select project"}
-        </button>
-      </aside>
-    </div>
-  ) : null;
-
+  const queryText = query.trim().toLocaleLowerCase();
+  const fixedEntries: PaletteEntry[] = [
+    ...["Overview", "Tasks", "Groups", "Documents", "Agent prompts", "Calendar"].map((label) => ({
+      key: `section:${label}`,
+      label: `Go to ${label}`,
+      detail: "Section",
+      run: () => selectSection(label),
+    })),
+    {
+      key: "action:new-task",
+      label: "New task",
+      detail: "Action",
+      run: () => {
+        setPaletteOpen(false);
+        openCreate();
+      },
+    },
+    {
+      key: "action:new-document",
+      label: "New document",
+      detail: "Action",
+      run: () => void createDocument(),
+    },
+    {
+      key: "action:theme",
+      label: "Toggle theme",
+      detail: "Action",
+      run: () => {
+        setPaletteOpen(false);
+        toggleTheme();
+      },
+    },
+    ...["Activity", "Workspace health"].map((label) => ({
+      key: `section:${label}`,
+      label: `Go to ${label}`,
+      detail: "Section",
+      run: () => selectSection(label),
+    })),
+  ];
+  const resultById = new Map<string, SearchResult>();
+  for (const result of searchResults) resultById.set(result.id, result);
+  for (const record of records) {
+    if (
+      queryText &&
+      `${record.id} ${record.name} ${record.path}`.toLocaleLowerCase().includes(queryText) &&
+      !resultById.has(record.id)
+    ) {
+      resultById.set(record.id, {
+        id: record.id,
+        name: record.name,
+        path: record.path,
+        type: record.type,
+        snippet: "",
+      });
+    }
+  }
+  const recordEntries = [...resultById.values()].map((result) => ({
+    key: `record:${result.id}`,
+    label:
+      result.type === "task" ? `${result.id} — ${result.name}` : `${result.name} — ${result.path}`,
+    detail: result.type === "task" ? "Task" : "Document",
+    run: () => void selectSearchResult(result),
+  }));
+  const paletteEntries = [...fixedEntries, ...recordEntries]
+    .filter((entry) => entry.label.toLocaleLowerCase().includes(queryText))
+    .slice(0, 8);
+  const sidebarMode = !sidebarVisible ? "hidden" : sidebarCompact ? "mini" : "full";
   return (
     <DragDropProvider onDragEnd={(event) => void handleDrop(event)}>
-      <ShellFrame
-        onPointerDownCapture={(event) => {
-          const target = event.target;
-          if (
-            projectSwitcherOpen &&
-            target instanceof Element &&
-            !target.closest('[data-slot="project-switcher"]')
-          ) {
-            setProjectSwitcherOpen(false);
-          }
+      <WorkspaceAppContext.Provider
+        value={{
+          workspace,
+          records,
+          tasks,
+          allTasks,
+          archivedTasks,
+          docs,
+          groups: (workspace?.groups ?? []).filter((group) => !group.archived && !group.finished),
+          allGroups: workspace?.groups ?? [],
+          connectionStatus,
+          workspaceError,
+          taskFilter,
+          setTaskFilter,
+          taskGroupFilter,
+          setTaskGroupFilter,
+          selectTaskGroup,
+          taskView,
+          setTaskView,
+          visibleTasks,
+          selected,
+          activeSelected,
+          detail,
+          documentDraft,
+          editingDocument,
+          setDocumentDraft,
+          setEditingDocument,
+          documentConflict,
+          setDocumentConflict,
+          resolveDocumentConflict,
+          documentFolder,
+          createDocument,
+          openCreate,
+          openRecord,
+          updateTaskStatus,
+          updateTaskDue,
+          updateTaskPriority,
+          setTaskHiddenFromRecent,
+          setTaskArchived,
+          deleteRecord,
+          undoDelete,
+          moveOnBoard,
+          updateTaskFields,
+          createSubtask,
+          setChecklist,
+          saveBody: persistDocumentBody,
+          setNotice,
+          refresh,
+          validate,
+          migrate,
         }}
       >
-        <GlobalNavigation
-          section={section}
-          selectSection={selectSection}
-          openCreate={openCreate}
-          workspace={workspace}
-          projectSwitcherOpen={projectSwitcherOpen}
-          setProjectSwitcherOpen={setProjectSwitcherOpen}
-          projectPathInput={projectPathInput}
-          setProjectPathInput={setProjectPathInput}
-          trustedProjects={trustedProjects}
-          trustProjectPath={trustProjectPath}
-          switchProject={switchProject}
-          removeProjectTrust={removeProjectTrust}
-          theme={theme}
-          toggleTheme={() => {
-            const next: ThemeChoice =
-              theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-            setTheme(next);
-            window.localStorage.setItem("task-theme", next);
-            applyTheme(next);
+        <ShellFrame
+          sidebarMode={sidebarMode}
+          sidebarWidth={sidebarWidth}
+          onPointerDownCapture={(event) => {
+            const target = event.target;
+            if (
+              projectSwitcherOpen &&
+              target instanceof Element &&
+              !target.closest('[data-slot="project-switcher"]')
+            ) {
+              setProjectSwitcherOpen(false);
+            }
           }}
-        />
-        <div className="relative m-2 ml-0 flex h-[calc(100svh-1rem)] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background">
-          {mobileContextDrawer}
-          <div className="flex min-h-0 flex-1">
-            {sidebarVisible && (
-              <div className="hidden min-h-0 md:flex">
-                <ContextualNavigation
-                  section={section}
-                  taskFilter={taskFilter}
-                  sidebarCompact={sidebarCompact}
-                  sidebarVisible={sidebarVisible}
-                  setSidebarCompact={setSidebarCompact}
-                  setSidebarVisible={setSidebarVisible}
-                  sidebarWidth={sidebarWidth}
-                  tasks={tasks}
-                  completedTasks={completedTasks}
-                  archivedTasks={archivedTasks}
-                  dueSoonCount={dueSoonCount}
-                  selectSavedView={selectSavedView}
-                  selectSection={selectSection}
-                  docs={docs}
-                  documentFolder={documentFolder}
-                  selectDocumentFolder={selectDocumentFolder}
-                  visibleDocumentFolders={visibleDocumentFolders}
-                  collapsedDocumentFolders={collapsedDocumentFolders}
-                  setCollapsedDocumentFolders={setCollapsedDocumentFolders}
-                  groups={workspace?.groups ?? []}
-                  resizeSidebar={resizeSidebar}
-                  resizeSidebarByKeyboard={resizeSidebarByKeyboard}
-                />
-              </div>
-            )}
-            <main
-              data-slot="main-content"
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-            >
-              <header
-                data-slot="main-toolbar"
-                className="z-30 h-12 shrink-0 border-b border-border/20 bg-background/75 backdrop-blur-md dark:border-white/5"
+        >
+          <GlobalNavigation
+            section={section}
+            selectSection={selectSection}
+            workspace={workspace}
+            projectSwitcherOpen={projectSwitcherOpen}
+            setProjectSwitcherOpen={setProjectSwitcherOpen}
+            projectPathInput={projectPathInput}
+            setProjectPathInput={setProjectPathInput}
+            trustedProjects={trustedProjects}
+            trustProjectPath={trustProjectPath}
+            switchProject={switchProject}
+            removeProjectTrust={removeProjectTrust}
+            sidebarCompact={sidebarCompact}
+            toggleSidebarCompact={toggleSidebarCompact}
+            taskCount={tasks.filter((task) => task.status !== "completed").length}
+            documentCount={docs.length}
+            taskGroups={(workspace?.groups ?? [])
+              .filter((item) => !item.archived && !item.finished)
+              .map((item) => ({ ...item, total: Math.max(0, item.total - item.archivedTasks) }))}
+            taskGroupFilter={taskGroupFilter}
+            selectTaskGroup={selectTaskGroup}
+            documentPaths={docs.map((doc) => doc.path)}
+            documentFolder={documentFolder}
+            selectDocumentFolder={selectDocumentFolder}
+          />
+          <div className="panel" data-slot="task-panel">
+            <div className="flex min-h-0 flex-1">
+              <main
+                data-slot="main-content"
+                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
               >
-                <div className="mx-auto flex h-12 w-full max-w-[1600px] items-center gap-2 px-4 sm:gap-3 sm:px-7 xl:px-10">
+                <header data-slot="main-toolbar" className="top shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="md:hidden"
-                    aria-label="Open contextual navigation"
-                    onClick={() => setMobileNav(true)}
+                    className="sidebar-toggle-mobile ib"
+                    aria-label={
+                      sidebarMode === "hidden"
+                        ? "Show sidebar (Ctrl/Cmd+B)"
+                        : "Hide sidebar (Ctrl/Cmd+B)"
+                    }
+                    title={
+                      sidebarMode === "hidden"
+                        ? "Show sidebar (Ctrl/Cmd+B)"
+                        : "Hide sidebar (Ctrl/Cmd+B)"
+                    }
+                    onClick={toggleSidebar}
                   >
-                    <PanelLeftOpen className="size-4" />
+                    <PanelLeft className="size-4" />
                   </Button>
-                  {!sidebarVisible && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="hidden md:inline-flex"
-                      aria-label="Show contextual sidebar"
-                      title="Show sidebar (Ctrl/Cmd+B)"
-                      onClick={() => setSidebarVisible(true)}
-                    >
-                      <PanelLeftOpen className="size-4" />
-                    </Button>
-                  )}
-                  <nav
-                    aria-label="Breadcrumb"
-                    className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`sidebar-toggle-desktop ib ${sidebarMode === "hidden" ? "on" : ""}`}
+                    aria-label={
+                      sidebarMode === "hidden"
+                        ? "Show sidebar (Ctrl/Cmd+B)"
+                        : "Hide sidebar (Ctrl/Cmd+B)"
+                    }
+                    title={
+                      sidebarMode === "hidden"
+                        ? "Show sidebar (Ctrl/Cmd+B)"
+                        : "Hide sidebar (Ctrl/Cmd+B)"
+                    }
+                    onClick={toggleSidebar}
                   >
-                    <ol className="flex min-w-0 items-center gap-1.5">
-                      <li className="shrink-0">Workspace</li>
-                      <li aria-hidden="true">
-                        <ChevronRight className="size-3" />
-                      </li>
-                      <li className="truncate font-medium text-foreground">{section}</li>
-                      {taskFilter && (
-                        <>
-                          <li aria-hidden="true">
-                            <ChevronRight className="size-3" />
-                          </li>
-                          <li className="truncate">
-                            {taskFilter === "due-soon"
-                              ? "Due soon"
-                              : (statusNames[taskFilter] ?? taskFilter)}
-                          </li>
-                        </>
-                      )}
-                    </ol>
-                  </nav>
-                  <div className="ml-auto flex shrink-0 items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="max-w-36 justify-start truncate px-2 md:hidden"
-                      aria-label="Switch project"
-                      onClick={() => setMobileProjectOpen(true)}
-                    >
-                      <FolderKanban className="size-4 shrink-0" />
-                      <span className="truncate">{workspace?.projectName ?? "Project"}</span>
-                    </Button>
+                    <PanelLeft className="size-4" />
+                  </Button>
+                  <button type="button" onClick={openPalette} className="sbtn">
+                    <Search className="size-4 shrink-0" />
+                    <span className="sbtn-label">Search or jump to…</span>
+                    <kbd>⌘K</kbd>
+                  </button>
+                  <div className="lvw">
                     <button
                       type="button"
-                      aria-label="Create task"
-                      title="Create task"
-                      onClick={() => openCreate()}
-                      className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      className="live"
+                      aria-expanded={liveOpen}
+                      aria-haspopup="dialog"
+                      onClick={() => setLiveOpen((open) => !open)}
                     >
-                      <Pencil className="size-4" />
+                      <Zap className="size-4" />
+                      <span>{connectionStatus === "connected" ? "Live" : "Offline"}</span>
                     </button>
-                    <button
-                      type="button"
-                      aria-label="Search workspace"
-                      title="Search workspace"
-                      onClick={() => setPaletteOpen(true)}
-                      className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                    >
-                      <Search className="size-4" />
-                    </button>
+                    {liveOpen && (
+                      <div className="lvp on" role="dialog" aria-label="Live sync">
+                        <b>Live sync</b>
+                        <p>
+                          Watching {workspace?.workspaceDirectory ?? "the selected workspace"}.
+                          Changes made in the workspace appear here as they are indexed.
+                        </p>
+                        <code className="cli">task move TASK-17 in-progress</code>
+                        {liveChanges.map((change) => (
+                          <p className="live-change" key={`${change.id}:${change.changedAt}`}>
+                            <span className="src">{change.source}</span>
+                            <span>
+                              {change.id} · {statusNames[change.status] ?? change.status}
+                            </span>
+                            <small>
+                              {new Date(change.changedAt).toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </small>
+                          </p>
+                        ))}
+                        {liveChanges.length === 0 && <p>No external changes yet.</p>}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </header>
-              <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-16 md:pb-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Toggle light and dark theme"
+                    title={`Theme: ${theme}`}
+                    onClick={toggleTheme}
+                    className="ib"
+                  >
+                    <Sun className="size-4" />
+                  </Button>
+                  <Button
+                    onClick={() => openCreate()}
+                    className="cta h-9 rounded-xl px-3 text-xs sm:px-4 sm:text-sm"
+                  >
+                    <Plus className="size-4" />
+                    <span>New task</span>
+                  </Button>
+                </header>
                 {connectionStatus === "offline" && (
                   <div
                     role="alert"
@@ -1092,1333 +1787,243 @@ export function App({
                     </Button>
                   </div>
                 )}
-                <section
-                  className={`mx-auto w-full max-w-[1600px] px-4 xl:px-10 ${section === "Documents" && selected !== null && selected.type !== "task" ? "py-2 sm:px-7 sm:py-3" : "py-6 sm:px-7 sm:py-8"}`}
-                >
+                <section ref={pageBodyRef} className="body min-h-0">
                   <div
-                    className={`grid gap-5 ${selected && !(section === "Documents" && selected.type !== "task") ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
+                    className={`grid gap-5 ${activeSelected && activeSelected.type !== "task" && section !== "Documents" ? "xl:grid-cols-[minmax(0,1fr)_370px]" : "grid-cols-1"}`}
                   >
-                    <div className="min-w-0">
-                      {section === "Overview" && (
-                        <>
-                          <div className="flex flex-wrap items-end justify-between gap-4">
-                            <div>
-                              <p className="text-sm text-muted-foreground">Workspace overview</p>
-                              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                                {workspace?.projectName ?? "Your workspace"}
-                              </h1>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {workspace?.workspaceDirectory ??
-                                  "Local project activity and task progress"}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <Badge variant="outline" className="h-10 rounded-xl px-3">
-                                <Clock3 className="size-4" /> This week
-                              </Badge>
-                            </div>
-                          </div>
-                          {!workspace && connectionStatus !== "offline" && (
-                            <Card className="mt-5 border-dashed">
-                              <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
-                                <div>
-                                  <p className="font-medium">
-                                    {workspaceError
-                                      ? "Could not load this project"
-                                      : "Loading project workspace…"}
-                                  </p>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    {workspaceError ?? "Connecting to the selected local project."}
-                                  </p>
-                                </div>
-                                <Button variant="outline" onClick={() => void refresh()}>
-                                  Refresh workspace
-                                </Button>
-                              </CardContent>
-                            </Card>
-                          )}
-                          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                            <Metric
-                              label="Completed this week"
-                              value={completedThisWeek}
-                              icon={Check}
-                            />
-                            <Metric
-                              label="Active tasks"
-                              value={workspace?.overview.inProgress ?? "—"}
-                              icon={Timer}
-                            />
-                            <Metric label="Upcoming" value={upcomingCount} icon={Clock3} />
-                            <Metric
-                              label="Blocked"
-                              value={workspace?.overview.blocked ?? "—"}
-                              icon={AlertTriangle}
-                            />
-                          </div>
-                          <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,.85fr)]">
-                            <div className="space-y-5">
-                              <Card>
-                                <CardHeader className="flex-row items-center justify-between">
-                                  <div>
-                                    <CardTitle>Tasks completed</CardTitle>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      Daily completions · this week
-                                    </p>
-                                  </div>
-                                  <Badge variant="secondary">{completedThisWeek} total</Badge>
-                                </CardHeader>
-                                <CardContent>
-                                  <div
-                                    role="img"
-                                    aria-label={`Tasks completed each day this week: ${completionByDay.map((day) => `${day.date} ${day.count}`).join(", ")}`}
-                                    className="relative grid h-52 grid-cols-7 items-end gap-3 border-b px-2 pt-4 sm:gap-5"
-                                  >
-                                    {completedThisWeek === 0 && (
-                                      <span className="pointer-events-none absolute inset-x-0 top-12 text-center text-xs text-muted-foreground">
-                                        No completions recorded this week yet.
-                                      </span>
-                                    )}
-                                    {completionByDay.map((day) => {
-                                      const date = new Date(`${day.date}T12:00:00`);
-                                      const height =
-                                        day.count === 0
-                                          ? 3
-                                          : Math.max(12, (day.count / maxCompletion) * 160);
-                                      return (
-                                        <div
-                                          key={day.date}
-                                          className="flex h-full min-w-0 flex-col items-center"
-                                        >
-                                          <span className="mb-2 text-xs font-medium tabular-nums">
-                                            {day.count}
-                                          </span>
-                                          <div className="mt-auto flex h-40 w-full items-end">
-                                            <div
-                                              className={`w-full rounded-t-lg ${day.count > 0 ? "bg-primary/75" : "bg-muted"}`}
-                                              style={{ height: `${height}px` }}
-                                            />
-                                          </div>
-                                          <span className="py-2 text-[10px] text-muted-foreground sm:text-xs">
-                                            {new Intl.DateTimeFormat(undefined, {
-                                              weekday: "short",
-                                            }).format(date)}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  <p className="mt-3 text-xs text-muted-foreground">
-                                    History is recorded from status changes made after tracking was
-                                    enabled.
-                                  </p>
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader className="flex-row items-center justify-between">
-                                  <CardTitle>Recent workspace changes</CardTitle>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => selectSection("Activity")}
-                                  >
-                                    View activity
-                                  </Button>
-                                </CardHeader>
-                                <CardContent className="divide-y">
-                                  {workspace?.overview.recent.slice(0, 5).map((item) => (
-                                    <button
-                                      type="button"
-                                      key={item.path}
-                                      onClick={() => setSelected(item)}
-                                      className="flex w-full items-center gap-3 py-3 text-left"
-                                    >
-                                      <FileText className="size-4 text-muted-foreground" />
-                                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                                        {item.name}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {formatDate(item.updated_at)}
-                                      </span>
-                                    </button>
-                                  ))}
-                                  {workspace?.overview.recent.length === 0 && (
-                                    <p className="py-4 text-sm text-muted-foreground">
-                                      No workspace changes yet.
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader className="flex-row items-center justify-between">
-                                  <div>
-                                    <CardTitle>Task groups</CardTitle>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      Your workspace organization
-                                    </p>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => selectSection("Groups")}
-                                  >
-                                    View all
-                                  </Button>
-                                </CardHeader>
-                                <CardContent className="divide-y">
-                                  {workspace?.groups
-                                    .filter((item) => !item.archived && !item.finished)
-                                    .slice(0, 4)
-                                    .map((item) => (
-                                      <button
-                                        type="button"
-                                        key={item.id}
-                                        onClick={() => selectSection("Groups")}
-                                        className="flex w-full items-center gap-3 py-3 text-left"
-                                      >
-                                        <FolderKanban className="size-4 text-muted-foreground" />
-                                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                                          {item.name}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {item.completed}/{item.total} complete
-                                        </span>
-                                      </button>
-                                    ))}
-                                  {workspace?.groups.filter(
-                                    (item) => !item.archived && !item.finished,
-                                  ).length === 0 && (
-                                    <p className="py-4 text-sm text-muted-foreground">
-                                      Create a task to start your first group.
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            </div>
-                            <div className="space-y-5">
-                              <Card>
-                                <CardHeader className="flex-row items-center justify-between">
-                                  <div>
-                                    <CardTitle>Recently completed</CardTitle>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      Latest {completedLimit} completed tasks
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <label className="sr-only" htmlFor="completed-limit">
-                                      Number of recent completed tasks
-                                    </label>
-                                    <select
-                                      id="completed-limit"
-                                      value={completedLimit}
-                                      onChange={(event) =>
-                                        setCompletedLimit(Number(event.target.value))
-                                      }
-                                      className="h-8 rounded-md border bg-background px-2 text-xs"
-                                    >
-                                      {[5, 10, 20].map((count) => (
-                                        <option key={count} value={count}>
-                                          Latest {count}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => selectSavedView("completed")}
-                                    >
-                                      View all
-                                    </Button>
-                                  </div>
-                                </CardHeader>
-                                <CardContent className="divide-y">
-                                  {recentCompletedTasks.map((task) => {
-                                    const completionEvent = [...(task.extra?.status_history ?? [])]
-                                      .reverse()
-                                      .find((change) => change.to === "completed");
-                                    return (
-                                      <div key={task.path} className="flex items-center gap-2 py-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelected(task)}
-                                          className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
-                                        >
-                                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground">
-                                            <Check className="size-3.5" />
-                                          </span>
-                                          <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-medium">
-                                              {task.name}
-                                            </span>
-                                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                              {task.id} · Completed
-                                            </span>
-                                          </span>
-                                          <span className="shrink-0 text-xs text-muted-foreground">
-                                            {formatDate(completionEvent?.at ?? task.updated_at)}
-                                          </span>
-                                        </button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="size-8 shrink-0"
-                                          aria-label={`Hide ${task.name} from recent completed tasks`}
-                                          title="Hide from recent completions"
-                                          onClick={() => void setCompletedHidden(task, true)}
-                                        >
-                                          <EyeOff className="size-4" />
-                                        </Button>
-                                      </div>
-                                    );
-                                  })}
-                                  {recentCompletedTasks.length === 0 && (
-                                    <p className="py-4 text-sm text-muted-foreground">
-                                      No visible tasks in this recent completion window.
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader className="flex-row items-center justify-between">
-                                  <div>
-                                    <CardTitle>Archived</CardTitle>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      Archived separately from completed work
-                                    </p>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => selectSavedView("archived")}
-                                  >
-                                    View all
-                                  </Button>
-                                </CardHeader>
-                                <CardContent className="divide-y">
-                                  {archivedTasks.slice(0, 5).map((task) => (
-                                    <button
-                                      type="button"
-                                      key={task.path}
-                                      onClick={() => setSelected(task)}
-                                      className="flex w-full items-center gap-3 py-3 text-left"
-                                    >
-                                      <Folder className="size-4 shrink-0 text-muted-foreground" />
-                                      <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm font-medium">
-                                          {task.name}
-                                        </span>
-                                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                                          {task.id} · Archived
-                                        </span>
-                                      </span>
-                                      <span className="shrink-0 text-xs text-muted-foreground">
-                                        {formatDate(task.archived_at)}
-                                      </span>
-                                    </button>
-                                  ))}
-                                  {archivedTasks.length === 0 && (
-                                    <p className="py-4 text-sm text-muted-foreground">
-                                      Archived tasks will appear here.
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader>
-                                  <CardTitle>Upcoming tasks</CardTitle>
-                                </CardHeader>
-                                <CardContent className="divide-y">
-                                  {tasks
-                                    .filter((task) => task.due_at && task.status !== "completed")
-                                    .sort((left, right) =>
-                                      (left.due_at ?? "").localeCompare(right.due_at ?? ""),
-                                    )
-                                    .slice(0, 5)
-                                    .map((task) => (
-                                      <button
-                                        type="button"
-                                        key={task.id}
-                                        onClick={() => setSelected(task)}
-                                        className="flex w-full items-start gap-3 py-3 text-left"
-                                      >
-                                        <span className="mt-1.5 size-2 rounded-full bg-primary/70" />
-                                        <span className="min-w-0 flex-1">
-                                          <span className="block truncate text-sm font-medium">
-                                            {task.name}
-                                          </span>
-                                          <span className="mt-1 block text-xs text-muted-foreground">
-                                            {task.id}
-                                          </span>
-                                        </span>
-                                        <span className="shrink-0 text-xs text-muted-foreground">
-                                          {formatDate(task.due_at)}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  {tasks.filter(
-                                    (task) => task.due_at && task.status !== "completed",
-                                  ).length === 0 && (
-                                    <p className="py-4 text-sm text-muted-foreground">
-                                      No scheduled tasks coming up.
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader>
-                                  <CardTitle>Workspace health</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                  <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Runtime</span>
-                                    <Badge
-                                      variant={
-                                        connectionStatus === "connected" ? "success" : "warning"
-                                      }
-                                    >
-                                      {connectionStatus}
-                                    </Badge>
-                                  </div>
-                                  <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Validation issues</span>
-                                    <span className="font-medium">
-                                      {workspace?.overview.diagnostics ?? "—"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Documents</span>
-                                    <span className="font-medium">
-                                      {workspace?.overview.documents ?? "—"}
-                                    </span>
-                                  </div>
-                                  <Button
-                                    variant="outline"
-                                    className="w-full"
-                                    onClick={() => void validate()}
-                                  >
-                                    Run validation
-                                  </Button>
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader>
-                                  <CardTitle>Quick actions</CardTitle>
-                                  <p className="text-sm text-muted-foreground">
-                                    Workspace shortcuts.
-                                  </p>
-                                </CardHeader>
-                                <CardContent className="grid gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    className="justify-start"
-                                    onClick={() => selectSection("Documents")}
-                                  >
-                                    <BookOpen className="size-4" />
-                                    Browse documents
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    className="justify-start"
-                                    onClick={() => void refresh()}
-                                  >
-                                    <Activity className="size-4" />
-                                    Refresh workspace index
-                                  </Button>
-                                </CardContent>
-                              </Card>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      {section === "Tasks" && (
-                        <>
-                          <div className="flex flex-wrap items-end justify-between gap-3">
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                Plan, prioritize, and keep work moving.
-                              </p>
-                              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                                {section}
-                              </h1>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                variant={taskView === "List" ? "secondary" : "ghost"}
-                                size="sm"
-                                onClick={() => setTaskView("List")}
-                              >
-                                List
-                              </Button>
-                              <Button
-                                variant={taskView === "Board" ? "secondary" : "ghost"}
-                                size="sm"
-                                onClick={() => setTaskView("Board")}
-                              >
-                                Board
-                              </Button>
-                              <Button
-                                variant={taskView === "Calendar" ? "secondary" : "ghost"}
-                                size="sm"
-                                onClick={() => setTaskView("Calendar")}
-                              >
-                                Calendar
-                              </Button>
-                            </div>
-                          </div>
-                          {taskView === "Board" ? (
-                            <div className="mt-5 grid gap-3 xl:grid-cols-4">
-                              {statuses.map((status) => (
-                                <Card key={status} className="min-w-0 bg-muted/25">
-                                  <CardHeader className="pb-2">
-                                    <CardTitle className="flex items-center justify-between text-sm">
-                                      {statusNames[status]}
-                                      <Badge variant="secondary">
-                                        {boardTasks.filter((task) => task.status === status).length}
-                                      </Badge>
-                                    </CardTitle>
-                                  </CardHeader>
-                                  <CardContent>
-                                    <StatusDropZone status={status}>
-                                      {boardTasks
-                                        .filter((task) => task.status === status)
-                                        .map((task) => (
-                                          <div
-                                            key={task.id}
-                                            className="border-b border-border/70 px-3 py-3 last:border-b-0 hover:bg-accent/30"
-                                          >
-                                            <button
-                                              type="button"
-                                              onClick={() => setSelected(task)}
-                                              className="w-full text-left"
-                                            >
-                                              <p className="text-sm font-medium">{task.name}</p>
-                                              <p className="mt-2 text-[11px] text-muted-foreground">
-                                                {task.id}
-                                                {isArchivedTask(task) ? " · Archived" : ""}
-                                              </p>
-                                            </button>
-                                            {!isArchivedTask(task) &&
-                                              !task.path.startsWith("todo/_completed/") && (
-                                                <div className="mt-2">
-                                                  <BoardTask
-                                                    task={task}
-                                                    onSelect={() => setSelected(task)}
-                                                  />
-                                                </div>
-                                              )}
-                                          </div>
-                                        ))}
-                                    </StatusDropZone>
-                                  </CardContent>
-                                </Card>
-                              ))}
-                            </div>
-                          ) : taskView === "Calendar" ? (
-                            <CalendarView
-                              tasks={
-                                taskFilter === "archived" || taskFilter === "completed"
-                                  ? []
-                                  : visibleTasks.filter(
-                                      (task) =>
-                                        task.status !== "completed" && !isArchivedTask(task),
-                                    )
-                              }
-                              recentCompleted={recentCompletedTasks.map((task) => ({
-                                id: task.id,
-                                name: task.name,
-                                status: task.status,
-                                archived: false,
-                              }))}
-                              onCreate={openCreate}
-                              onSelect={(task) =>
-                                setSelected(records.find((item) => item.id === task.id) ?? null)
-                              }
-                            />
-                          ) : (
-                            <div className="mt-5 overflow-hidden border-y border-border/70">
-                              {visibleTasks.map((item) => (
-                                <button
-                                  type="button"
-                                  key={item.path}
-                                  onClick={() => setSelected(item)}
-                                  className="flex w-full items-center gap-3 border-b p-3.5 text-left last:border-0 hover:bg-accent/50"
-                                >
-                                  <span className="grid size-5 place-items-center rounded-full border">
-                                    <span
-                                      className={`size-2 rounded-full ${item.status === "completed" ? "bg-emerald-500" : ""}`}
-                                    />
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">
-                                      {item.name}
-                                    </span>
-                                    <span className="block truncate text-xs text-muted-foreground">
-                                      {item.id} · {item.path}
-                                    </span>
-                                  </span>
-                                  <Badge variant={statusVariant(item.status)}>
-                                    {statusNames[item.status ?? ""] ?? item.status ?? "Planned"}
-                                  </Badge>
-                                  <span className="hidden w-24 text-right text-xs text-muted-foreground sm:block">
-                                    {formatDate(item.due_at)}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                      {section === "Documents" && (
-                        <div className="mt-2 grid min-h-[calc(100svh-9rem)] grid-cols-1 gap-0">
-                          <div className="min-w-0">
-                            {selected && selected.type !== "task" ? (
-                              <div className="mx-auto w-full max-w-5xl px-4 py-2 sm:px-8 sm:py-3">
-                                <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-3">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelected(null);
-                                      setEditingDocument(false);
-                                    }}
-                                  >
-                                    <ChevronRight className="size-4 rotate-180" />
-                                    Documents
-                                  </Button>
-                                  <span
-                                    className="min-w-0 max-w-[24ch] flex-1 truncate text-xs text-muted-foreground"
-                                    title={selected.id}
-                                  >
-                                    {selected.id}
-                                  </span>
-                                  {detail && !editingDocument && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setDocumentDraft(detail.body);
-                                        setEditingDocument(true);
-                                      }}
-                                    >
-                                      Edit document
-                                    </Button>
-                                  )}
-                                  {detail && editingDocument && (
-                                    <>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={savingDocument}
-                                        onClick={() => {
-                                          setDocumentDraft(detail.body);
-                                          setEditingDocument(false);
-                                        }}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        disabled={savingDocument || documentDraft === detail.body}
-                                        onClick={() => void saveDocument()}
-                                      >
-                                        {savingDocument ? "Saving…" : "Save changes"}
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                                <header className="py-4">
-                                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                                    {selected.name}
-                                  </h1>
-                                </header>
-                                {detail ? (
-                                  editingDocument ? (
-                                    <MarkdownEditor
-                                      key={selected.id}
-                                      value={documentDraft}
-                                      onChange={setDocumentDraft}
-                                      onError={setNotice}
-                                      className="min-h-[60vh] border-y border-border/70"
-                                    />
-                                  ) : (
-                                    <MarkdownBody
-                                      body={detail.body}
-                                      onToggleTask={(index, checked) =>
-                                        void toggleDocumentTask(index, checked)
-                                      }
-                                      taskUpdatesDisabled={savingDocument}
-                                    />
-                                  )
-                                ) : (
-                                  <p className="border-y border-border/70 py-6 text-sm text-muted-foreground">
-                                    Loading document…
-                                  </p>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="px-4 py-5 sm:px-8 sm:py-7">
-                                <p className="text-sm text-muted-foreground">
-                                  Browse managed Markdown by folder.
-                                </p>
-                                <div className="mt-1 flex items-end justify-between gap-4">
-                                  <div>
-                                    <h1 className="text-3xl font-semibold tracking-tight">
-                                      Documents
-                                    </h1>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                      {documentFolder || "All folders"} · {visibleDocuments.length}{" "}
-                                      documents
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="mt-5 divide-y divide-border/70 border-y border-border/70">
-                                  {visibleDocuments.map((item) => (
-                                    <button
-                                      type="button"
-                                      key={item.path}
-                                      onClick={() => {
-                                        setSelected(item);
-                                        setEditingDocument(false);
-                                      }}
-                                      className="flex w-full items-center gap-3 py-3.5 text-left hover:bg-accent/40"
-                                    >
-                                      <FileText className="size-4 shrink-0 text-muted-foreground" />
-                                      <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm font-medium">
-                                          {item.name}
-                                        </span>
-                                        <span className="block truncate text-xs text-muted-foreground">
-                                          {item.path}
-                                        </span>
-                                      </span>
-                                      <Badge variant="outline">{item.type}</Badge>
-                                      <ChevronRight className="size-4 text-muted-foreground" />
-                                    </button>
-                                  ))}
-                                  {visibleDocuments.length === 0 && (
-                                    <p className="py-8 text-center text-sm text-muted-foreground">
-                                      No Markdown documents in this folder.
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {section === "Groups" && (
-                        <>
-                          <h1 className="text-3xl font-semibold">Groups</h1>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Task groups organize work inside this active local project.
-                          </p>
-                          <div className="mt-5 grid gap-3 md:grid-cols-2">
-                            {workspace?.groups
-                              .filter((item) => !item.archived && !item.finished)
-                              .map((item) => (
-                                <Card key={item.id} className="">
-                                  <CardContent className="flex items-center gap-3 p-4">
-                                    <FolderKanban className="size-5 text-muted-foreground" />
-                                    <div className="min-w-0 flex-1">
-                                      <p className="truncate font-medium">{item.name}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {item.completed}/{item.total} complete · {item.path}
-                                      </p>
-                                    </div>
-                                    <ChevronRight className="size-4 text-muted-foreground" />
-                                  </CardContent>
-                                </Card>
-                              ))}
-                          </div>
-                          {workspace?.groups.some((item) => item.finished) && (
-                            <section className="mt-8">
-                              <h2 className="text-sm font-semibold">Completed groups</h2>
-                              <div className="mt-2 divide-y border-y border-border/70">
-                                {workspace.groups
-                                  .filter((item) => item.finished)
-                                  .map((item) => (
-                                    <div key={item.id} className="flex items-center gap-3 py-3">
-                                      <Check className="size-4 text-muted-foreground" />
-                                      <span className="min-w-0 flex-1 truncate text-sm">
-                                        {item.name}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {item.path}
-                                      </span>
-                                    </div>
-                                  ))}
-                              </div>
-                            </section>
-                          )}
-                          {workspace?.groups.some((item) => item.archived) && (
-                            <section className="mt-8">
-                              <h2 className="text-sm font-semibold">Archived groups</h2>
-                              <div className="mt-2 divide-y border-y border-border/70">
-                                {workspace.groups
-                                  .filter((item) => item.archived)
-                                  .map((item) => (
-                                    <div key={item.id} className="flex items-center gap-3 py-3">
-                                      <Folder className="size-4 text-muted-foreground" />
-                                      <span className="min-w-0 flex-1 truncate text-sm">
-                                        {item.name}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {item.path}
-                                      </span>
-                                    </div>
-                                  ))}
-                              </div>
-                            </section>
-                          )}
-                        </>
-                      )}
-                      {section === "Agent prompts" && (
-                        <PromptBuilder
-                          records={records}
-                          workspace={workspace}
-                          setNotice={setNotice}
-                        />
-                      )}
-                      {section === "Activity" && (
-                        <>
-                          <h1 className="text-3xl font-semibold">Activity</h1>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Recent filesystem reconciliation view (source: workspace modified
-                            timestamps).
-                          </p>
-                          <div className="mt-5 space-y-2">
-                            {[...records]
-                              .sort((a, b) => b.modifiedAt - a.modifiedAt)
-                              .slice(0, 30)
-                              .map((item) => (
-                                <button
-                                  type="button"
-                                  key={item.path}
-                                  onClick={() => setSelected(item)}
-                                  className="flex w-full items-center gap-3 border-b border-border/70 px-3 py-3 text-left last:border-b-0 hover:bg-accent/30"
-                                >
-                                  <Activity className="size-4 text-muted-foreground" />
-                                  <span className="flex-1 text-sm">{item.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(item.modifiedAt).toLocaleString()}
-                                  </span>
-                                </button>
-                              ))}
-                          </div>
-                        </>
-                      )}
-                      {section === "Workspace health" && (
-                        <>
-                          <h1 className="text-3xl font-semibold">Workspace health</h1>
-                          <Card className="mt-5">
-                            <CardContent className="space-y-3 p-5">
-                              <p>
-                                Runtime: <strong>{connectionStatus}</strong>
-                              </p>
-                              <p>
-                                Project:{" "}
-                                <code className="text-xs">
-                                  {workspace?.projectRoot ?? "Not selected"}
-                                </code>
-                              </p>
-                              <p>
-                                Managed directory:{" "}
-                                <code className="text-xs">
-                                  {workspace?.workspaceDirectory ?? "—"}
-                                </code>
-                              </p>
-                              <p>Index source: {workspace?.source ?? "—"}</p>
-                              <p>
-                                Last snapshot:{" "}
-                                {workspace ? new Date(workspace.scannedAt).toLocaleString() : "—"}
-                              </p>
-                              <Separator />
-                              {workspace?.diagnostics.map((item) => (
-                                <p
-                                  key={`${item.path}:${item.message}`}
-                                  className="text-sm text-amber-700"
-                                >
-                                  {item.path}: {item.message}
-                                </p>
-                              ))}
-                              <Button onClick={() => void refresh()}>Refresh index</Button>
-                              <Button variant="outline" onClick={() => void validate()}>
-                                Validate
-                              </Button>
-                            </CardContent>
-                          </Card>
-                        </>
-                      )}
-                    </div>
-                    {selected && !(section === "Documents" && selected.type !== "task") && (
-                      <aside className="border-l border-border/60 bg-transparent p-5 xl:sticky xl:top-4 xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs text-muted-foreground">{selected.id}</p>
-                            <h2 className="mt-1 text-xl font-semibold">{selected.name}</h2>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Close details"
-                            onClick={() => setSelected(null)}
-                          >
-                            <X className="size-4" />
-                          </Button>
-                        </div>
-                        <div className="mt-4 flex items-center gap-2">
-                          <Badge variant={statusVariant(selected.status)}>
-                            {statusNames[selected.status ?? ""] ?? "Document"}
-                          </Badge>
-                          {selected.priority && (
-                            <Badge variant="outline">{selected.priority} priority</Badge>
-                          )}
-                        </div>
-                        {selected.type === "task" && (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant={isArchivedTask(selected) ? "secondary" : "outline"}
-                              onClick={() =>
-                                void setTaskArchived(selected, !isArchivedTask(selected))
-                              }
-                            >
-                              <Folder className="size-4" />
-                              {isArchivedTask(selected)
-                                ? selected.extra?.archived_from
-                                  ? "Restore task"
-                                  : "Restore group"
-                                : "Archive task"}
-                            </Button>
-                            {selected.status === "completed" && !isArchivedTask(selected) && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  void setCompletedHidden(
-                                    selected,
-                                    !selected.extra?.hidden_from_recent,
-                                  )
-                                }
-                              >
-                                <EyeOff className="size-4" />
-                                {selected.extra?.hidden_from_recent
-                                  ? "Show in recent"
-                                  : "Hide in recent"}
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                        {selected.type !== "task" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="mt-3"
-                            onClick={() => {
-                              setDocumentFolder(selected.path.split("/").slice(0, -1).join("/"));
-                              setSection("Documents");
-                            }}
-                          >
-                            Open full document
-                            <ChevronRight className="size-4" />
-                          </Button>
-                        )}
-                        <Separator className="my-5" />
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <p className="text-muted-foreground">Start</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.start_at)}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Due</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.due_at)}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Created</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.created_at)}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Updated</p>
-                            <p className="mt-1 font-medium">{formatDate(selected.updated_at)}</p>
-                          </div>
-                        </div>
-                        <p className="mt-4 break-all text-xs text-muted-foreground">
-                          {selected.path}
-                        </p>
-                        <Separator className="my-5" />
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="text-sm font-semibold">
-                            {editingDocument ? "Markdown editor" : "Markdown preview"}
-                          </h3>
-                          {detail && !editingDocument && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setDocumentDraft(detail.body);
-                                setEditingDocument(true);
-                              }}
-                            >
-                              Edit Markdown
-                            </Button>
-                          )}
-                        </div>
-                        {detail ? (
-                          editingDocument ? (
-                            <>
-                              <MarkdownEditor
-                                key={selected.id}
-                                value={documentDraft}
-                                onChange={setDocumentDraft}
-                                onError={setNotice}
-                                className="mt-3 border-y border-border/70"
-                              />
-                              <div className="mt-3 flex justify-end gap-2">
-                                <Button
-                                  variant="outline"
-                                  disabled={savingDocument}
-                                  onClick={() => {
-                                    setDocumentDraft(detail.body);
-                                    setEditingDocument(false);
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  disabled={savingDocument || documentDraft === detail.body}
-                                  onClick={() => void saveDocument()}
-                                >
-                                  {savingDocument ? "Saving…" : "Save changes"}
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="mt-3 border-y border-border/60 py-3">
-                              <MarkdownBody
-                                body={detail.body}
-                                onToggleTask={(index, checked) =>
-                                  void toggleDocumentTask(index, checked)
-                                }
-                                taskUpdatesDisabled={savingDocument}
-                              />
-                            </div>
-                          )
-                        ) : (
-                          <p className="mt-3 text-xs text-muted-foreground">Loading content…</p>
-                        )}
-                      </aside>
-                    )}
+                    <div className="min-w-0">{children}</div>
                   </div>
                 </section>
-              </div>
-            </main>
+              </main>
+            </div>
           </div>
-        </div>
-        <nav
-          aria-label="Mobile workspace navigation"
-          className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-border/70 bg-background/95 px-2 pb-[env(safe-area-inset-bottom)] md:hidden"
-        >
-          {navigation.map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              type="button"
-              aria-label={label}
-              aria-current={section === label ? "page" : undefined}
-              onClick={() => selectSection(label)}
-              className={`grid size-10 place-items-center rounded-xl ${section === label ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
-            >
-              <Icon className="size-5" />
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-label="Create task"
-            onClick={() => openCreate()}
-            className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"
-          >
-            <Pencil className="size-4" />
-          </button>
-        </nav>
-        {mobileProjectOpen && (
-          <div className="fixed inset-0 z-[60] grid place-items-end bg-foreground/25 md:hidden">
-            <button
-              type="button"
-              className="absolute inset-0 size-full"
-              aria-label="Close project switcher"
-              onClick={() => setMobileProjectOpen(false)}
-            />
-            <section
-              role="dialog"
-              aria-modal="true"
-              aria-label="Switch project"
-              className="max-h-[75svh] w-full overflow-y-auto rounded-t-2xl border border-border bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-semibold">Trusted projects</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Close project switcher"
-                  onClick={() => setMobileProjectOpen(false)}
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-              {trustedProjects.map((project) => (
-                <button
-                  key={project.path}
-                  type="button"
-                  disabled={project.active}
-                  onClick={() => void switchProject(project.path)}
-                  className="flex w-full items-center gap-3 border-b border-border/60 py-3 text-left disabled:opacity-70"
-                >
-                  <Folder className="size-4" />
-                  <span className="min-w-0 flex-1 truncate text-sm">{project.path}</span>
-                  {project.active && <Check className="size-4 text-primary" />}
-                </button>
-              ))}
-              {workspace &&
-                !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
-                  <Button
-                    className="mt-3 w-full"
-                    variant="outline"
-                    onClick={() => void trustProjectPath(workspace.projectRoot)}
-                  >
-                    Trust current project
-                  </Button>
-                )}
-              <form
-                className="mt-4 space-y-2 border-y border-border/60 py-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
-                }}
+          {/* biome-ignore lint/a11y/useSemanticElements: This is a focusable pointer and keyboard resize separator, not a visual divider. */}
+          <div
+            id="sidebar-resize"
+            className="rz hidden md:block"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuenow={sidebarCompact ? 68 : sidebarWidth}
+            tabIndex={0}
+            onPointerDown={resizeSidebar}
+            onPointerMove={resizeSidebar}
+            onPointerUp={resizeSidebar}
+            onPointerCancel={resizeSidebar}
+            onDoubleClick={resetSidebarWidth}
+            onKeyDown={resizeSidebarByKeyboard}
+          />
+          <nav aria-label="Mobile workspace navigation" className="mob">
+            {navigation.map(({ label, icon: Icon }) => (
+              <button
+                key={label}
+                type="button"
+                aria-label={label}
+                aria-current={section === label ? "page" : undefined}
+                onClick={() => selectSection(label)}
+                className={`nv ${section === label ? "on" : ""}`}
               >
-                <label
-                  htmlFor="mobile-trusted-project-path"
-                  className="text-xs text-muted-foreground"
-                >
-                  Add a project folder
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    id="mobile-trusted-project-path"
-                    value={projectPathInput}
-                    onChange={(event) => setProjectPathInput(event.target.value)}
-                    placeholder="/path/to/project"
-                    className="h-9 min-w-0 text-xs"
-                  />
-                  <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
-                    Trust
-                  </Button>
-                </div>
-              </form>
-              {trustedProjects
-                .filter((project) => !project.active)
-                .map((project) => (
+                <Icon className="size-4" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+          {mobileProjectOpen && (
+            <div className="fixed inset-0 z-[60] grid place-items-end bg-foreground/25 md:hidden">
+              <button
+                type="button"
+                className="absolute inset-0 size-full"
+                aria-label="Close project switcher"
+                onClick={() => setMobileProjectOpen(false)}
+              />
+              <section
+                role="dialog"
+                aria-modal="true"
+                aria-label="Switch project"
+                className="max-h-[75svh] w-full overflow-y-auto rounded-t-2xl border border-border bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-semibold">Trusted projects</h2>
                   <Button
-                    key={`remove:${project.path}`}
-                    className="mt-2 w-full justify-start"
                     variant="ghost"
-                    onClick={() => void removeProjectTrust(project.path)}
+                    size="icon"
+                    aria-label="Close project switcher"
+                    onClick={() => setMobileProjectOpen(false)}
                   >
                     <X className="size-4" />
-                    Remove trust · {project.path}
                   </Button>
+                </div>
+                {trustedProjects.map((project) => (
+                  <button
+                    key={project.path}
+                    type="button"
+                    disabled={project.active}
+                    onClick={() => void switchProject(project.path)}
+                    className="flex w-full items-center gap-3 border-b border-border/60 py-3 text-left disabled:opacity-70"
+                  >
+                    <Folder className="size-4" />
+                    <span className="min-w-0 flex-1 truncate text-sm">{project.path}</span>
+                    {project.active && <Check className="size-4 text-primary" />}
+                  </button>
                 ))}
-            </section>
-          </div>
-        )}
-
-        {dialog && (
-          <div className="fixed inset-0 z-50 grid place-items-center p-4">
-            <button
-              type="button"
-              className="absolute inset-0 size-full cursor-default bg-black/35"
-              aria-label="Close task creation"
-              onClick={() => setDialog(false)}
-            />
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="create-title"
-              className="relative z-10 max-h-[calc(100svh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-card p-5"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-primary">New task</p>
-                  <h2 id="create-title" className="mt-1 text-xl font-semibold">
-                    Add to your workspace
-                  </h2>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setDialog(false)}
-                  aria-label="Close"
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-              <div className="mt-5 space-y-4">
-                <label htmlFor="new-task-title" className="block text-sm font-medium">
-                  Task name
-                  <Input
-                    id="new-task-title"
-                    autoFocus
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void createTask();
-                    }}
-                    placeholder="What needs to get done?"
-                    className="mt-1.5"
-                  />
-                </label>
-                <fieldset className="min-w-0">
-                  <legend className="mb-1.5 text-sm font-medium">Description</legend>
-                  <MarkdownEditor
-                    key="new-task-description"
-                    value={description}
-                    onChange={setDescription}
-                    onError={setNotice}
-                    className="min-h-56 border-y border-border/70"
-                  />
-                </fieldset>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label htmlFor="new-task-group" className="text-sm font-medium">
-                    Task group
-                    <select
-                      id="new-task-group"
-                      value={group}
-                      onChange={(event) => setGroup(event.target.value)}
-                      className="mt-1.5 h-9 w-full rounded-lg border bg-background px-3 text-sm"
+                {workspace &&
+                  !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
+                    <Button
+                      className="mt-3 w-full"
+                      variant="outline"
+                      onClick={() => void trustProjectPath(workspace.projectRoot)}
                     >
-                      {" "}
-                      <option value="">Select group…</option>
-                      {workspace?.groups
-                        .filter((item) => !item.archived && !item.finished)
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label htmlFor="new-task-due-date" className="text-sm font-medium">
-                    Due date
-                    <input
-                      id="new-task-due-date"
-                      type="date"
-                      value={dueDate}
-                      onChange={(event) => setDueDate(event.target.value)}
-                      className="mt-1.5 h-9 w-full rounded-lg border bg-background px-3 text-sm"
-                    />
-                  </label>
-                </div>
-                {!workspace?.groups.some((item) => !item.archived && !item.finished) && (
-                  <label htmlFor="new-task-group-name" className="block text-sm font-medium">
-                    Create your first task group
-                    <Input
-                      id="new-task-group-name"
-                      value={newGroup}
-                      onChange={(event) => setNewGroup(event.target.value)}
-                      placeholder="For example, Website refresh"
-                      className="mt-1.5"
-                    />
-                  </label>
-                )}
-                {workspace?.groups.length && !group ? (
-                  <label htmlFor="new-task-group-name" className="block text-sm font-medium">
-                    Or create a new group
-                    <Input
-                      id="new-task-group-name"
-                      value={newGroup}
-                      onChange={(event) => setNewGroup(event.target.value)}
-                      placeholder="Group name"
-                      className="mt-1.5"
-                    />
-                  </label>
-                ) : null}
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDialog(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={creating || !title.trim() || (!group && !newGroup.trim())}
-                  onClick={() => void createTask()}
+                      Trust current project
+                    </Button>
+                  )}
+                <form
+                  className="mt-4 space-y-2 border-y border-border/60 py-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
+                  }}
                 >
-                  {creating ? "Creating…" : "Create task"}
-                </Button>
-              </div>
+                  <label
+                    htmlFor="mobile-trusted-project-path"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Add a project folder
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="mobile-trusted-project-path"
+                      value={projectPathInput}
+                      onChange={(event) => setProjectPathInput(event.target.value)}
+                      placeholder="/path/to/project"
+                      className="h-9 min-w-0 text-xs"
+                    />
+                    <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
+                      Trust
+                    </Button>
+                  </div>
+                </form>
+                {trustedProjects
+                  .filter((project) => !project.active)
+                  .map((project) => (
+                    <Button
+                      key={`remove:${project.path}`}
+                      className="mt-2 w-full justify-start"
+                      variant="ghost"
+                      onClick={() => void removeProjectTrust(project.path)}
+                    >
+                      <X className="size-4" />
+                      Remove trust · {project.path}
+                    </Button>
+                  ))}
+              </section>
             </div>
-          </div>
-        )}
-        {paletteOpen && (
-          <div className="fixed inset-0 z-50 grid place-items-start px-4 pt-[12vh]">
-            <button
-              type="button"
-              className="absolute inset-0 size-full cursor-default bg-black/35"
-              aria-label="Close command palette"
-              onClick={() => setPaletteOpen(false)}
-            />
-            <div className="relative z-10 mx-auto w-full max-w-lg overflow-hidden rounded-2xl border bg-popover p-2">
-              <InputGroup className="border-0 focus-within:ring-0">
-                <Search className="size-4" />
-                <InputGroupInput
+          )}
+
+          <Dialog.Root open={dialog} onOpenChange={setDialog}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="new-task-overlay" />
+              <Dialog.Content className="new-task-dialog">
+                <Dialog.Title className="dialog-title">New task</Dialog.Title>
+                <Dialog.Description className="sr-only">
+                  Add a task to your workspace. Date and group tokens in the title are applied
+                  automatically.
+                </Dialog.Description>
+                <Input
+                  id="new-task-title"
+                  autoFocus
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void createTask();
+                  }}
+                  placeholder="e.g. Review API fri #docs"
+                  aria-label="Task name"
+                  className="quick-add-title"
+                />
+                {workspace?.groups.some((item) => !item.archived && !item.finished) ? (
+                  <CustomSelect
+                    label="Group"
+                    value={group}
+                    onValueChange={setGroup}
+                    placeholder="Select group…"
+                    options={(workspace.groups ?? [])
+                      .filter((item) => !item.archived && !item.finished)
+                      .map((item) => ({ value: item.id, label: item.name }))}
+                  />
+                ) : (
+                  <Input
+                    id="new-task-group-name"
+                    value={newGroup}
+                    onChange={(event) => setNewGroup(event.target.value)}
+                    placeholder="Create your first task group"
+                    aria-label="New task group name"
+                    className="quick-add-title"
+                  />
+                )}
+                <div className="quick-add-submit">
+                  <Button
+                    className="cta"
+                    disabled={creating || !title.trim() || (!group && !newGroup.trim())}
+                    onClick={() => void createTask()}
+                  >
+                    {creating ? "Creating…" : "Create task"}
+                  </Button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+          {paletteOpen && (
+            <CommandMenu.Dialog
+              open={paletteOpen}
+              onOpenChange={setPaletteOpen}
+              label="Command palette"
+              overlayClassName="ov on"
+              contentClassName="mdl"
+              shouldFilter={false}
+              loop
+              className="command-menu"
+            >
+              <div className="command-input-wrap">
+                <Search className="size-4 shrink-0 text-muted-foreground" />
+                <CommandMenu.Input
                   autoFocus
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onValueChange={setQuery}
+                  aria-label="Search actions and files"
                   placeholder="Search or jump to…"
+                  className="command-input"
                 />
-              </InputGroup>
-              <div className="mt-2 max-h-[55svh] overflow-y-auto border-t pt-2">
-                {matchingSearch.map((result) => (
-                  <button
-                    type="button"
-                    key={result.path}
-                    onClick={() => void selectSearchResult(result)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-accent"
-                  >
-                    <Search className="size-4 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{result.name}</span>
-                    <span className="text-xs text-muted-foreground">{result.id}</span>
-                  </button>
-                ))}
-                {[...navigation, ...operations].map(({ label, icon: Icon }) => (
-                  <button
-                    type="button"
-                    key={label}
-                    onClick={() => selectSection(label)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
-                  >
-                    <Icon className="size-4 text-muted-foreground" />
-                    {label}
-                    <Command className="ml-auto size-3 text-muted-foreground" />
-                  </button>
-                ))}
               </div>
-            </div>
-          </div>
-        )}
-        {notice && (
-          <div
-            role="status"
-            className="fixed bottom-5 right-5 z-[60] flex max-w-lg items-center gap-2 rounded-xl border bg-card px-4 py-3 text-sm"
-          >
-            <Check className="size-4 shrink-0 text-emerald-600" />
+              <CommandMenu.List className="palette-options mt-2 max-h-[55svh] overflow-y-auto border-t pt-2">
+                {paletteEntries.map((entry) => (
+                  <CommandMenu.Item
+                    key={entry.key}
+                    value={entry.key}
+                    keywords={[entry.label, entry.detail]}
+                    onSelect={entry.run}
+                    className="palette-option nv"
+                  >
+                    <Search className="size-4 shrink-0 text-muted-foreground" />
+                    <span>{entry.label}</span>
+                  </CommandMenu.Item>
+                ))}
+                <CommandMenu.Empty className="sub px-3 py-3">No matches.</CommandMenu.Empty>
+              </CommandMenu.List>
+            </CommandMenu.Dialog>
+          )}
+          <div role="status" className={`toast ${notice ? "on" : ""}`}>
             <span>{notice}</span>
-            <button
-              type="button"
-              aria-label="Dismiss"
-              onClick={() => setNotice("")}
-              className="ml-2"
-            >
-              <X className="size-4" />
+            {undoTrashId && (
+              <button type="button" onClick={() => void undoDelete()}>
+                Undo
+              </button>
+            )}
+            <button type="button" aria-label="Dismiss notification" onClick={() => setNotice("")}>
+              ×
             </button>
           </div>
-        )}
-      </ShellFrame>
+        </ShellFrame>
+      </WorkspaceAppContext.Provider>
     </DragDropProvider>
   );
 
@@ -2438,10 +2043,9 @@ export function App({
         (item) => item.path === result.path || item.id === result.id,
       );
       if (!current) throw new Error("This result changed or was removed. Search again.");
-      setSelected(current);
+      openRecord(current);
       setQuery("");
       setPaletteOpen(false);
-      setSection(current.type === "task" ? "Tasks" : "Documents");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not open this search result");
     }

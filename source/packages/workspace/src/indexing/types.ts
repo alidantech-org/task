@@ -1,14 +1,43 @@
 export type WorkspaceContext = {
   root: string;
   projectRoot?: string;
+  config?: WorkspaceConfig;
 };
-export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed";
+export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed" | "archived";
 export type TaskStatusChange = { from: TaskStatus; to: TaskStatus; at: string };
 export type TaskPriority = "low" | "medium" | "high";
+export type TrackingSummary = { files: number; insertions: number; deletions: number };
+export type TrackingSegment = {
+  base_ref: string;
+  base_commit?: string;
+  started_at: string;
+  end_ref?: string;
+  ended_at?: string;
+  end_error?: string;
+  /** The snapshot skipped files because of size or count limits. */
+  truncated?: boolean;
+  summary?: TrackingSummary;
+};
+export type TaskTracking = { segments: readonly TrackingSegment[] };
+export type TaskLinkType = "blocks" | "relates" | "duplicates";
+export type TaskLink = { type: TaskLinkType; task: string };
+export type Attachment = {
+  kind: "file" | "link";
+  name: string;
+  /** Workspace-relative path of an uploaded file. */
+  path?: string;
+  /** http or https address of a link attachment. */
+  url?: string;
+  size?: number;
+  added_at: string;
+  added_by?: string;
+};
+export type Recurrence = { every: "day" | "week" | "month"; interval: number; until?: string };
 export type TaskExtra = Readonly<
   Record<string, unknown> & {
     status_history?: readonly TaskStatusChange[];
     hidden_from_recent?: boolean;
+    tracking?: TaskTracking;
   }
 >;
 export type DocumentMetadata = {
@@ -26,6 +55,13 @@ export type DocumentMetadata = {
   updated_at?: string;
   archived_at?: string;
   depends_on?: readonly string[];
+  order?: number;
+  parent?: string;
+  estimate?: number;
+  links?: readonly TaskLink[];
+  watchers?: readonly string[];
+  attachments?: readonly Attachment[];
+  recurrence?: Recurrence;
   extra?: TaskExtra;
   dates: Readonly<Record<string, string>>;
 };
@@ -38,6 +74,10 @@ export type DocumentSummary = {
   contentHash: string;
   changeTime: number;
   fileId: string;
+  /** Checkbox progress of a task body, computed while indexing. */
+  checklist?: { completed: number; total: number };
+  /** Number of comments in a task body, computed while indexing. */
+  commentCount?: number;
 };
 export type ValidationCategory =
   | "metadata"
@@ -46,8 +86,15 @@ export type ValidationCategory =
   | "dependency"
   | "link"
   | "group"
-  | "path";
-export type ValidationDiagnostic = { path: string; message: string; category?: ValidationCategory };
+  | "path"
+  | "quality";
+export type ValidationSeverity = "error" | "warning";
+export type ValidationDiagnostic = {
+  path: string;
+  message: string;
+  category?: ValidationCategory;
+  severity?: ValidationSeverity;
+};
 export type WorkspaceIndex = {
   root: string;
   documents: ReadonlyMap<string, DocumentSummary>;
@@ -55,7 +102,22 @@ export type WorkspaceIndex = {
   scannedAt: number;
   fingerprints: ReadonlyMap<string, string>;
 };
-export type WorkspaceConfig = { workspace: string };
+export type QualityMode = "reject" | "warn" | "off";
+export type QualityConfig = {
+  mode?: QualityMode;
+  minTaskWords?: number;
+  minChecklistItems?: number;
+  minGroupDocWords?: number;
+};
+export type TrackingConfig = { enabled?: boolean };
+export type IdentityConfig = { name?: string };
+export type WorkspaceConfig = {
+  workspace: string;
+  organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
+  quality?: QualityConfig;
+  tracking?: TrackingConfig;
+  identity?: IdentityConfig;
+};
 export type ResolvedWorkspace = {
   root: string;
   projectRoot: string;
@@ -67,15 +129,21 @@ export type TaskGroup = {
   name: string;
   slug: string;
   path: string;
+  /** Id of the group's goal.md document, when it exists. */
+  goalId?: string;
   archived: boolean;
   finished?: boolean;
   total: number;
   completed: number;
+  archivedTasks: number;
+  resolved: number;
 };
 export type TaskCreateInput = {
   title: string;
   group: string;
   description?: string;
+  /** Full Markdown body; replaces the generated scaffold. */
+  body?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
   assignee?: string;
@@ -84,11 +152,30 @@ export type TaskCreateInput = {
   dueAt?: string;
   tags?: readonly string[];
   dependsOn?: readonly string[];
+  order?: number;
+  parent?: string;
+  estimate?: number;
+  links?: readonly TaskLink[];
+  watchers?: readonly string[];
+  recurrence?: Recurrence;
   extra?: Readonly<Record<string, unknown>>;
 };
-export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "description">> & {
+export type TaskUpdateInput = Partial<
+  Omit<
+    TaskCreateInput,
+    "group" | "description" | "body" | "dueAt" | "order" | "parent" | "estimate" | "recurrence"
+  >
+> & {
   title?: string;
+  dueAt?: string | null;
+  /** `null` clears the field. */
+  order?: number | null;
+  parent?: string | null;
+  estimate?: number | null;
+  recurrence?: Recurrence | null;
   hiddenFromRecent?: boolean;
+  /** Record git snapshots while the task is in progress (requires a git repository). */
+  track?: boolean;
 };
 export type DocumentCreateInput = {
   title: string;

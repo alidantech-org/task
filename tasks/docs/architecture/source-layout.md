@@ -79,11 +79,29 @@ All web applications use Next.js App Router. The local dashboard and hosted webs
 - **CLI:** a purpose-built, coloured and carefully formatted command experience. Use picocolors for terminal-aware colour and @clack/prompts for accessible interactive prompts, selections, confirmations and progress. Preserve task and tc, machine-readable output, predictable exit codes, and non-interactive operation for scripts and agents.
 - **Runtime:** Bun manages the TypeScript workspace. OpenTUI requires Bun 1.3.14 or later. Flutter remains on its independent Dart toolchain.
 
+### Preferred Next.js App Router layout
+
+Group browser-facing screens under `src/app/(app)/`. Put the persistent application frame in that route group's `layout.tsx`, including shared navigation, app bars, sidebars, and the stable main-content boundary. Section and detail pages render only their route content so client navigation does not remount shared chrome. Keep URL-changing context in the route or derive it directly from the current pathname to avoid a post-navigation flash.
+
+Keep API handlers outside the UI route group at `src/app/api/`. Route groups do not add URL segments, so this structure keeps public paths stable while making the UI/API boundary clear. Use explicit route pages for known sections; add dynamic segments only for resource detail or nested resource paths that need them.
+
+```text
+src/app/
+├── (app)/
+│   ├── layout.tsx       # Persistent UI frame
+│   ├── page.tsx         # /
+│   └── documents/[id]/page.tsx
+├── api/                 # Route handlers, outside the UI group
+└── layout.tsx           # HTML document and global providers
+```
+
+This is the preferred structure for both `apps/local` and `apps/site`. Keep app-specific navigation and runtime boundaries inside their own Next.js application.
+
 ## Current implementation status
 
 - The CLI has task/tc aliases, workspace discovery, overview/list/show/search, task and group creation/update, editor handoff, completion storage under `todo/_completed/`, explicit archive/restore under `todo/_archived/`, document commands, validation, index diagnostics, static project inspection, reviewed setup plans, JSON output, stable error codes, and TTY-only prompts. It calls `@task/workspace` directly and does not require the local runtime. Project setup is static, does not execute repository code, and does not launch agents; it should ask before recommending or applying Git ignore choices for completed/archive history.
 - The NestJS API has a bootstrap, health endpoint and a direct controller smoke test; it has no authentication, domain persistence or workspace modules yet.
-- The local application has a Next.js dashboard with overview, task list/board/calendar, document browsing, detail panels, prompt generation, global full-text search, and workspace diagnostics. Its loopback runtime exposes capability-protected read/query/validation/refresh and task create/update routes through a same-origin Next.js proxy. Writes use shared operations with hash conflicts, symlink rejection, and atomic file replacement; they recheck directory and file identity before replacement but do not use kernel-enforced directory handles against a hostile concurrent filesystem actor. Trusted project switching, Markdown source editing, and WebSocket updates are not implemented.
+- The local application has explicit App Router pages for Overview, Tasks, Calendar, Groups, Documents, Prompts, Activity, and Health inside a persistent `(app)` layout. The runtime provides the initial workspace snapshot to that layout, while each route renders its own page content. Its loopback runtime exposes capability-protected reads, search, validation, organization settings, group migration/archive/restore, and task create/update routes through a same-origin Next.js proxy. The dashboard refreshes live snapshots while open; the runtime also maintains week-based group folders and delayed auto-archive while running. Markdown editing uses the shared Milkdown editor and React Markdown viewer. Writes use shared operations with hash conflicts, symlink rejection, and atomic file replacement; they recheck directory and file identity before replacement but do not use kernel-enforced directory handles against a hostile concurrent filesystem actor.
 - The hosted site has a separate Next.js App Router starter and a render smoke test; authentication and API-backed workflows are not implemented.
 - The Flutter project has a minimal Material application and widget smoke test, with Flutter analyze/test wired into root scripts.
 - The TUI has an OpenTUI/React interactive navigation shell with task, group, document, Rules, and Agent Profile browsing. Reads and previews use `@task/workspace`; it remains read-only.

@@ -5,18 +5,15 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = join(fileURLToPath(new URL("..", import.meta.url)));
 const cliRoot = join(repositoryRoot, "source/apps/cli");
 const localRoot = join(repositoryRoot, "source/apps/local");
+const workspaceTemplatesRoot = join(
+  repositoryRoot,
+  "source/packages/workspace/src/project/templates",
+);
 const buildRoot = await mkdtemp(join(repositoryRoot, ".task-cli-release-build-"));
 const stagedRoot = join(buildRoot, "cli-dist");
 const assetRoot = join(stagedRoot, "assets");
 const buildLocalRoot = join(buildRoot, "source/apps/local");
 await mkdir(stagedRoot, { recursive: true });
-const packageManifest = JSON.parse(await Bun.file(join(cliRoot, "package.json")).text()) as {
-  dependencies: Record<string, string>;
-  bin?: Record<string, string>;
-  files?: string[];
-};
-
-await Bun.write(join(stagedRoot, "package.json"), JSON.stringify(packageManifest, null, 2));
 
 function run(label: string, command: string[], cwd = repositoryRoot): void {
   process.stdout.write(`\n› ${label}\n`);
@@ -86,6 +83,7 @@ try {
     .replace(/^\/\/ @bun\r?\n/, "")
     .replace(/^#!\/usr\/bin\/env bun\r?\n/, "");
   await Bun.write(cliEntry, `#!/usr/bin/env bun\n${cliSource}`);
+  await cp(workspaceTemplatesRoot, join(stagedRoot, "templates"), { recursive: true });
 
   const tuiBuild = await Bun.build({
     entrypoints: [join(repositoryRoot, "source/apps/tui/src/index.tsx")],
@@ -94,7 +92,7 @@ try {
     target: "bun",
     minify: false,
     packages: "bundle",
-    external: ["@opentui/core", "@opentui/react"],
+    external: ["@opentui/core", "@opentui/react", "react"],
   });
   if (!tuiBuild.success) {
     throw new Error(tuiBuild.logs.map((log) => log.message).join("\n"));
@@ -113,13 +111,6 @@ try {
   const buildId = await Bun.file(join(dashboardRoot, ".next/BUILD_ID")).text();
   if (!buildId.trim()) throw new Error("Next.js production build did not produce a BUILD_ID");
 
-  packageManifest.bin = {
-    taskcode: "dist/cli.js",
-    task: "dist/cli.js",
-    tc: "dist/cli.js",
-  };
-  packageManifest.files = ["dist", "README.md"];
-  await Bun.write(join(stagedRoot, "package.json"), JSON.stringify(packageManifest, null, 2));
   await rm(join(cliRoot, "dist"), { recursive: true, force: true });
   await cp(stagedRoot, join(cliRoot, "dist"), { recursive: true });
   process.stdout.write("\nCLI release assets are ready in source/apps/cli/dist.\n");

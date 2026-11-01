@@ -10,7 +10,9 @@ export function monthGrid(month: Date, weekStartsOn = 1): Date[] {
   const startOffset = (first.getDay() - weekStartsOn + 7) % 7;
   const start = new Date(first);
   start.setDate(first.getDate() - startOffset);
-  return Array.from({ length: 42 }, (_, index) => {
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cellCount = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+  return Array.from({ length: cellCount }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     return date;
