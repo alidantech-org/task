@@ -67,8 +67,9 @@ const modes: readonly { id: EditorMode; label: string; icon: typeof Bold }[] = [
 ];
 const saveDelay = 1000;
 /** Room kept free for undo, redo, revert and the mode switch on the right of the toolbar. */
-const rightReserve = 260;
-const groupWidth = (group: readonly ToolItem[]) => group.length * 34 + 14;
+const rightReserve = 240;
+const groupWidth = (group: readonly ToolItem[]) => group.length * 34 + 17;
+const moreWidth = 40;
 
 type Props = {
   title: string;
@@ -150,13 +151,14 @@ export function DocumentEditorSheet({
     const element = toolbar.current;
     if (!element) return;
     const fit = () => {
-      let room = element.clientWidth - rightReserve - 40;
-      let count = 0;
-      for (const group of toolGroups) {
-        room -= groupWidth(group);
-        if (room < 0) break;
-        count += 1;
-      }
+      const available = element.clientWidth - rightReserve;
+      const widths = toolGroups.map(groupWidth);
+      const fits = (count: number) => {
+        const used = widths.slice(0, count).reduce((sum, width) => sum + width, 0);
+        return used + (count < toolGroups.length ? moreWidth : 0) <= available;
+      };
+      let count = toolGroups.length;
+      while (count > 0 && !fits(count)) count -= 1;
       setVisibleGroups(count);
     };
     fit();
