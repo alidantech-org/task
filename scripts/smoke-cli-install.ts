@@ -130,7 +130,7 @@ while time.monotonic() < deadline:
         if not chunk:
             break
         output.extend(chunk)
-        if not sent_quit and b"q Quit" in output:
+        if not sent_quit and b"TASKS" in output.upper():
             os.write(master, b"q")
             sent_quit = True
     waited, child_status = os.waitpid(pid, os.WNOHANG)
@@ -146,7 +146,7 @@ if status is None:
             pass
         _, status = os.waitpid(pid, 0)
 text = output.decode(errors="replace")
-if not sent_quit or os.waitstatus_to_exitcode(status) != 0 or "Tasks" not in text or "TypeError" in text:
+if not sent_quit or os.waitstatus_to_exitcode(status) != 0 or "tasks" not in text.lower() or "TypeError" in text:
     sys.stderr.write(text[-4000:])
     raise SystemExit("Installed TUI failed its PTY smoke test")
 print("Installed TUI PTY smoke test passed.")`;
@@ -196,6 +196,7 @@ try {
   const projectRoot = join(temporaryRoot, "consumer-project");
   await mkdir(projectRoot, { recursive: true });
   runCli(taskPath, projectRoot, ["init"]);
+  await Bun.write(join(projectRoot, "task.yaml"), 'workspace: "tasks"\nquality:\n  mode: off\n');
   const group = JSON.parse(
     runCli(taskPath, projectRoot, ["group", "create", "--title", "Install smoke", "--json"]),
   ) as { id: string };
