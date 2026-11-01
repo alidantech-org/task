@@ -12,10 +12,14 @@ import {
   EyeOff,
   FileText,
   GitCompare,
+  History,
   LayoutDashboard,
+  ListTree,
   Maximize2,
+  MessageSquare,
   Minimize2,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Save,
   ShieldCheck,
@@ -29,8 +33,13 @@ import { ChangeViewer, type ViewerTarget } from "@/components/change-viewer";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { TaskActivity } from "@/components/task-activity";
 import { TaskChanges } from "@/components/task-changes";
+import { TaskComments } from "@/components/task-comments";
+import { TaskFiles } from "@/components/task-files";
 import { TaskOverview } from "@/components/task-overview";
+import { TaskProperties } from "@/components/task-properties";
+import { TaskSubtasks } from "@/components/task-subtasks";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CustomSelect } from "@/components/ui/select";
 import { groupForTask } from "@/lib/group";
@@ -47,9 +56,13 @@ import { describeDue } from "@/lib/task-analytics";
 const tabs = [
   ["overview", "Overview", LayoutDashboard],
   ["details", "Details", FileText],
+  ["subtasks", "Subtasks", ListTree],
+  ["comments", "Comments", MessageSquare],
+  ["activity", "Activity", History],
   ["changes", "Changes", GitCompare],
   ["edit", "Edit", Pencil],
   ["docs", "Docs", BookOpen],
+  ["files", "Files", Paperclip],
   ["quality", "Quality", ShieldCheck],
 ] as const;
 type TabId = (typeof tabs)[number][0];
@@ -115,6 +128,11 @@ export function TaskSheet() {
     setTaskArchived,
     deleteRecord,
     setChecklist,
+    refresh,
+    updateTaskFields,
+    createSubtask,
+    allTasks,
+    groups,
     selected,
     detail,
     saveBody,
@@ -277,6 +295,19 @@ export function TaskSheet() {
     ...(group?.goalId ? [{ label: "Group goal", id: group.goalId }] : []),
     ...(group ? [{ label: "Group plan", id: group.id }] : []),
   ];
+  const childTasks = allTasks.filter((item) => item.parent === task.id);
+  const parentTask = allTasks.find((item) => item.id === task.parent);
+  const attachmentList = task.attachments ?? [];
+  const assignees = [
+    ...new Set(
+      allTasks.map((item) => item.assignee).filter((name): name is string => Boolean(name)),
+    ),
+  ];
+  const counts: Partial<Record<TabId, number>> = {
+    subtasks: childTasks.length,
+    comments: task.commentCount ?? 0,
+    files: attachmentList.length,
+  };
   const checklistChange = (selector: ChecklistSelector, checked: boolean) =>
     void setChecklist(task, selector, checked);
 
@@ -452,6 +483,11 @@ export function TaskSheet() {
                           {findings.length}
                         </b>
                       ) : null}
+                      {counts[id] ? (
+                        <b className="tab-count" title="Items">
+                          {counts[id]}
+                        </b>
+                      ) : null}
                       {id === "overview" && remainingSteps > 0 ? (
                         <b className="tab-count" title="Steps not done">
                           {remainingSteps}
@@ -501,6 +537,46 @@ export function TaskSheet() {
                     onReadMore={() => setTab("details")}
                     onShowChanges={() => setTab("changes")}
                     onChecklist={checklistChange}
+                  />
+                )}
+                {tab === "overview" && (
+                  <section className="task-overview">
+                    <h3 className="ov-title">Properties</h3>
+                    <TaskProperties
+                      task={task}
+                      candidates={allTasks.filter((item) => item.id !== task.id)}
+                      groups={groups}
+                      assignees={assignees}
+                      currentGroupId={group?.id}
+                      onSave={(patch) => updateTaskFields(task, patch)}
+                    />
+                  </section>
+                )}
+                {tab === "subtasks" && (
+                  <TaskSubtasks
+                    task={task}
+                    subtasks={childTasks}
+                    parent={parentTask}
+                    onOpen={(item) => openRecord(item)}
+                    onAdd={(title) => createSubtask(task, title)}
+                  />
+                )}
+                {tab === "comments" && (
+                  <TaskComments
+                    taskId={task.id}
+                    onChanged={() => void refresh()}
+                    onNotice={setNotice}
+                  />
+                )}
+                {tab === "activity" && (
+                  <TaskActivity taskId={task.id} refreshKey={task.contentHash} />
+                )}
+                {tab === "files" && (
+                  <TaskFiles
+                    taskId={task.id}
+                    attachments={attachmentList}
+                    onChanged={() => void refresh()}
+                    onNotice={setNotice}
                   />
                 )}
                 {tab === "details" && (

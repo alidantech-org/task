@@ -3,13 +3,22 @@
 import { DragOverlay, useDragDropMonitor } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
 import { Archive, Columns3, List } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BoardTask, BoardTaskPreview } from "@/components/board-task";
 import { StatusDropZone } from "@/components/calendar";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
+import { TaskFilterBar } from "@/components/task-filter-bar";
 import { TaskSheet } from "@/components/task-sheet";
 import { planReorder, sortBoard } from "@/lib/board-order";
 import { groupForTask } from "@/lib/group";
+import { usePersistentState } from "@/lib/persistent-state";
+import {
+  applyFilters,
+  emptyFilters,
+  isFilters,
+  isSavedViews,
+  type SavedView,
+} from "@/lib/task-filters";
 
 const columns = ["planned", "in-progress", "blocked", "completed"] as const;
 const labels: Record<string, string> = {
@@ -34,9 +43,33 @@ export function TasksPageContent() {
     openRecord,
     moveOnBoard,
   } = useWorkspaceApp();
+  const [filters, setFilters] = usePersistentState("task:filters", emptyFilters, isFilters);
+  const [views, setViews] = usePersistentState<SavedView[]>("task:views", [], isSavedViews);
+  const [me, setMe] = useState("");
+  useEffect(() => {
+    void fetch("/api/runtime/workspace/identity", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as { author?: string };
+        if (response.ok) setMe(payload.author ?? "");
+      })
+      .catch(() => undefined);
+  }, []);
+  const assignees = useMemo(
+    () =>
+      [
+        ...new Set(
+          visibleTasks.map((task) => task.assignee).filter((name): name is string => Boolean(name)),
+        ),
+      ].sort(),
+    [visibleTasks],
+  );
+  const labelNames = useMemo(
+    () => [...new Set(visibleTasks.flatMap((task) => task.tags))].sort(),
+    [visibleTasks],
+  );
   const displayed = useMemo(() => {
     const group = groups.find((item) => item.id === groupFilter);
-    const filtered = visibleTasks.filter(
+    const filtered = applyFilters(visibleTasks, filters, me).filter(
       (task) => !group || task.path === group.path || task.path.startsWith(`${group.path}/`),
     );
     const groupRank = (task: (typeof filtered)[number]) => {
@@ -45,7 +78,7 @@ export function TasksPageContent() {
       return position < 0 ? Number.MAX_SAFE_INTEGER : position;
     };
     return sortBoard(filtered, groupRank);
-  }, [visibleTasks, groups, groupFilter, allGroups]);
+  }, [visibleTasks, groups, groupFilter, allGroups, filters, me]);
   useDragDropMonitor({
     onDragEnd(event) {
       if (event.canceled) return;
@@ -93,6 +126,15 @@ export function TasksPageContent() {
             </fieldset>
           </div>
         </header>
+        <TaskFilterBar
+          filters={filters}
+          onFilters={setFilters}
+          views={views}
+          onViews={setViews}
+          assignees={assignees}
+          tags={labelNames}
+          matching={displayed.length}
+        />
         <div className="chips">
           <button
             type="button"
