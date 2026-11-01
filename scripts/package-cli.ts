@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = join(fileURLToPath(new URL("..", import.meta.url)));
 const cliRoot = join(repositoryRoot, "source/apps/cli");
 const localRoot = join(repositoryRoot, "source/apps/local");
+const workspaceTemplatesRoot = join(
+  repositoryRoot,
+  "source/packages/workspace/src/project/templates",
+);
 const buildRoot = await mkdtemp(join(repositoryRoot, ".task-cli-release-build-"));
 const stagedRoot = join(buildRoot, "cli-dist");
 const assetRoot = join(stagedRoot, "assets");
@@ -79,6 +83,7 @@ try {
     .replace(/^\/\/ @bun\r?\n/, "")
     .replace(/^#!\/usr\/bin\/env bun\r?\n/, "");
   await Bun.write(cliEntry, `#!/usr/bin/env bun\n${cliSource}`);
+  await cp(workspaceTemplatesRoot, join(stagedRoot, "templates"), { recursive: true });
 
   const tuiBuild = await Bun.build({
     entrypoints: [join(repositoryRoot, "source/apps/tui/src/index.tsx")],
