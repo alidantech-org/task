@@ -1,8 +1,9 @@
 export type WorkspaceContext = {
   root: string;
   projectRoot?: string;
+  config?: WorkspaceConfig;
 };
-export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed";
+export type TaskStatus = "planned" | "in-progress" | "blocked" | "completed" | "archived";
 export type TaskStatusChange = { from: TaskStatus; to: TaskStatus; at: string };
 export type TaskPriority = "low" | "medium" | "high";
 export type TaskExtra = Readonly<
@@ -55,7 +56,10 @@ export type WorkspaceIndex = {
   scannedAt: number;
   fingerprints: ReadonlyMap<string, string>;
 };
-export type WorkspaceConfig = { workspace: string };
+export type WorkspaceConfig = {
+  workspace: string;
+  organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
+};
 export type ResolvedWorkspace = {
   root: string;
   projectRoot: string;
@@ -71,6 +75,8 @@ export type TaskGroup = {
   finished?: boolean;
   total: number;
   completed: number;
+  archivedTasks: number;
+  resolved: number;
 };
 export type TaskCreateInput = {
   title: string;
@@ -86,8 +92,9 @@ export type TaskCreateInput = {
   dependsOn?: readonly string[];
   extra?: Readonly<Record<string, unknown>>;
 };
-export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "description">> & {
+export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "description" | "dueAt">> & {
   title?: string;
+  dueAt?: string | null;
   hiddenFromRecent?: boolean;
 };
 export type DocumentCreateInput = {

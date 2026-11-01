@@ -1,23 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   archiveTask,
   archiveTaskGroup,
+  autoArchiveResolvedGroups,
   buildWorkspaceIndex,
   createDocument,
   createTask,
   createTaskGroup,
+  getTaskGroupWeekPath,
   initializeWorkspace,
   listTaskGroups,
   listTasks,
+  migrateLegacyGroups,
   readWorkspaceDocument,
   resolveWorkspace,
   restoreTask,
   restoreTaskGroup,
   searchWorkspace,
   updateTask,
+  updateWorkspaceOrganization,
   validateWorkspace,
 } from "#/index";
 
@@ -118,6 +122,127 @@ describe("workspace resolution", () => {
 });
 
 describe("task operations", () => {
+  test("uses ISO Monday weeks by default and honors configurable week starts", () => {
+    const date = new Date("2026-11-01T12:00:00.000Z");
+    expect(getTaskGroupWeekPath(date, 1, 2026)).toBe("todo/work/W44");
+    expect(getTaskGroupWeekPath(date, 7, 2026)).toBe("todo/work/W45");
+    expect(getTaskGroupWeekPath(new Date("2026-01-01T12:00:00.000Z"), 1, 2026)).toBe(
+      "todo/work/W01",
+    );
+  });
+
+  test("saves organization settings when a default workspace has no task.yaml yet", async () => {
+    const { projectRoot } = await project();
+    const selected = await resolveWorkspace({ cwd: projectRoot });
+    expect(selected.source).toBe("default");
+    const updated = await updateWorkspaceOrganization(selected, {
+      weekStart: 7,
+      autoArchiveAfterDays: null,
+    });
+    expect(updated.config.organization).toEqual({ weekStart: 7, autoArchiveAfterDays: null });
+    const reread = await resolveWorkspace({ cwd: projectRoot });
+    expect(reread.config.organization).toEqual({ weekStart: 7, autoArchiveAfterDays: null });
+  });
+
+  test("rolls old groups into year folders and auto-archives resolved groups by age", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const oldCreatedAt = "2025-06-01T12:00:00.000Z";
+    const completedGroup = await createTaskGroup(context, "Old resolved group");
+    const completedTask = await createTask(context, {
+      group: completedGroup.id,
+      title: "Resolved before rollover",
+    });
+    await updateTask(context, completedTask.metadata.id, { status: "completed" });
+    const unfinishedGroup = await createTaskGroup(context, "Old unfinished group");
+    const unfinishedTask = await createTask(context, {
+      group: unfinishedGroup.id,
+      title: "Still in progress",
+    });
+    for (const group of [completedGroup, unfinishedGroup]) {
+      const path = join(workspace, group.path, "plan.md");
+      const content = await readFile(path, "utf8");
+      await writeFile(
+        path,
+        withMetadata(content, (values) => {
+          const extra = values.extra as Record<string, unknown>;
+          extra.created_at = oldCreatedAt;
+        }),
+      );
+    }
+
+    const rolloverArchives = await autoArchiveResolvedGroups(context, null);
+    expect(rolloverArchives.map((group) => group.id)).toContain(completedGroup.id);
+    const groupsAfterRollover = await listTaskGroups(context);
+    expect(groupsAfterRollover.find((group) => group.id === completedGroup.id)?.archived).toBe(
+      true,
+    );
+    expect(groupsAfterRollover.find((group) => group.id === unfinishedGroup.id)?.path).toMatch(
+      /^todo\/work\/2025\/W\d{2}\/old-unfinished-group--[a-f0-9]{6}$/,
+    );
+    expect(unfinishedTask.path).toContain(unfinishedGroup.path);
+
+    const agedGroup = await createTaskGroup(context, "Aged resolved group");
+    const agedTask = await createTask(context, {
+      group: agedGroup.id,
+      title: "Archive after delay",
+    });
+    const completed = await updateTask(context, agedTask.metadata.id, { status: "completed" });
+    const agedAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const agedPath = join(workspace, completed.task.path);
+    const agedContent = await readFile(agedPath, "utf8");
+    await writeFile(
+      agedPath,
+      withMetadata(agedContent, (values) => {
+        values.updated_at = agedAt;
+        const extra = values.extra as Record<string, unknown>;
+        extra.status_history = [{ from: "planned", to: "completed", at: agedAt }];
+      }),
+    );
+    const ageArchives = await autoArchiveResolvedGroups(context, 2);
+    expect(ageArchives.map((group) => group.id)).toContain(agedGroup.id);
+    expect(
+      (await listTaskGroups(context)).find((group) => group.id === agedGroup.id)?.archived,
+    ).toBe(true);
+  });
+
+  test("keeps current resolved groups active when automatic archiving is disabled", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Manual archive only");
+    const task = await createTask(context, { group: group.id, title: "Stay visible" });
+    await updateTask(context, task.metadata.id, { status: "completed" });
+    expect(await autoArchiveResolvedGroups(context, null)).toEqual([]);
+    expect((await listTaskGroups(context)).find((item) => item.id === group.id)?.archived).toBe(
+      false,
+    );
+  });
+
+  test("migrates a legacy flat group while preserving IDs and Markdown", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Legacy project");
+    const task = await createTask(context, {
+      group: group.id,
+      title: "Preserve this work",
+      description: "Keep the authored body",
+    });
+    const originalBody = await readWorkspaceDocument(context, task.path);
+    const legacyPath = "todo/legacy-project";
+    await rename(join(workspace, group.path), join(workspace, legacyPath));
+    const migrated = await migrateLegacyGroups(context);
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0]?.path).toMatch(
+      /^todo\/work\/(?:W\d{2}|\d{4}\/W\d{2})\/legacy-project--[a-f0-9]{6}$/,
+    );
+    const index = await buildWorkspaceIndex(context);
+    const migratedTask = [...index.documents.values()].find(
+      (document) => document.metadata.id === task.metadata.id,
+    );
+    expect(migratedTask?.metadata.id).toBe(task.metadata.id);
+    expect(await readWorkspaceDocument(context, migratedTask!.path)).toBe(originalBody);
+  });
+
   test("creates numbered tasks with defaults, filters and body preserving updates", async () => {
     const { workspace } = await project();
     const context = { root: workspace };
@@ -130,7 +255,9 @@ describe("task operations", () => {
     expect(task.metadata.id).toMatch(/^TSK-[A-F0-9]{12}$/);
     expect(task.metadata.status).toBe("planned");
     expect(task.metadata.priority).toBe("medium");
-    expect(task.path).toBe("todo/workspace-engine/001-build-scanner.md");
+    expect(task.path).toMatch(
+      /^todo\/work\/W\d{2}\/workspace-engine--[a-f0-9]{6}\/001-build-scanner\.md$/,
+    );
     const index = await buildWorkspaceIndex(context);
     expect(listTasks(index, { status: "planned" })).toHaveLength(1);
     expect(listTasks(index, { group: group.id })).toHaveLength(1);
@@ -143,6 +270,14 @@ describe("task operations", () => {
       expect.objectContaining({ from: "planned", to: "in-progress" }),
     ]);
     expect(await readWorkspaceDocument(context, task.path)).toContain("Keep the body");
+    const scheduled = await updateTask(context, task.metadata.id, { dueAt: "2026-11-06" });
+    expect(scheduled.task.metadata.due_at).toBe("2026-11-06");
+    const unscheduled = await updateTask(context, task.metadata.id, { dueAt: null });
+    expect(unscheduled.task.metadata.due_at).toBeUndefined();
+    const hidden = await updateTask(context, task.metadata.id, { hiddenFromRecent: true });
+    expect(hidden.task.metadata.extra?.hidden_from_recent).toBe(true);
+    const shown = await updateTask(context, task.metadata.id, { hiddenFromRecent: false });
+    expect(shown.task.metadata.extra?.hidden_from_recent).toBe(false);
   });
 
   test("records only real status transitions and validates the history shape", async () => {
@@ -210,22 +345,21 @@ describe("task operations", () => {
     ).rejects.toMatchObject({ code: "conflict" });
   });
 
-  test("moves a completed group to completed storage and archives/restores by group ID", async () => {
+  test("keeps completed tasks in place and archives/restores resolved groups by group ID", async () => {
     const { workspace } = await project();
     const context = { root: workspace };
     const group = await createTaskGroup(context, "Release prep");
     const task = await createTask(context, { group: group.id, title: "Ship it" });
     const updated = await updateTask(context, task.metadata.id, { status: "completed" });
-    expect(updated.completedGroup?.path).toMatch(
-      /^todo\/_completed\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-release-prep$/,
-    );
-    expect(updated.task.path).toBe(`${updated.completedGroup?.path}/001-ship-it.md`);
+    expect(updated.task.path).toBe(task.path);
     expect(updated.task.metadata.created_at).toBeTruthy();
     expect(updated.task.metadata.archived_at).toBeUndefined();
     const archived = await archiveTaskGroup(context, group.id);
     expect(archived.path).toMatch(/^todo\/_archived\//);
     const restored = await restoreTaskGroup(context, group.id);
-    expect(restored.path).toMatch(/^todo\/_completed\//);
+    expect(restored.path).toMatch(
+      /^todo\/work\/(?:W\d{2}|\d{4}\/W\d{2})\/release-prep--[a-f0-9]{6}$/,
+    );
     expect(restored.finished).toBe(true);
     expect((await listTaskGroups(context))[0]?.archived).toBe(false);
     const restoredTask = (await buildWorkspaceIndex(context)).documents.get(
@@ -236,19 +370,41 @@ describe("task operations", () => {
     expect(restoredTask?.metadata.updated_at).toBe(updated.task.metadata.updated_at);
   });
 
-  test("archives an incomplete task independently and restores its original path", async () => {
+  test("archives a task in place and restores its previous status", async () => {
     const { workspace } = await project();
     const context = { root: workspace };
     const group = await createTaskGroup(context, "Partial work");
     const task = await createTask(context, { group: group.id, title: "Pause this" });
-    const archived = await archiveTask(context, task.metadata.id, task.contentHash);
-    expect(archived.path).toMatch(/^todo\/_archived\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-task-/);
-    expect(archived.metadata.status).toBe("planned");
-    expect(archived.metadata.extra?.archived_from).toBe("todo/partial-work/001-pause-this.md");
+    const started = await updateTask(context, task.metadata.id, { status: "in-progress" });
+    const archived = await archiveTask(context, task.metadata.id, started.task.contentHash);
+    expect(archived.path).toBe(task.path);
+    expect(archived.metadata.status).toBe("archived");
     const restored = await restoreTask(context, task.metadata.id, archived.contentHash);
     expect(restored.path).toBe(task.path);
-    expect(restored.metadata.status).toBe("planned");
+    expect(restored.metadata.status).toBe("in-progress");
     expect(restored.metadata.archived_at).toBeUndefined();
+  });
+
+  test("allows changing a task status from inside an archived group and restores its folder", async () => {
+    const { workspace } = await project();
+    const context = { root: workspace };
+    const group = await createTaskGroup(context, "Status from archive");
+    const task = await createTask(context, { group: group.id, title: "Return to planned" });
+    await updateTask(context, task.metadata.id, { status: "completed" });
+    await archiveTaskGroup(context, group.id);
+    const archivedTask = [...(await buildWorkspaceIndex(context)).documents.values()].find(
+      (document) => document.metadata.id === task.metadata.id,
+    );
+    if (!archivedTask) throw new Error("Archived task was not found");
+
+    const reopened = await updateTask(
+      context,
+      task.metadata.id,
+      { status: "planned" },
+      archivedTask.contentHash,
+    );
+    expect(reopened.task.metadata.status).toBe("planned");
+    expect(reopened.task.path).toMatch(/^todo\/work\/W\d{2}\/status-from-archive--/);
   });
 
   test("searches document bodies, detects references, and protects explicit reads", async () => {

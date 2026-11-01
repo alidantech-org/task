@@ -51,6 +51,7 @@ type ContextualNavigationProps = {
   groups: WorkspaceGroup[];
   resizeSidebar(event: PointerEvent<HTMLDivElement>): void;
   resizeSidebarByKeyboard(event: KeyboardEvent<HTMLDivElement>): void;
+  embedded?: boolean;
 };
 const operations = [
   { label: "Agent prompts", icon: BookOpen },
@@ -87,51 +88,54 @@ export function ContextualNavigation({
   groups,
   resizeSidebar,
   resizeSidebarByKeyboard,
+  embedded = false,
 }: ContextualNavigationProps) {
   return (
     <aside
       data-slot="contextual-sidebar"
       data-compact={sidebarCompact}
       aria-label={`${section} navigation`}
-      className={`relative flex h-full min-h-0 shrink-0 flex-col border-r border-border/60 ${sidebarCompact ? "w-14 bg-background px-1.5" : "bg-card/20 px-3"} transition-[width]`}
+      className={`relative flex h-full min-h-0 shrink-0 flex-col ${embedded ? "w-full border-0 bg-transparent px-0" : `border-r border-border/60 ${sidebarCompact ? "w-14 bg-background px-1.5" : "bg-card/20 px-3"}`} transition-[width]`}
       style={{
-        ...(sidebarVisible && !sidebarCompact ? { width: sidebarWidth } : {}),
+        ...(!embedded && sidebarVisible && !sidebarCompact ? { width: sidebarWidth } : {}),
       }}
     >
       {sidebarVisible && (
         <>
-          <div
-            className={`flex h-12 shrink-0 items-center border-b border-border/50 ${sidebarCompact ? "justify-center" : "justify-between px-1"}`}
-          >
-            {sidebarCompact ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label="Expand sidebar"
-                title="Expand sidebar"
-                onClick={() => setSidebarCompact(false)}
-              >
-                <PanelLeftOpen className="size-4" />
-              </Button>
-            ) : (
-              <span className="truncate text-xs font-semibold">
-                {section === "Tasks" && taskFilter ? statusNames[taskFilter] : section}
-              </span>
-            )}
-            {!sidebarCompact && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label="Hide sidebar"
-                title="Hide sidebar"
-                onClick={() => setSidebarVisible(false)}
-              >
-                <PanelLeftClose className="size-4" />
-              </Button>
-            )}
-          </div>
+          {!embedded && (
+            <div
+              className={`flex h-12 shrink-0 items-center border-b border-border/50 ${sidebarCompact ? "justify-center" : "justify-between px-1"}`}
+            >
+              {sidebarCompact ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Expand sidebar"
+                  title="Expand sidebar"
+                  onClick={() => setSidebarCompact(false)}
+                >
+                  <PanelLeftOpen className="size-4" />
+                </Button>
+              ) : (
+                <span className="truncate text-xs font-semibold">
+                  {section === "Tasks" && taskFilter ? statusNames[taskFilter] : section}
+                </span>
+              )}
+              {!sidebarCompact && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Hide sidebar"
+                  title="Hide sidebar"
+                  onClick={() => setSidebarVisible(false)}
+                >
+                  <PanelLeftClose className="size-4" />
+                </Button>
+              )}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3">
             {section === "Tasks" && (
               <nav aria-label="Task filters" className="space-y-1">
@@ -343,23 +347,25 @@ export function ContextualNavigation({
               ))}
             </section>
           </div>
-          {/* biome-ignore lint/a11y/useSemanticElements: A focusable vertical resize handle cannot be represented by an hr. */}
-          <div
-            role="separator"
-            aria-label="Resize contextual sidebar"
-            aria-orientation="vertical"
-            aria-valuemin={208}
-            aria-valuemax={360}
-            aria-valuenow={sidebarCompact ? 56 : sidebarWidth}
-            aria-valuetext={sidebarCompact ? "Compact" : `${sidebarWidth} pixels`}
-            tabIndex={0}
-            onPointerDown={resizeSidebar}
-            onPointerMove={resizeSidebar}
-            onPointerUp={resizeSidebar}
-            onPointerCancel={resizeSidebar}
-            onKeyDown={resizeSidebarByKeyboard}
-            className={`group absolute inset-y-0 -right-1 z-20 hidden h-full w-2 cursor-col-resize touch-none border-0 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:bg-transparent after:content-[''] md:block ${sidebarCompact ? "" : "hover:after:bg-border focus-visible:after:bg-ring"}`}
-          />
+          {!embedded && (
+            /* biome-ignore lint/a11y/useSemanticElements: A focusable vertical resize handle cannot be represented by an hr. */
+            <div
+              role="separator"
+              aria-label="Resize contextual sidebar"
+              aria-orientation="vertical"
+              aria-valuemin={208}
+              aria-valuemax={360}
+              aria-valuenow={sidebarCompact ? 56 : sidebarWidth}
+              aria-valuetext={sidebarCompact ? "Compact" : `${sidebarWidth} pixels`}
+              tabIndex={0}
+              onPointerDown={resizeSidebar}
+              onPointerMove={resizeSidebar}
+              onPointerUp={resizeSidebar}
+              onPointerCancel={resizeSidebar}
+              onKeyDown={resizeSidebarByKeyboard}
+              className={`group absolute inset-y-0 -right-1 z-20 hidden h-full w-2 cursor-col-resize touch-none border-0 bg-transparent outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:bg-transparent after:content-[''] md:block ${sidebarCompact ? "" : "hover:after:bg-border focus-visible:after:bg-ring"}`}
+            />
+          )}
         </>
       )}
     </aside>

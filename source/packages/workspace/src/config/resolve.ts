@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { link, lstat, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { WorkspaceError } from "@task/workspace/errors";
 import type { ResolvedWorkspace, WorkspaceConfig } from "@task/workspace/indexing/types";
@@ -36,10 +36,10 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
     throw new WorkspaceError("invalid_workspace_config", "task.yaml must contain a YAML mapping");
   }
   const record = parsed as Record<string, unknown>;
-  if (Object.keys(record).some((key) => key !== "workspace")) {
+  if (Object.keys(record).some((key) => key !== "workspace" && key !== "organization")) {
     throw new WorkspaceError(
       "invalid_workspace_config",
-      "task.yaml currently supports only the workspace field",
+      "task.yaml supports workspace and organization fields",
     );
   }
   if (record.workspace !== undefined && typeof record.workspace !== "string") {
@@ -62,7 +62,57 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
       "task.yaml workspace must stay inside the project root",
     );
   }
-  return { workspace };
+  let organization: WorkspaceConfig["organization"];
+  if (record.organization !== undefined) {
+    if (
+      typeof record.organization !== "object" ||
+      record.organization === null ||
+      Array.isArray(record.organization)
+    ) {
+      throw new WorkspaceError(
+        "invalid_workspace_config",
+        "task.yaml organization must be a mapping",
+      );
+    }
+    const options = record.organization as Record<string, unknown>;
+    if (Object.keys(options).some((key) => key !== "weekStart" && key !== "autoArchiveAfterDays")) {
+      throw new WorkspaceError(
+        "invalid_workspace_config",
+        "Unsupported organization setting in task.yaml",
+      );
+    }
+    if (
+      options.weekStart !== undefined &&
+      (!Number.isInteger(options.weekStart) ||
+        Number(options.weekStart) < 1 ||
+        Number(options.weekStart) > 7)
+    ) {
+      throw new WorkspaceError(
+        "invalid_workspace_config",
+        "organization.weekStart must be an integer from 1 (Monday) to 7 (Sunday)",
+      );
+    }
+    if (
+      options.autoArchiveAfterDays !== undefined &&
+      options.autoArchiveAfterDays !== null &&
+      (!Number.isInteger(options.autoArchiveAfterDays) || Number(options.autoArchiveAfterDays) < 0)
+    ) {
+      throw new WorkspaceError(
+        "invalid_workspace_config",
+        "organization.autoArchiveAfterDays must be a non-negative integer or null",
+      );
+    }
+    organization = {
+      ...(options.weekStart === undefined ? {} : { weekStart: Number(options.weekStart) }),
+      ...(options.autoArchiveAfterDays === undefined
+        ? {}
+        : {
+            autoArchiveAfterDays:
+              options.autoArchiveAfterDays === null ? null : Number(options.autoArchiveAfterDays),
+          }),
+    };
+  }
+  return { workspace, ...(organization ? { organization } : {}) };
 }
 
 async function result(
@@ -102,10 +152,24 @@ export async function resolveWorkspace(
         `Workspace path is not a directory: ${direct}`,
       );
     const projectRoot = dirname(root);
+    let organization: WorkspaceConfig["organization"];
+    try {
+      const configStat = await lstat(resolve(projectRoot, "task.yaml"));
+      if (!configStat.isFile()) {
+        throw new WorkspaceError("invalid_workspace_config", "task.yaml must be a regular file");
+      }
+      organization = (await readConfig(projectRoot)).organization;
+    } catch (error) {
+      if (error instanceof WorkspaceError) throw error;
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
     return {
       root,
       projectRoot,
-      config: { workspace: relative(projectRoot, root) || "." },
+      config: {
+        workspace: relative(projectRoot, root) || ".",
+        ...(organization ? { organization } : {}),
+      },
       source: options.workspaceOverride ? "argument" : "environment",
     };
   }
@@ -146,4 +210,108 @@ export async function resolveWorkspace(
     "workspace_not_found",
     "No Task workspace found. Run from a project with task.yaml or tasks/, or pass --workspace <path>.",
   );
+}
+
+export async function updateWorkspaceOrganization(
+  selected: ResolvedWorkspace,
+  organization: NonNullable<WorkspaceConfig["organization"]>,
+): Promise<ResolvedWorkspace> {
+  if (
+    organization.weekStart !== undefined &&
+    (!Number.isInteger(organization.weekStart) ||
+      organization.weekStart < 1 ||
+      organization.weekStart > 7)
+  ) {
+    throw new WorkspaceError("invalid_input", "Week start must be an integer from 1 to 7");
+  }
+  if (
+    organization.autoArchiveAfterDays !== undefined &&
+    organization.autoArchiveAfterDays !== null &&
+    (!Number.isInteger(organization.autoArchiveAfterDays) || organization.autoArchiveAfterDays < 0)
+  ) {
+    throw new WorkspaceError(
+      "invalid_input",
+      "Auto-archive delay must be a non-negative integer or null",
+    );
+  }
+  const configPath = resolve(selected.projectRoot, "task.yaml");
+  let exists = false;
+  try {
+    const fileStat = await lstat(configPath);
+    if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+      throw new WorkspaceError("path_not_safe", "task.yaml must be a regular file");
+    }
+    exists = true;
+    const parsedValue = Bun.YAML.parse(await readFile(configPath, "utf8"));
+    if (typeof parsedValue !== "object" || parsedValue === null || Array.isArray(parsedValue)) {
+      throw new WorkspaceError("invalid_workspace_config", "task.yaml must contain a YAML mapping");
+    }
+    const parsed = parsedValue as Record<string, unknown>;
+    const currentOrganization =
+      typeof parsed.organization === "object" &&
+      parsed.organization !== null &&
+      !Array.isArray(parsed.organization)
+        ? (parsed.organization as Record<string, unknown>)
+        : {};
+    const selectedOrganization = selected.config.organization ?? {};
+    if (
+      Object.keys(parsed).some((key) => key !== "workspace" && key !== "organization") ||
+      parsed.workspace !== selected.config.workspace ||
+      currentOrganization.weekStart !== selectedOrganization.weekStart ||
+      currentOrganization.autoArchiveAfterDays !== selectedOrganization.autoArchiveAfterDays
+    ) {
+      throw new WorkspaceError(
+        "conflict",
+        "task.yaml changed while saving workspace organization settings",
+      );
+    }
+  } catch (error) {
+    if (error instanceof WorkspaceError) throw error;
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    if (selected.source === "task-yaml") {
+      throw new WorkspaceError("conflict", "task.yaml was removed while saving workspace settings");
+    }
+  }
+  const weekStart = organization.weekStart ?? selected.config.organization?.weekStart;
+  const autoArchiveAfterDays =
+    organization.autoArchiveAfterDays === undefined
+      ? selected.config.organization?.autoArchiveAfterDays
+      : organization.autoArchiveAfterDays;
+  const organizationSettings = {
+    ...(weekStart === undefined ? {} : { weekStart }),
+    ...(autoArchiveAfterDays === undefined ? {} : { autoArchiveAfterDays }),
+  };
+  const temporary = `${configPath}.${crypto.randomUUID()}.tmp`;
+  const lines = [
+    `workspace: ${JSON.stringify(selected.config.workspace)}`,
+    "organization:",
+    ...(organizationSettings.weekStart === undefined
+      ? []
+      : [`  weekStart: ${organizationSettings.weekStart}`]),
+    ...(organizationSettings.autoArchiveAfterDays === undefined
+      ? []
+      : [
+          `  autoArchiveAfterDays: ${organizationSettings.autoArchiveAfterDays === null ? "null" : organizationSettings.autoArchiveAfterDays}`,
+        ]),
+  ];
+  await writeFile(temporary, `${lines.join("\n")}\n`, { encoding: "utf8", flag: "wx" });
+  if (exists) {
+    await rename(temporary, configPath).catch(async (error: unknown) => {
+      await rm(temporary, { force: true });
+      throw error;
+    });
+  } else {
+    await link(temporary, configPath).catch(async (error: unknown) => {
+      await rm(temporary, { force: true });
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        throw new WorkspaceError(
+          "conflict",
+          "task.yaml was created while saving workspace settings",
+        );
+      }
+      throw error;
+    });
+    await rm(temporary, { force: true });
+  }
+  return { ...selected, config: { ...selected.config, organization: organizationSettings } };
 }

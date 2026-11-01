@@ -1,8 +1,7 @@
+import { HealthPage as HealthContent } from "@/components/pages/health-page";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Task — Workspace health" };
-export const dynamic = "force-dynamic";
-
 export default function HealthPage() {
-  return null;
+  return <HealthContent />;
 }

@@ -1,9 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { WorkspacePage } from "@/components/workspace-page";
+mock.module("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({
+    back: () => undefined,
+    forward: () => undefined,
+    push: () => undefined,
+    replace: () => undefined,
+    refresh: () => undefined,
+    prefetch: async () => undefined,
+  }),
+}));
+
+const { WorkspacePage } = await import("@/components/workspace-page");
 import { closeLocalWorkspace, configureWorkspace, createLocalServer } from "@/server";
 
 let server: ReturnType<typeof createLocalServer> | undefined;

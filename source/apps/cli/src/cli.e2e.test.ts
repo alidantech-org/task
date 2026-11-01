@@ -52,13 +52,13 @@ describe("workspace-connected CLI", () => {
     const completed = await cli(workspace, "update", task.id, "--status", "completed", "--json");
     expect(completed.exitCode).toBe(0);
     const completion = JSON.parse(completed.stdout.toString());
-    expect(completion.completedGroup.path).toMatch(/^todo\/_completed\//);
+    expect(completion.status).toBe("completed");
     const archived = await cli(workspace, "archive", group.id, "--json");
     expect(JSON.parse(archived.stdout.toString()).path).toMatch(/^todo\/_archived\//);
     const archivedList = await cli(workspace, "list", "--archived", "--json");
     expect(JSON.parse(archivedList.stdout.toString())).toHaveLength(1);
     const restored = await cli(workspace, "restore", group.id, "--json");
-    expect(JSON.parse(restored.stdout.toString()).path).toMatch(/^todo\/_completed\//);
+    expect(JSON.parse(restored.stdout.toString()).path).toMatch(/^todo\/work\//);
     const missing = await cli(workspace, "show", "missing-id", "--json");
     expect(missing.exitCode).toBe(1);
     expect(missing.stdout.toString()).toBe("");

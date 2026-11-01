@@ -5,6 +5,7 @@ export const taskStatuses: readonly TaskStatus[] = [
   "in-progress",
   "blocked",
   "completed",
+  "archived",
 ];
 export const taskPriorities: readonly TaskPriority[] = ["low", "medium", "high"];
 

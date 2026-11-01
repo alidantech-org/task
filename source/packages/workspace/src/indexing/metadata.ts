@@ -5,7 +5,13 @@ import type {
   TaskStatus,
 } from "@task/workspace/indexing/types";
 
-const taskStatuses = new Set<TaskStatus>(["planned", "in-progress", "blocked", "completed"]);
+const taskStatuses = new Set<TaskStatus>([
+  "planned",
+  "in-progress",
+  "blocked",
+  "completed",
+  "archived",
+]);
 const taskPriorities = new Set<TaskPriority>(["low", "medium", "high"]);
 
 export function hashContent(content: string): string {
@@ -73,7 +79,7 @@ export function parseFrontmatter(content: string): {
   }
   if (type === "task") {
     if (values.status !== undefined && !taskStatuses.has(values.status as TaskStatus)) {
-      throw new Error("Task status must be planned, in-progress, blocked, or completed");
+      throw new Error("Task status must be planned, in-progress, blocked, completed, or archived");
     }
     if (values.priority !== undefined && !taskPriorities.has(values.priority as TaskPriority)) {
       throw new Error("Task priority must be low, medium, or high");

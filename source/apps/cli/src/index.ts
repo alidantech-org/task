@@ -20,6 +20,7 @@ import {
   inspectProject,
   listDocuments,
   listTaskGroups,
+  migrateLegacyGroups,
   listTasks,
   listWorkspaceTree,
   readWorkspaceIndex,
@@ -112,6 +113,7 @@ function printHelp(): void {
     "  info | status | stats  Workspace information and counts",
     "  tree                   Show Markdown workspace paths",
     "  group create|list      Manage task groups",
+    "  migrate                Move legacy flat task groups into week folders",
     "  list [filters]         List active tasks (use --archived for archived)",
     "  show <id|path>         Show a task or document",
     "  search <query>         Search metadata and Markdown text",
@@ -373,6 +375,7 @@ async function main(): Promise<void> {
   });
   const context = {
     root: selected.root,
+    config: selected.config,
     projectRoot:
       resolve(selected.root) === resolve(process.cwd()) ? selected.root : selected.projectRoot,
   };
@@ -557,6 +560,22 @@ async function main(): Promise<void> {
     const tree = await listWorkspaceTree(context);
     if (json) output(tree);
     else for (const path of tree) line(path);
+    return;
+  }
+
+  if (command === "migrate") {
+    const groups = await migrateLegacyGroups(context);
+    if (json) output({ migrated: groups.length, groups });
+    else
+      line(
+        renderMessage(
+          "success",
+          `Organized ${groups.length} legacy group(s).`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
     return;
   }
 
@@ -796,7 +815,7 @@ async function main(): Promise<void> {
       dependsOn,
       extra,
     });
-    if (json) output({ ...record(result.task), completedGroup: result.completedGroup });
+    if (json) output(record(result.task));
     else {
       line(
         renderMessage(
@@ -806,15 +825,6 @@ async function main(): Promise<void> {
           stdoutSymbols,
         ),
       );
-      if (result.completedGroup)
-        line(
-          renderMessage(
-            "success",
-            `Moved completed group · ${result.completedGroup.path}`,
-            stdoutStyle,
-            stdoutSymbols,
-          ),
-        );
     }
     return;
   }

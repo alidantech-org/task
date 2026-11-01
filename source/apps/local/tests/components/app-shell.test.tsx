@@ -1,26 +1,36 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { App } from "@/components/layout/app-layout";
+
+mock.module("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({
+    back: () => undefined,
+    forward: () => undefined,
+    push: () => undefined,
+    replace: () => undefined,
+    refresh: () => undefined,
+    prefetch: async () => undefined,
+  }),
+}));
+
+const { App } = await import("@/components/layout/app-layout");
+const { OverviewPage } = await import("@/components/pages/overview-page");
 
 describe("local dashboard", () => {
-  test("renders the workspace shell, global search and simple toolbar", () => {
-    const markup = renderToStaticMarkup(<App runtimeStatus="connected" workspace={null} />);
-    expect(markup).toContain("Workspace overview");
-    expect(markup).toContain("Search workspace");
-    expect(markup).not.toContain("Connected");
-    expect(markup).toContain('aria-label="Tasks"');
+  test("renders one persistent shell around route content", () => {
+    const markup = renderToStaticMarkup(
+      <App runtimeStatus="connected" workspace={null}>
+        <div>Route content</div>
+      </App>,
+    );
+    expect(markup).toContain("Search or jump to…");
+    expect(markup).toContain("Route content");
+    expect(markup).toContain("Live");
     expect(markup).toContain('data-slot="task-app-shell"');
     expect(markup).toContain('data-slot="main-toolbar"');
     expect(markup).toContain('aria-label="Workspace navigation"');
-    expect(markup).toContain('aria-label="Hide sidebar"');
-    expect(markup).toContain('aria-haspopup="menu"');
-    expect(markup).toContain('data-slot="project-switcher"');
-    expect(markup).toContain('src="/task-symbol.svg"');
-    expect(markup).toContain('data-slot="global-navigation"');
-    expect(markup).toContain('data-slot="contextual-sidebar"');
-    expect(markup).toContain('aria-label="Create task"');
-    expect(markup).not.toContain(">New task</button>");
-    expect(markup).toContain("h-svh");
+    expect(markup.match(/data-slot="global-navigation"/g)).toHaveLength(1);
+    expect(markup).not.toContain('data-slot="contextual-sidebar"');
   });
 
   test("shows when the local runtime is unavailable", () => {
@@ -59,15 +69,15 @@ describe("local dashboard", () => {
       />,
     );
     expect(markup).toContain("Selected project");
-    expect(markup).toContain("Tasks completed");
-    expect(markup).toContain("Upcoming tasks");
-    expect(markup).toContain("Workspace health");
+    expect(markup).toContain("Search or jump to…");
+    expect(markup).toContain("Overview");
   });
 
   test("shows archived tasks in completion history without adding them to active task totals", () => {
     const markup = renderToStaticMarkup(
       <App
         runtimeStatus="connected"
+        initialPath="/"
         workspace={{
           projectName: "Project",
           projectRoot: "/project",
@@ -114,12 +124,13 @@ describe("local dashboard", () => {
             recent: [],
           },
         }}
-      />,
+      >
+        <OverviewPage />
+      </App>,
     );
-    expect(markup).toContain("Active");
-    expect(markup).toContain("Recently completed");
-    expect(markup).toContain("Archived");
-    expect(markup).toContain("Archived");
-    expect(markup).toContain("View all");
+    expect(markup).toContain("Where things stand");
+    expect(markup).toContain("Recently finished");
+    expect(markup).not.toContain("Archived</b>");
+    expect(markup).toContain("<b>1</b><small>tasks</small>");
   });
 });

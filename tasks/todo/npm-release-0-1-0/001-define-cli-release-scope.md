@@ -1,5 +1,5 @@
 ---
-{id: TSK-NPM-CLI-SCOPE-010,name: Define the complete CLI release scope,type: task,status: in-progress,priority: high,created_at: 2026-10-31,updated_at: 2026-10-31T03:45:28.757Z,tags: [release,npm,cli],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: in-progress,at: 2026-10-31T03:45:28.757Z}]}}
+{id: TSK-NPM-CLI-SCOPE-010,name: Define the complete CLI release scope,type: task,status: planned,priority: high,created_at: 2026-10-31,updated_at: 2026-11-01T01:05:00.283Z,tags: [release,npm,cli],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: in-progress,at: 2026-10-31T03:45:28.757Z},{from: in-progress,to: planned,at: 2026-10-31T21:01:36.459Z},{from: planned,to: in-progress,at: 2026-10-31T21:06:30.035Z},{from: in-progress,to: planned,at: 2026-10-31T21:06:49.290Z},{from: planned,to: in-progress,at: 2026-10-31T21:14:01.837Z},{from: in-progress,to: planned,at: 2026-11-01T01:05:00.283Z}]},due_at: 2026-11-07}
 ---
 
 # Define the complete CLI release scope

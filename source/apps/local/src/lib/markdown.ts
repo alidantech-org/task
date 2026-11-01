@@ -19,6 +19,14 @@ export function listDocumentFolders(paths: readonly string[]): DocumentFolder[] 
 
 const taskCheckboxLine = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s+.*)$/;
 
+export function markdownChecklistProgress(body: string): { completed: number; total: number } {
+  const lines = body.match(/^\s*(?:[-+*]|\d+[.)])\s+\[[ xX]\]\s+.*$/gm) ?? [];
+  return {
+    completed: lines.filter((line) => /\[[xX]\]/.test(line)).length,
+    total: lines.length,
+  };
+}
+
 export function toggleMarkdownCheckbox(
   body: string,
   targetIndex: number,
@@ -36,4 +44,16 @@ export function toggleMarkdownCheckbox(
       return `${match[1]}${checked ? "x" : " "}${match[3]}`;
     })
     .join("\n");
+}
+
+export function appendTimestampedMarkdownComment(
+  body: string,
+  comment: string,
+  at = new Date().toISOString(),
+): string {
+  const text = comment.trim();
+  if (!text) return body;
+  const hasComments = /(?:^|\n)## Comments\s*(?:\n|$)/.test(body);
+  const content = hasComments ? body : `${body.trimEnd()}\n\n## Comments\n`;
+  return `${content.trimEnd()}\n\n- **${at}** — ${text}\n`;
 }

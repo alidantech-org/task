@@ -129,6 +129,47 @@ function taskBody(title: string, description?: string): string {
   return `# ${title}\n${description?.trim() ? `\n${description.trim()}\n` : "\n"}`;
 }
 
+export function getTaskGroupWeekPath(
+  date: Date,
+  weekStart = 1,
+  currentYear = new Date().getUTCFullYear(),
+): string {
+  if (!Number.isInteger(weekStart) || weekStart < 1 || weekStart > 7) {
+    throw new WorkspaceError("invalid_input", "Week start must be an integer from 1 to 7");
+  }
+  const weekday = (date.getUTCDay() + 6) % 7;
+  const startOffset = (weekday - (weekStart - 1) + 7) % 7;
+  const start = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - startOffset),
+  );
+  const anchor = new Date(start);
+  anchor.setUTCDate(anchor.getUTCDate() + ((4 - weekStart + 7) % 7));
+  const year = anchor.getUTCFullYear();
+  const first = new Date(Date.UTC(year, 0, 1));
+  first.setUTCDate(first.getUTCDate() + ((4 - first.getUTCDay() + 7) % 7));
+  const firstOffset = (first.getUTCDay() + 6 - (weekStart - 1) + 7) % 7;
+  first.setUTCDate(first.getUTCDate() - firstOffset);
+  const number = Math.floor((start.getTime() - first.getTime()) / 604_800_000) + 1;
+  const prefix = year === currentYear ? "" : `${year}/`;
+  return `todo/work/${prefix}W${String(number).padStart(2, "0")}`;
+}
+
+export async function migrateLegacyGroups(context: WorkspaceContext): Promise<TaskGroup[]> {
+  const index = await buildWorkspaceIndex(context);
+  const moved: TaskGroup[] = [];
+  for (const group of await listTaskGroups(context)) {
+    if (!/^todo\/[^/]+$/.test(group.path)) continue;
+    const plan = index.documents.get(`${group.path}/plan.md`);
+    const created = plan?.metadata.extra?.created_at;
+    const createdAt =
+      typeof created === "string" ? new Date(created) : new Date(plan?.modifiedAt ?? Date.now());
+    const destination = `${getTaskGroupWeekPath(createdAt, context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
+    await moveDirectory(context, group.path, destination);
+    moved.push({ ...group, path: destination });
+  }
+  return moved;
+}
+
 async function validateDependencies(
   context: WorkspaceContext,
   currentId: string | undefined,
@@ -172,7 +213,9 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
   const cleanName = name.trim();
   if (!cleanName) throw new WorkspaceError("invalid_input", "Group name is required");
   const slug = slugify(cleanName);
-  const relativePath = `todo/${slug}`;
+  const groupId = id("GRP");
+  const weekPath = getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1);
+  const relativePath = `${weekPath}/${slug}--${groupId.slice(-6).toLowerCase()}`;
   const groupPath = await resolveSafeWorkspacePath(context.root, relativePath);
   await mkdir(dirname(groupPath), { recursive: true });
   try {
@@ -182,11 +225,11 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
       throw new WorkspaceError("already_exists", `Task group already exists: ${slug}`);
     throw error;
   }
-  const groupId = id("GRP");
   const plan = {
     id: groupId,
     name: cleanName,
     type: "documentation",
+    extra: { created_at: new Date().toISOString() },
   };
   try {
     await createFile(
@@ -207,6 +250,8 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
     archived: false,
     total: 0,
     completed: 0,
+    archivedTasks: 0,
+    resolved: 0,
   };
 }
 
@@ -294,24 +339,6 @@ export async function updateTask(
   let task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
     throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
-  if (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_archive/"))
-    throw new WorkspaceError(
-      "invalid_input",
-      "Restore the archived task or group before updating it",
-    );
-  if (
-    task.path.startsWith("todo/_completed/") &&
-    input.status !== undefined &&
-    input.status !== "completed"
-  ) {
-    const group = (await listTaskGroups(context)).find(
-      (candidate) => candidate.path === dirname(task.path) && candidate.finished,
-    );
-    if (!group) throw new WorkspaceError("not_found", "Completed task group was not found");
-    await reopenCompletedGroup(context, group.id);
-    index = await buildWorkspaceIndex(context);
-    task = findDocument(index, identifier);
-  }
   if (expectedHash !== undefined && task.contentHash !== expectedHash) {
     throw new WorkspaceError("conflict", `Task changed since it was loaded: ${task.path}`);
   }
@@ -330,7 +357,8 @@ export async function updateTask(
   if (input.assignee !== undefined) values.assignee = input.assignee;
   if (input.project !== undefined) values.project = input.project;
   if (input.startAt !== undefined) values.start_at = input.startAt;
-  if (input.dueAt !== undefined) values.due_at = input.dueAt;
+  if (input.dueAt === null) delete values.due_at;
+  else if (input.dueAt !== undefined) values.due_at = input.dueAt;
   if (input.tags !== undefined) values.tags = [...input.tags];
   if (input.dependsOn !== undefined) {
     await validateDependencies(context, task.metadata.id, input.dependsOn);
@@ -369,35 +397,63 @@ export async function updateTask(
     );
   }
   await replaceFile(context, task.path, next, task.contentHash);
-  const updatedIndex = await buildWorkspaceIndex(context);
+  let updatedIndex = await buildWorkspaceIndex(context);
   let updatedTask = findDocument(updatedIndex, task.metadata.id);
-  let completedGroup: TaskGroup | undefined;
-  if (updatedTask.metadata.status === "completed") {
-    const groupPath = dirname(updatedTask.path);
+  if (
+    (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_completed/")) &&
+    input.status !== undefined &&
+    !["completed", "archived"].includes(input.status)
+  ) {
     const group = (await listTaskGroups(context)).find(
-      (candidate) => candidate.path === groupPath && !candidate.archived && !candidate.finished,
+      (candidate) => candidate.path === dirname(task.path),
     );
-    const groupTasks = [...updatedIndex.documents.values()].filter(
-      (document) => document.metadata.type === "task" && dirname(document.path) === groupPath,
-    );
-    if (
-      group &&
-      groupTasks.length > 0 &&
-      groupTasks.every((record) => record.metadata.status === "completed")
-    ) {
-      try {
-        completedGroup = await completeGroup(context, group.id);
-        updatedTask = findDocument(await buildWorkspaceIndex(context), task.metadata.id);
-      } catch (error) {
-        throw new WorkspaceError(
-          "filesystem_error",
-          `Task status was saved, but its group could not move to completed. Retry the update after checking 'task validate'.`,
-          { cause: error },
+    if (group?.archived) {
+      await restoreGroup(context, group.id);
+      updatedIndex = await buildWorkspaceIndex(context);
+      updatedTask = findDocument(updatedIndex, task.metadata.id);
+    } else if (group && task.path.startsWith("todo/_completed/")) {
+      const destination = `${getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
+      await moveDirectory(context, group.path, destination);
+      updatedIndex = await buildWorkspaceIndex(context);
+      updatedTask = findDocument(updatedIndex, task.metadata.id);
+    } else if (task.path.startsWith("todo/_archived/")) {
+      const originalPath = task.metadata.extra?.archived_from;
+      if (typeof originalPath === "string" && originalPath.startsWith("todo/")) {
+        const source = await resolveSafeWorkspacePath(context.root, task.path);
+        const destination = await resolveSafeWorkspacePath(context.root, originalPath);
+        await mkdir(dirname(destination), { recursive: true });
+        await resolveSafeWorkspacePath(context.root, originalPath);
+        try {
+          await lstat(destination);
+          throw new WorkspaceError(
+            "already_exists",
+            `Restore destination already exists: ${originalPath}`,
+          );
+        } catch (error) {
+          if (error instanceof WorkspaceError) throw error;
+          if (errorCode(error) !== "ENOENT") throw error;
+        }
+        const currentText = await Bun.file(source).text();
+        const restoredMetadata = parseFrontmatter(currentText);
+        delete restoredMetadata.values.archived_at;
+        const extra = restoredMetadata.values.extra as Record<string, unknown> | undefined;
+        if (extra) {
+          delete extra.archived_from;
+          if (Object.keys(extra).length === 0) delete restoredMetadata.values.extra;
+        }
+        await replaceFile(
+          context,
+          task.path,
+          serializeMarkdown(restoredMetadata.values, restoredMetadata.body),
+          updatedTask.contentHash,
         );
+        await rename(source, destination);
+        updatedIndex = await buildWorkspaceIndex(context);
+        updatedTask = findDocument(updatedIndex, task.metadata.id);
       }
     }
   }
-  return { task: updatedTask, ...(completedGroup ? { completedGroup } : {}) };
+  return { task: updatedTask };
 }
 
 export async function replaceDocumentBody(
@@ -439,15 +495,23 @@ export async function archiveGroup(
   identifier: string,
   requireComplete = false,
 ): Promise<TaskGroup> {
+  void requireComplete;
   const group = await findGroup(context, identifier);
   if (group.archived) throw new WorkspaceError("invalid_input", "Task group is already archived");
-  if (group.total === 0 || (requireComplete && group.completed !== group.total)) {
-    throw new WorkspaceError("validation_failed", "Only non-empty groups can be archived");
+  if (group.total === 0 || group.resolved !== group.total) {
+    throw new WorkspaceError(
+      "validation_failed",
+      "Only groups with completed or archived tasks can be archived",
+    );
   }
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
   const archivedAt = now.toISOString();
-  const destination = datedGroupPath("_archived", day, group.slug);
+  const destination = datedGroupPath(
+    "_archived",
+    day,
+    `${group.slug}--${group.id.slice(-6).toLowerCase()}`,
+  );
   const index = await buildWorkspaceIndex(context);
   for (const task of index.documents.values()) {
     if (task.metadata.type !== "task" || !task.path.startsWith(`${group.path}/`)) continue;
@@ -492,28 +556,7 @@ export async function completeGroup(
   context: WorkspaceContext,
   identifier: string,
 ): Promise<TaskGroup> {
-  const group = await findGroup(context, identifier);
-  if (group.archived || group.finished)
-    throw new WorkspaceError("invalid_input", "Only active groups can be completed");
-  if (group.total === 0 || group.completed !== group.total) {
-    throw new WorkspaceError("validation_failed", "Every task must be completed first");
-  }
-  const day = new Date().toISOString().slice(0, 10);
-  const destination = datedGroupPath("_completed", day, group.slug);
-  await moveDirectory(context, group.path, destination);
-  return { ...group, path: destination, finished: true };
-}
-
-async function reopenCompletedGroup(
-  context: WorkspaceContext,
-  identifier: string,
-): Promise<TaskGroup> {
-  const group = await findGroup(context, identifier);
-  if (!group.finished)
-    throw new WorkspaceError("invalid_input", "Task group is not in completed storage");
-  const destination = `todo/${group.slug}`;
-  await moveDirectory(context, group.path, destination);
-  return { ...group, path: destination, finished: false };
+  return archiveGroup(context, identifier, true);
 }
 
 export async function restoreGroup(
@@ -526,12 +569,7 @@ export async function restoreGroup(
   const tasks = [...index.documents.values()].filter(
     (task) => task.metadata.type === "task" && task.path.startsWith(`${group.path}/`),
   );
-  const finished = tasks.length > 0 && tasks.every((task) => task.metadata.status === "completed");
-  const archivedDay = basename(group.path).match(/^(\d{4}-\d{2}-\d{2})-/)?.[1];
-  const restoreDay = archivedDay ?? new Date().toISOString().slice(0, 10);
-  const destination = finished
-    ? datedGroupPath("_completed", restoreDay, group.slug)
-    : `todo/${group.slug}`;
+  const destination = `${getTaskGroupWeekPath(new Date(), context.config?.organization?.weekStart ?? 1)}/${group.slug}--${group.id.slice(-6).toLowerCase()}`;
   const sourcePath = await resolveSafeWorkspacePath(context.root, group.path);
   const destinationPath = await resolveSafeWorkspacePath(context.root, destination);
   await mkdir(dirname(destinationPath), { recursive: true });
@@ -556,7 +594,7 @@ export async function restoreGroup(
     );
   }
   await rename(sourcePath, destinationPath);
-  return { ...group, path: destination, archived: false, finished };
+  return { ...group, path: destination, archived: false, finished: group.resolved === group.total };
 }
 
 export async function archiveTaskGroup(
@@ -566,43 +604,67 @@ export async function archiveTaskGroup(
   return archiveGroup(context, identifier, false);
 }
 
+export async function autoArchiveResolvedGroups(
+  context: WorkspaceContext,
+  afterDays: number | null | undefined,
+): Promise<TaskGroup[]> {
+  const delay = afterDays === null ? null : (afterDays ?? 2);
+  if (delay !== null && (!Number.isInteger(delay) || delay < 0)) {
+    throw new WorkspaceError(
+      "invalid_input",
+      "Auto-archive delay must be a non-negative integer or null",
+    );
+  }
+  const index = await buildWorkspaceIndex(context);
+  const archived: TaskGroup[] = [];
+  const currentYear = new Date().getUTCFullYear();
+  for (const group of await listTaskGroups(context)) {
+    const match = /^todo\/work\/(W\d{2})\/([^/]+)$/.exec(group.path);
+    if (!match) continue;
+    const plan = index.documents.get(`${group.path}/plan.md`);
+    const createdAtValue = plan?.metadata.extra?.created_at;
+    const createdAt =
+      typeof createdAtValue === "string"
+        ? Date.parse(createdAtValue)
+        : (plan?.modifiedAt ?? Number.NaN);
+    const groupYear = Number.isFinite(createdAt)
+      ? new Date(createdAt).getUTCFullYear()
+      : currentYear;
+    if (groupYear >= currentYear) continue;
+    if (group.total > 0 && group.resolved === group.total) {
+      archived.push(await archiveGroup(context, group.id));
+      continue;
+    }
+    const destination = `todo/work/${groupYear}/${match[1]}/${match[2]}`;
+    await moveDirectory(context, group.path, destination);
+  }
+  if (delay === null) return archived;
+  for (const group of await listTaskGroups(context)) {
+    if (group.archived || group.total === 0 || group.resolved !== group.total) continue;
+    const tasks = [...index.documents.values()].filter(
+      (document) => document.metadata.type === "task" && dirname(document.path) === group.path,
+    );
+    const resolutionTimes = tasks.map((task) => {
+      const changes = task.metadata.extra?.status_history ?? [];
+      const resolved = [...changes]
+        .reverse()
+        .find((change) => change.to === "completed" || change.to === "archived");
+      return Date.parse(resolved?.at ?? task.metadata.updated_at ?? task.metadata.created_at ?? "");
+    });
+    if (resolutionTimes.some((time) => !Number.isFinite(time))) continue;
+    const lastResolved = Math.max(...resolutionTimes);
+    if (Date.now() - lastResolved < delay * 86_400_000) continue;
+    archived.push(await archiveGroup(context, group.id));
+  }
+  return archived;
+}
+
 export async function archiveTask(
   context: WorkspaceContext,
   identifier: string,
   expectedHash?: string,
 ): Promise<DocumentSummary> {
-  const task = findDocument(await buildWorkspaceIndex(context), identifier);
-  if (task.metadata.type !== "task")
-    throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
-  if (task.path.startsWith("todo/_archived/") || task.path.startsWith("todo/_archive/"))
-    throw new WorkspaceError("invalid_input", "Task is already archived");
-  if (expectedHash !== undefined && task.contentHash !== expectedHash)
-    throw new WorkspaceError("conflict", `Task changed since it was loaded: ${task.path}`);
-  const day = new Date().toISOString().slice(0, 10);
-  const destination = `${datedGroupPath("_archived", day, `task-${task.metadata.id.toLowerCase()}`)}/${basename(task.path)}`;
-  const currentPath = await resolveSafeWorkspacePath(context.root, task.path);
-  const content = await Bun.file(currentPath).text();
-  const parsed = parseFrontmatter(content);
-  const existingExtra =
-    typeof parsed.values.extra === "object" &&
-    parsed.values.extra !== null &&
-    !Array.isArray(parsed.values.extra)
-      ? (parsed.values.extra as Record<string, unknown>)
-      : {};
-  parsed.values.extra = { ...existingExtra, archived_from: task.path };
-  parsed.values.archived_at = new Date().toISOString();
-  await replaceFile(
-    context,
-    task.path,
-    serializeMarkdown(parsed.values, parsed.body),
-    task.contentHash,
-  );
-  const updated = findDocument(await buildWorkspaceIndex(context), task.metadata.id);
-  const absoluteDestination = await resolveSafeWorkspacePath(context.root, destination);
-  await mkdir(dirname(absoluteDestination), { recursive: true });
-  await resolveSafeWorkspacePath(context.root, destination);
-  await rename(currentPath, absoluteDestination);
-  return findDocument(await buildWorkspaceIndex(context), updated.metadata.id);
+  return (await updateTask(context, identifier, { status: "archived" }, expectedHash)).task;
 }
 
 export async function restoreTask(
@@ -611,6 +673,24 @@ export async function restoreTask(
   expectedHash?: string,
 ): Promise<DocumentSummary> {
   const task = findDocument(await buildWorkspaceIndex(context), identifier);
+  if (
+    task.metadata.type === "task" &&
+    task.metadata.status === "archived" &&
+    !task.path.startsWith("todo/_archived/") &&
+    !task.path.startsWith("todo/_archive/")
+  ) {
+    const archivedTransition = [...(task.metadata.extra?.status_history ?? [])]
+      .reverse()
+      .find((change) => change.to === "archived");
+    return (
+      await updateTask(
+        context,
+        identifier,
+        { status: archivedTransition?.from ?? "planned" },
+        expectedHash,
+      )
+    ).task;
+  }
   if (
     task.metadata.type !== "task" ||
     (!task.path.startsWith("todo/_archived/") && !task.path.startsWith("todo/_archive/"))

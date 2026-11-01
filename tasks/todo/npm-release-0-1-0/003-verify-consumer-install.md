@@ -1,17 +1,5 @@
 ---
-id: TSK-NPM-CONSUMER-010
-name: Verify CLI from a clean consumer installation
-type: task
-status: planned
-priority: high
-created_at: 2026-10-31
-updated_at: 2026-10-31
-tags:
-  - release
-  - npm
-  - verification
-extra:
-  group_id: GRP-NPM-RELEASE-010
+{id: TSK-NPM-CONSUMER-010,name: Verify CLI from a clean consumer installation,type: task,status: planned,priority: high,created_at: 2026-10-31,updated_at: 2026-11-01T01:04:54.908Z,tags: [release,npm,verification],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: in-progress,at: 2026-10-31T21:06:32.213Z},{from: in-progress,to: planned,at: 2026-11-01T01:04:54.908Z}]},due_at: 2026-11-12}
 ---
 
 # Verify CLI from a clean consumer installation

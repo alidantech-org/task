@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -45,6 +45,124 @@ describe("local runtime HTTP boundary", () => {
 
     const wrongMethod = await fetch(`${baseUrl}/health/live`, { method: "POST" });
     expect(wrongMethod.status).toBe(405);
+  });
+
+  test("streams external workspace edits to live dashboard subscribers", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-live-"));
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      const documentPath = join(root, "tasks", "live.md");
+      await writeFile(documentPath, "---\nid: D-LIVE\nname: Before\ntype: documentation\n---\n");
+      await configureWorkspace(root);
+
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const session = await fetch(`${baseUrl}/internal/session`);
+      const { capability } = (await session.json()) as { capability: string };
+      const events = await fetch(`${baseUrl}/workspace/events`, {
+        headers: { "x-task-capability": capability },
+      });
+      expect(events.status).toBe(200);
+      expect(events.headers.get("content-type")).toContain("text/event-stream");
+      if (!events.body) throw new Error("Expected streaming response body");
+      reader = events.body.getReader();
+      const decoder = new TextDecoder();
+      const initial = await reader.read();
+      expect(decoder.decode(initial.value)).toContain('"type":"workspace.reset"');
+
+      await writeFile(documentPath, "---\nid: D-LIVE\nname: After\ntype: documentation\n---\n");
+      let update = "";
+      const deadline = Date.now() + 4_000;
+      while (Date.now() < deadline && !update.includes('"recordId":"D-LIVE"')) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<{ done: true; value: undefined }>((resolve) => {
+            timeout = setTimeout(() => resolve({ done: true, value: undefined }), 500);
+          }),
+        ]).finally(() => {
+          if (timeout) clearTimeout(timeout);
+        });
+        if (next.done || !next.value) continue;
+        update += decoder.decode(next.value);
+      }
+      expect(update).toContain('"type":"workspace.changed"');
+      expect(update).toContain('"recordId":"D-LIVE"');
+
+      const currentDocument = await fetch(`${baseUrl}/workspace/document/D-LIVE`, {
+        headers: { "x-task-capability": capability },
+      });
+      const currentPayload = (await currentDocument.json()) as {
+        document: { body: string; contentHash: string };
+      };
+      const dashboardEdit = await fetch(`${baseUrl}/workspace/document/D-LIVE`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({
+          body: `${currentPayload.document.body}\nChanged through the dashboard.\n`,
+          expectedHash: currentPayload.document.contentHash,
+        }),
+      });
+      expect(dashboardEdit.status).toBe(200);
+      let dashboardUpdate = "";
+      const dashboardDeadline = Date.now() + 2_000;
+      while (Date.now() < dashboardDeadline && !dashboardUpdate.includes('"recordId":"D-LIVE"')) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<{ done: true; value: undefined }>((resolve) => {
+            timeout = setTimeout(() => resolve({ done: true, value: undefined }), 500);
+          }),
+        ]).finally(() => {
+          if (timeout) clearTimeout(timeout);
+        });
+        if (next.done || !next.value) continue;
+        dashboardUpdate += decoder.decode(next.value);
+      }
+      expect(dashboardUpdate).toContain('"type":"workspace.changed"');
+    } finally {
+      await reader?.cancel();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("saves week-start and archive-delay settings for an implicit tasks workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-settings-"));
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const session = await fetch(`${baseUrl}/internal/session`);
+      const { capability } = (await session.json()) as { capability: string };
+      const saved = await fetch(`${baseUrl}/workspace/settings`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({ weekStart: 7, autoArchiveAfterDays: null }),
+      });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({
+        workspace: { organization: { weekStart: 7, autoArchiveAfterDays: null } },
+      });
+      expect(await readFile(join(root, "task.yaml"), "utf8")).toContain("weekStart: 7");
+      const invalid = await fetch(`${baseUrl}/workspace/settings`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({ weekStart: 0 }),
+      });
+      expect(invalid.status).toBe(400);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("serves authorized workspace snapshots and rejects browser-origin access", async () => {
@@ -125,6 +243,30 @@ describe("local runtime HTTP boundary", () => {
         workspace: { groups: Array<{ id: string }> };
       };
       expect(groupPayload.workspace.groups).toHaveLength(1);
+      const createdDocument = await fetch(`${baseUrl}/workspace/documents`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-task-capability": capability },
+        body: JSON.stringify({
+          title: "Untitled note",
+          path: "docs/note-new.md",
+          tags: [],
+          body: "## Summary\n\nFirst note.\n",
+        }),
+      });
+      expect(createdDocument.status).toBe(201);
+      const documentPayload = (await createdDocument.json()) as {
+        document: { metadata: { id: string; type: string }; path: string };
+        workspace: { documents: Array<{ id: string }> };
+      };
+      expect(documentPayload.document).toMatchObject({
+        path: "docs/note-new.md",
+        metadata: { name: "Untitled note", type: "documentation" },
+      });
+      expect(
+        documentPayload.workspace.documents.some(
+          (item) => item.id === documentPayload.document.metadata.id,
+        ),
+      ).toBe(true);
       const createdTask = await fetch(`${baseUrl}/workspace/tasks`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-task-capability": capability },
@@ -145,6 +287,24 @@ describe("local runtime HTTP boundary", () => {
         body: JSON.stringify({ status: "in-progress", expectedHash: taskPayload.task.contentHash }),
       });
       expect(moved.status).toBe(200);
+      const movedPayload = (await moved.json()) as {
+        task: { contentHash: string };
+      };
+      const hiddenFromRecent = await fetch(
+        `${baseUrl}/workspace/task/${taskPayload.task.metadata.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json", "x-task-capability": capability },
+          body: JSON.stringify({
+            hiddenFromRecent: true,
+            expectedHash: movedPayload.task.contentHash,
+          }),
+        },
+      );
+      expect(hiddenFromRecent.status).toBe(200);
+      expect(await hiddenFromRecent.json()).toMatchObject({
+        task: { metadata: { extra: { hidden_from_recent: true } } },
+      });
       const conflict = await fetch(`${baseUrl}/workspace/task/${taskPayload.task.metadata.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json", "x-task-capability": capability },

@@ -38,10 +38,10 @@ The schema system has four layers:
 
 1. **Common identity fields:** required fields shared by every managed document: `id`, `name`, and `type`.
 2. **Common optional metadata:** `tags` is an optional sequence of unique, non-empty strings; `extra` is an optional mapping for supplemental data.
-3. **Type-specific metadata:** the parser supports task records, decisions, general documentation, rules, and agent profiles. `documentation`, `rule`, and `agent-profile` documents currently use the common fields plus optional `tags` and `extra`. Task status is `planned`, `in-progress`, `blocked`, or `completed`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
+3. **Type-specific metadata:** the parser supports task records, decisions, general documentation, rules, and agent profiles. `documentation`, `rule`, and `agent-profile` documents currently use the common fields plus optional `tags` and `extra`. Task status is `planned`, `in-progress`, `blocked`, `completed`, or `archived`; priority is `low`, `medium`, or `high`. New tasks default to `planned` and `medium`.
 4. **Explicit extension metadata:** the `extra` mapping for supplemental information that is not part of the common or type-specific contract.
 
-Task operations use `extra.status_history` for validated status transitions, `extra.hidden_from_recent` to keep a completed task out of the recent-completion panel without changing its status, and `extra.archived_from` as an operation-managed restore path for individually archived tasks.
+Task operations use `extra.status_history` for validated status transitions and `extra.hidden_from_recent` to keep a completed task out of the recent-completion panel without changing its status. The `archived` status keeps task files in their groups; legacy individual archive paths remain readable for compatibility.
 
 The contract is strict at the top level: an unknown field is an error unless the active schema or a supported workspace extension explicitly declares it. The `extra` mapping is the intentional extension point; it is not permission to add arbitrary top-level keys or bypass validation.
 

@@ -1,4 +1,4 @@
-export { resolveWorkspace } from "@task/workspace/config/resolve";
+export { resolveWorkspace, updateWorkspaceOrganization } from "@task/workspace/config/resolve";
 export type {
   InitializedWorkspace,
   InitializeWorkspaceOptions,
@@ -31,9 +31,12 @@ export type {
 export {
   archiveTask,
   archiveTaskGroup,
+  autoArchiveResolvedGroups,
+  getTaskGroupWeekPath,
   createDocument,
   createTask,
   createTaskGroup,
+  migrateLegacyGroups,
   replaceDocumentBody,
   restoreTask,
   restoreTaskGroup,

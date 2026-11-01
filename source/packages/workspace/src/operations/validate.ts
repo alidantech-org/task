@@ -89,11 +89,17 @@ export async function validateWorkspace(
         "group",
       );
     }
-    if (
-      !/^todo\/(?:_(?:completed|archived|archive)\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}-[^/]+|[^/]+)\/\d{3,}-[a-z0-9-]+\.md$/i.test(
+    const taskFilename = "\\d{3,}-[a-z0-9-]+\\.md";
+    const validPath =
+      new RegExp(`^todo/work/(?:W\\d{2}|\\d{4}/W\\d{2})/[^/]+/${taskFilename}$`, "i").test(
         task.path,
-      )
-    ) {
+      ) ||
+      new RegExp(
+        `^todo/_(?:completed|archived|archive)/\\d{4}/\\d{2}/\\d{4}-\\d{2}-[^/]+/${taskFilename}$`,
+        "i",
+      ).test(task.path) ||
+      new RegExp(`^todo/[^/]+/${taskFilename}$`, "i").test(task.path);
+    if (!validPath) {
       push(
         diagnostics,
         task.path,
@@ -121,21 +127,6 @@ export async function validateWorkspace(
           "Task group must have a plan.md with a GRP- group ID",
           "group",
         );
-    }
-    if (
-      groupPath.startsWith("todo/") &&
-      !groupPath.startsWith("todo/_completed/") &&
-      !groupPath.startsWith("todo/_archived/") &&
-      !groupPath.startsWith("todo/_archive/") &&
-      groupTasks.length > 0 &&
-      groupTasks.every((task) => task.metadata.status === "completed")
-    ) {
-      push(
-        diagnostics,
-        groupPath,
-        "All tasks are completed; archive this group with task archive",
-        "group",
-      );
     }
   }
 

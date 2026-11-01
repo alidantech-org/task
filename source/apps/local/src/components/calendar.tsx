@@ -1,10 +1,12 @@
 "use client";
 
 import { useDraggable, useDroppable } from "@dnd-kit/react";
-import { Button } from "@task/ui";
-import { ChevronLeft, ChevronRight, GripVertical, Plus } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { ChevronLeft, PanelRight, Plus } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
+import { restartSectionEntrance } from "@/lib/entrance";
+import { markdownChecklistProgress } from "@/lib/markdown";
 
 export type CalendarTask = {
   id: string;
@@ -13,7 +15,16 @@ export type CalendarTask = {
   start_at?: string;
   status?: string;
   archived?: boolean;
+  project?: string;
+  groupName?: string;
+  priority?: string;
+  assignee?: string;
+  contentHash?: string;
 };
+
+function statusClass(status?: string): string {
+  return `s-${status ?? "planned"}`;
+}
 
 function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): void }) {
   const { ref, handleRef, isDragging } = useDraggable({
@@ -23,18 +34,17 @@ function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): 
   return (
     <div
       ref={ref}
-      className={`group flex min-w-0 items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-left text-[11px] ${isDragging ? "opacity-40" : ""}`}
+      data-tid={task.id}
+      className={`mini ${statusClass(task.status)} ${isDragging ? "drag" : ""}`}
+      title={task.name}
     >
-      <button type="button" onClick={onSelect} className="min-w-0 flex-1 truncate text-left">
-        {task.name}
-      </button>
       <button
         type="button"
         ref={handleRef}
-        aria-label={`Drag ${task.name}`}
-        className="cursor-grab rounded p-0.5 text-muted-foreground opacity-60 hover:opacity-100 active:cursor-grabbing"
+        onClick={onSelect}
+        className="w-full truncate text-left"
       >
-        <GripVertical className="size-3" />
+        {task.name}
       </button>
     </div>
   );
@@ -44,81 +54,126 @@ function DateCell({
   date,
   inMonth,
   tasks,
-  compact,
+  week,
   onCreate,
   onSelect,
 }: {
   date: Date;
   inMonth: boolean;
   tasks: CalendarTask[];
-  compact: boolean;
+  week: boolean;
   onCreate(date: string): void;
   onSelect(task: CalendarTask): void;
 }) {
   const key = dateKey(date);
   const { ref, isDropTarget } = useDroppable({ id: `date:${key}`, data: { date: key } });
+  const maximum = week ? 9 : 3;
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Grid cells are appropriate in the ARIA calendar grid.
     <div
       ref={ref}
-      role="gridcell"
-      tabIndex={0}
-      aria-label={date.toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })}
-      className={`min-h-28 border-b border-r p-1.5 transition-colors ${!inMonth && compact ? "bg-muted/30 text-muted-foreground" : "bg-background"} ${isDropTarget ? "bg-primary/10 ring-2 ring-inset ring-primary/50" : ""}`}
+      className={`day ${week ? "wk" : ""} ${key === dateKey(new Date()) ? "tdy" : ""} ${!week && !inMonth ? "oth" : ""} ${isDropTarget ? "over" : ""}`}
+      data-dropday={key}
     >
-      <div className="mb-1 flex items-center justify-between">
-        <span
-          className={`grid size-6 place-items-center rounded-full text-xs ${key === dateKey(new Date()) ? "bg-primary font-semibold text-primary-foreground" : ""}`}
-        >
-          {date.getDate()}
-        </span>
+      <div className="xd">
+        <b>{date.getDate()}</b>
         <button
           type="button"
-          aria-label={`Create task on ${key}`}
+          className="add"
+          aria-label={`Add task on ${date.toLocaleDateString("en", { month: "long", day: "numeric" })}`}
           onClick={() => onCreate(key)}
-          className="rounded p-1 text-muted-foreground opacity-50 hover:bg-accent hover:opacity-100"
         >
-          <Plus className="size-3" />
+          <Plus />
         </button>
       </div>
-      <div className="space-y-1">
-        {tasks.slice(0, compact ? 2 : 4).map((task) => (
-          <CalendarTaskCard key={task.id} task={task} onSelect={() => onSelect(task)} />
-        ))}
-        {tasks.length > (compact ? 2 : 4) && (
-          <p className="px-1 text-[10px] text-muted-foreground">
-            +{tasks.length - (compact ? 2 : 4)} more
-          </p>
-        )}
-      </div>
+      {tasks.slice(0, maximum).map((task) => (
+        <CalendarTaskCard key={task.id} task={task} onSelect={() => onSelect(task)} />
+      ))}
+      {tasks.length > maximum && <span className="more">+{tasks.length - maximum} more</span>}
     </div>
+  );
+}
+
+function UnscheduledTray({
+  id,
+  tasks,
+  onSelect,
+}: {
+  id: string;
+  tasks: CalendarTask[];
+  onSelect(task: CalendarTask): void;
+}) {
+  const { ref, isDropTarget } = useDroppable({
+    id: "calendar:unscheduled",
+    data: { clearDate: true },
+  });
+  return (
+    <aside id={id} ref={ref} className={`unp ${isDropTarget ? "over" : ""}`} data-dropday="">
+      <h2>Unscheduled</h2>
+      <p className="sub" style={{ margin: "2px 0 8px" }}>
+        Drag onto a day, or drop here to clear a date.
+      </p>
+      {tasks.map((task) => (
+        <CalendarTaskCard key={task.id} task={task} onSelect={() => onSelect(task)} />
+      ))}
+      {tasks.length === 0 && <p className="sub">Everything has a date.</p>}
+    </aside>
   );
 }
 
 export function CalendarView({
   tasks,
-  recentCompleted = [],
+  initialDate,
   onCreate,
   onSelect,
 }: {
   tasks: CalendarTask[];
-  recentCompleted?: CalendarTask[];
+  initialDate?: string;
   onCreate(date: string): void;
   onSelect(task: CalendarTask): void;
 }) {
-  const [cursor, setCursor] = useState(() => new Date());
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedDate = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : null;
+  const [cursor, setCursor] = useState(() =>
+    requestedDate ? new Date(`${requestedDate}T12:00:00`) : new Date(),
+  );
+  const appliedRequestedDate = useRef(requestedDate);
+  const pendingRequestedDate = useRef<string | null>(null);
   const [mode, setMode] = useState<"month" | "week">("month");
-  const [showPlanning, setShowPlanning] = useState(true);
+  const [unscheduledVisibility, setUnscheduledVisibility] = useState<boolean | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the section entrance when switching calendar modes.
+  useEffect(() => {
+    restartSectionEntrance(document.querySelector<HTMLElement>(".body"));
+  }, [mode]);
+  useEffect(() => {
+    if (requestedDate === appliedRequestedDate.current) return;
+    appliedRequestedDate.current = requestedDate;
+    if (!requestedDate) return;
+    pendingRequestedDate.current = requestedDate;
+    setCursor(new Date(`${requestedDate}T12:00:00`));
+  }, [requestedDate]);
+  useEffect(() => {
+    const selectedDate = dateKey(cursor);
+    const pendingDate = pendingRequestedDate.current;
+    if (pendingDate && pendingDate !== selectedDate) return;
+    if (pendingDate === selectedDate) pendingRequestedDate.current = null;
+    if (searchParams.get("date") === selectedDate) return;
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("date", selectedDate);
+    router.replace(`/calendar?${nextParams.toString()}`, { scroll: false });
+  }, [cursor, router, searchParams]);
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const grid = useMemo(
     () => (mode === "month" ? monthGrid(cursor) : weekGrid(cursor)),
     [cursor, mode],
   );
   const scheduled = tasks.filter((task) => task.due_at);
-  const unscheduled = tasks.filter((task) => !task.due_at);
+  const unscheduled = tasks.filter((task) => !task.due_at && task.status !== "completed");
+  const showUnscheduled = unscheduledVisibility ?? unscheduled.length > 0;
+  const title =
+    mode === "month"
+      ? cursor.toLocaleDateString("en", { month: "long", year: "numeric" })
+      : `${grid[0]?.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${grid[6]?.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
   function movePeriod(amount: number) {
     setCursor((date) =>
       mode === "month"
@@ -126,156 +181,165 @@ export function CalendarView({
         : new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount * 7),
     );
   }
-  function selectTask(task: CalendarTask) {
-    onSelect(task);
-  }
   return (
-    <div
-      className={`mt-5 grid gap-4 ${showPlanning ? "xl:grid-cols-[minmax(0,1fr)_250px]" : "grid-cols-1"}`}
-    >
-      <section className="min-w-0 border-y border-border/70 bg-transparent">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3 sm:p-4">
-          <div>
-            <h2 className="font-semibold">
-              {mode === "month"
-                ? cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" })
-                : `${grid[0]?.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${grid[6]?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`}
-            </h2>
-            <p className="text-xs text-muted-foreground">Drag tasks to schedule or move them.</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Previous period"
-              onClick={() => movePeriod(-1)}
+    <div className="calendar-match">
+      <header className="calh">
+        <h1>{title}</h1>
+        <button
+          type="button"
+          className="ib"
+          aria-label="Previous period"
+          onClick={() => movePeriod(-1)}
+        >
+          <ChevronLeft />
+        </button>
+        <button type="button" className="btn2" onClick={() => setCursor(new Date())}>
+          Today
+        </button>
+        <button
+          type="button"
+          className="ib nx"
+          aria-label="Next period"
+          onClick={() => movePeriod(1)}
+        >
+          <ChevronLeft />
+        </button>
+        <span className="gap" />
+        <button
+          type="button"
+          className={`btn2 calendar-unscheduled-toggle ${showUnscheduled ? "on" : ""}`}
+          aria-label={`${showUnscheduled ? "Hide" : "Show"} unscheduled tasks`}
+          aria-expanded={showUnscheduled}
+          aria-controls={showUnscheduled ? "calendar-unscheduled-tray" : undefined}
+          title={`${showUnscheduled ? "Hide" : "Show"} unscheduled tasks`}
+          onClick={() => setUnscheduledVisibility(!showUnscheduled)}
+        >
+          <PanelRight className="size-4" />
+          <span>Unscheduled</span>
+          <small className="calendar-unscheduled-count">{unscheduled.length}</small>
+        </button>
+        <fieldset className="seg" aria-label="Calendar view">
+          {(["month", "week"] as const).map((view) => (
+            <button
+              type="button"
+              key={view}
+              className={mode === view ? "on" : ""}
+              onClick={() => setMode(view)}
             >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setCursor(new Date())}>
-              Today
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Next period"
-              onClick={() => movePeriod(1)}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-            <span className="ml-2 flex rounded-lg bg-muted p-1">
-              <Button
-                variant={mode === "month" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setMode("month")}
-              >
-                Month
-              </Button>
-              <Button
-                variant={mode === "week" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setMode("week")}
-              >
-                Week
-              </Button>
-            </span>
-          </div>
-        </div>
-        <div className="grid grid-cols-7 border-l text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <div key={day} className="border-b border-r py-2">
+              {view === "month" ? "Month" : "Week"}
+            </button>
+          ))}
+        </fieldset>
+      </header>
+      <div className={`calw ${showUnscheduled ? "" : "without-unscheduled"}`}>
+        <section className="cal" aria-label={title}>
+          {days.map((day) => (
+            <div className="dh" key={day}>
               {day}
             </div>
           ))}
-        </div>
-        <div
-          className={`grid grid-cols-7 border-l ${mode === "month" ? "" : "[&>div]:min-h-[420px]"}`}
-        >
           {grid.map((date) => (
             <DateCell
               key={dateKey(date)}
               date={date}
               inMonth={date.getMonth() === cursor.getMonth()}
-              compact={mode === "month"}
               tasks={scheduled.filter((task) => task.due_at === dateKey(date))}
+              week={mode === "week"}
               onCreate={onCreate}
-              onSelect={selectTask}
+              onSelect={onSelect}
             />
           ))}
-        </div>
-      </section>
-      <aside className="border-l border-border/60 bg-transparent px-4 py-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold">Planning</h3>
-            <p className="text-xs text-muted-foreground">Unscheduled and recent tasks</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => setShowPlanning((value) => !value)}>
-            {showPlanning ? "Collapse" : "Expand"}
-          </Button>
-        </div>
-        {showPlanning && (
-          <>
-            <div className="mt-4 grid grid-cols-7 gap-1">
-              {monthGrid(cursor).map((date) => (
-                <button
-                  type="button"
-                  key={dateKey(date)}
-                  onClick={() => setCursor(date)}
-                  className={`grid aspect-square place-items-center rounded text-[10px] hover:bg-accent ${date.getMonth() !== cursor.getMonth() ? "text-muted-foreground/40" : ""} ${dateKey(date) === dateKey(cursor) ? "bg-primary text-primary-foreground" : ""}`}
-                >
-                  {date.getDate()}
-                </button>
-              ))}
-            </div>
-            <div className="my-4 border-t" />
-            <p className="mb-2 text-xs font-medium">
-              No due date <span className="text-muted-foreground">{unscheduled.length}</span>
-            </p>
-            <div className="space-y-2">
-              {unscheduled.map((task) => (
-                <CalendarTaskCard key={task.id} task={task} onSelect={() => onSelect(task)} />
-              ))}
-              {unscheduled.length === 0 && (
-                <p className="text-xs text-muted-foreground">All tasks have due dates.</p>
-              )}
-            </div>
-            <div className="my-4 border-t" />
-            <p className="mb-2 text-xs font-medium">
-              Recently completed{" "}
-              <span className="text-muted-foreground">{recentCompleted.length}</span>
-            </p>
-            <div className="divide-y divide-border/60">
-              {recentCompleted.map((task) => (
-                <button
-                  type="button"
-                  key={task.id}
-                  onClick={() => onSelect(task)}
-                  className="flex w-full items-start gap-2 py-2 text-left hover:bg-accent/40"
-                >
-                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary/70" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">{task.name}</span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {task.id}
-                      {task.archived ? " · Archived" : " · Completed"}
-                    </span>
-                  </span>
-                </button>
-              ))}
-              {recentCompleted.length === 0 && (
-                <p className="py-2 text-xs text-muted-foreground">No completed tasks yet.</p>
-              )}
-            </div>
-          </>
+        </section>
+        {showUnscheduled && (
+          <UnscheduledTray id="calendar-unscheduled-tray" tasks={unscheduled} onSelect={onSelect} />
         )}
-      </aside>
+      </div>
     </div>
   );
 }
 
 export function BoardTask({ task, onSelect }: { task: CalendarTask; onSelect(): void }) {
-  return <CalendarTaskCard task={task} onSelect={onSelect} />;
+  const [progress, setProgress] = useState(0);
+  const { ref, handleRef, isDragging } = useDraggable({
+    id: `task:${task.id}`,
+    data: { taskId: task.id },
+  });
+  const priorityClass = task.priority === "high" ? "p-h" : task.priority === "low" ? "p-l" : "p-m";
+  const priorityLabel = task.priority
+    ? `${task.priority[0]?.toLocaleUpperCase() ?? ""}${task.priority.slice(1)} priority`
+    : "";
+  const overdue = Boolean(
+    task.due_at && task.due_at < dateKey(new Date()) && task.status !== "completed",
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Re-fetch checklist state when the task record hash changes.
+  useEffect(() => {
+    let active = true;
+    setProgress(0);
+    void fetch(`/api/runtime/workspace/document/${encodeURIComponent(task.id)}`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { document?: { body: string } };
+        if (!active || !response.ok || !payload.document) return;
+        const checklist = markdownChecklistProgress(payload.document.body);
+        setProgress(
+          checklist.total ? Math.round((checklist.completed / checklist.total) * 100) : 0,
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [task.contentHash, task.id]);
+  return (
+    <button
+      type="button"
+      ref={(element) => {
+        ref(element);
+        handleRef(element);
+      }}
+      data-tid={task.id}
+      className={`card w-full text-left ${isDragging ? "drag" : ""}`}
+      aria-label={`Open task ${task.id}: ${task.name}`}
+      onClick={onSelect}
+    >
+      <div className="ct">{task.name}</div>
+      <div className="cm">
+        <span className="tag">{task.groupName ?? task.project ?? "Ungrouped"}</span>
+        {task.due_at && (
+          <span className={`due ${overdue ? "late" : ""}`}>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            {new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
+              new Date(`${task.due_at}T12:00:00`),
+            )}
+          </span>
+        )}
+        {task.priority && <i className={`pri ${priorityClass}`} title={priorityLabel} />}
+        {task.assignee && <b className="av">{task.assignee.slice(0, 2).toLocaleUpperCase()}</b>}
+      </div>
+      <div
+        className="bar"
+        role="progressbar"
+        aria-label="Checklist completion"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+      >
+        <b style={{ width: `${progress}%` }} />
+      </div>
+    </button>
+  );
 }
 
 export function StatusDropZone({ status, children }: { status: string; children: ReactNode }) {
@@ -284,7 +348,7 @@ export function StatusDropZone({ status, children }: { status: string; children:
     <fieldset
       ref={ref}
       aria-label={`Drop tasks in ${status}`}
-      className={`min-h-40 space-y-2 rounded-xl p-1 transition-colors ${isDropTarget ? "bg-primary/10 ring-2 ring-primary/40" : ""}`}
+      className={`col ${isDropTarget ? "over" : ""}`}
     >
       {children}
     </fieldset>

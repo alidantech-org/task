@@ -1,16 +1,5 @@
 ---
-id: TSK-NPM-PUBLISH-010
-name: Publish npm release 0.1.0
-type: task
-status: planned
-priority: high
-created_at: 2026-10-31
-updated_at: 2026-10-31
-tags:
-  - release
-  - npm
-extra:
-  group_id: GRP-NPM-RELEASE-010
+{id: TSK-NPM-PUBLISH-010,name: Publish npm release 0.1.0,type: task,status: planned,priority: high,created_at: 2026-10-31,updated_at: 2026-11-01T01:04:52.801Z,tags: [release,npm],extra: {group_id: GRP-NPM-RELEASE-010,status_history: [{from: planned,to: blocked,at: 2026-10-31T21:00:06.951Z},{from: blocked,to: in-progress,at: 2026-10-31T21:06:33.819Z},{from: in-progress,to: planned,at: 2026-11-01T01:04:52.801Z}]},due_at: 2026-11-05}
 ---
 
 # Publish npm release 0.1.0

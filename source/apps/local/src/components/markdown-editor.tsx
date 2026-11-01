@@ -1,7 +1,8 @@
 "use client";
 
 import { Crepe } from "@milkdown/crepe";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { CustomSelect } from "@/components/ui/select";
 
 type MarkdownEditorProps = {
   value: string;
@@ -10,8 +11,50 @@ type MarkdownEditorProps = {
   className?: string;
 };
 
+type EditMode = "rich" | "code";
+type FormatAction =
+  | "bold"
+  | "italic"
+  | "heading"
+  | "list"
+  | "task"
+  | "quote"
+  | "code"
+  | "link"
+  | "wiki";
+
 const imageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const maxInlineImageBytes = 1_500_000;
+
+const actions: { key: FormatAction; label: string }[] = [
+  { key: "bold", label: "B" },
+  { key: "italic", label: "I" },
+  { key: "heading", label: "H2" },
+  { key: "list", label: "• List" },
+  { key: "task", label: "☑ Task" },
+  { key: "quote", label: "❝ Quote" },
+  { key: "code", label: "‹/› Code" },
+  { key: "link", label: "Link" },
+  { key: "wiki", label: "[[ ]] Link file" },
+];
+
+const wrappers: Partial<Record<FormatAction, readonly [string, string]>> = {
+  bold: ["**", "**"],
+  italic: ["*", "*"],
+  code: ["`", "`"],
+  wiki: ["[[", "]]"],
+  link: ["[", "](https://)"],
+};
+const prefixes: Partial<Record<FormatAction, string>> = {
+  heading: "## ",
+  list: "- ",
+  task: "- [ ] ",
+  quote: "> ",
+};
+
+function wordCount(markdown: string): number {
+  return (markdown.match(/\S+/g) ?? []).length;
+}
 
 function imageAsDataUrl(file: File): Promise<string> {
   if (!imageTypes.has(file.type)) {
@@ -31,11 +74,16 @@ function imageAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export function MarkdownEditor({ value, onChange, onError, className }: MarkdownEditorProps) {
+function RichMarkdownEditor({
+  value,
+  onChange,
+  onError,
+}: Pick<MarkdownEditorProps, "value" | "onChange" | "onError">) {
   const root = useRef<HTMLDivElement>(null);
-  const initialValue = useRef(value);
+  const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
   const onErrorRef = useRef(onError);
+  valueRef.current = value;
   onChangeRef.current = onChange;
   onErrorRef.current = onError;
 
@@ -44,7 +92,7 @@ export function MarkdownEditor({ value, onChange, onError, className }: Markdown
     if (!element) return;
     const editor = new Crepe({
       root: element,
-      defaultValue: initialValue.current,
+      defaultValue: valueRef.current,
       features: {
         [Crepe.Feature.TopBar]: true,
         [Crepe.Feature.Toolbar]: true,
@@ -66,8 +114,15 @@ export function MarkdownEditor({ value, onChange, onError, className }: Markdown
         },
       },
     });
+    let skipInitialMarkdownUpdate = true;
     editor.on((listener) => {
-      listener.markdownUpdated((_context, markdown) => onChangeRef.current(markdown));
+      listener.markdownUpdated((_context, markdown) => {
+        if (skipInitialMarkdownUpdate) {
+          skipInitialMarkdownUpdate = false;
+          return;
+        }
+        onChangeRef.current(markdown);
+      });
     });
     let disposed = false;
     const ready = editor.create();
@@ -84,5 +139,93 @@ export function MarkdownEditor({ value, onChange, onError, className }: Markdown
     };
   }, []);
 
-  return <div ref={root} className={`task-markdown-editor ${className ?? ""}`} />;
+  return <div ref={root} className="task-markdown-editor" />;
+}
+
+function CodeMarkdownEditor({ value, onChange }: Pick<MarkdownEditorProps, "value" | "onChange">) {
+  const textarea = useRef<HTMLTextAreaElement>(null);
+
+  function format(action: FormatAction): void {
+    const field = textarea.current;
+    if (!field) return;
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    const selected = value.slice(start, end);
+    const wrapper = wrappers[action];
+    const prefix = prefixes[action];
+    if (wrapper) {
+      const text = `${wrapper[0]}${selected || "text"}${wrapper[1]}`;
+      onChange(`${value.slice(0, start)}${text}${value.slice(end)}`);
+      window.requestAnimationFrame(() => {
+        field.focus();
+        field.setSelectionRange(start, start + text.length);
+      });
+      return;
+    }
+    if (!prefix) return;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    onChange(`${value.slice(0, lineStart)}${prefix}${value.slice(lineStart)}`);
+    window.requestAnimationFrame(() => {
+      field.focus();
+      const caret = start + prefix.length;
+      field.setSelectionRange(caret, caret);
+    });
+  }
+
+  const words = wordCount(value);
+  return (
+    <div className="markdown-code-editor">
+      <div className="tb">
+        {actions.map(({ key, label }) => (
+          <button
+            type="button"
+            key={key}
+            aria-label={`Insert ${label}`}
+            onClick={() => format(key)}
+          >
+            {key === "bold" ? <b>B</b> : key === "italic" ? <i>I</i> : label}
+          </button>
+        ))}
+      </div>
+      <textarea
+        ref={textarea}
+        id="ed"
+        aria-label="Markdown source editor"
+        spellCheck={false}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+      <small className="sub">
+        {words} words · {Math.max(1, Math.round(words / 200))} min read
+      </small>
+    </div>
+  );
+}
+
+export function MarkdownEditor({ value, onChange, onError, className = "" }: MarkdownEditorProps) {
+  const [mode, setMode] = useState<EditMode>("rich");
+  return (
+    <div className={`markdown-editor ${className}`.trim()}>
+      <div className="markdown-mode-row">
+        <span className="markdown-mode-label">Edit as</span>
+        <CustomSelect
+          value={mode}
+          onValueChange={(nextMode) => {
+            if (nextMode === "rich" || nextMode === "code") setMode(nextMode);
+          }}
+          options={[
+            { value: "rich", label: "Rich text" },
+            { value: "code", label: "Markdown code" },
+          ]}
+          label="Markdown editing mode"
+          className="markdown-mode-select"
+        />
+      </div>
+      {mode === "rich" ? (
+        <RichMarkdownEditor value={value} onChange={onChange} onError={onError} />
+      ) : (
+        <CodeMarkdownEditor value={value} onChange={onChange} />
+      )}
+    </div>
+  );
 }

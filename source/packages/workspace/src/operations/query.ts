@@ -63,6 +63,7 @@ export function listTasks(index: WorkspaceIndex, filters: TaskFilters = {}): Doc
   );
   const filtered = tasks.filter((task) => {
     const archived =
+      task.metadata.status === "archived" ||
       task.path.startsWith(`todo${sep}_archived${sep}`) ||
       task.path.startsWith("todo/_archived/") ||
       task.path.startsWith(`todo${sep}_archive${sep}`) ||
@@ -173,32 +174,52 @@ export async function listTaskGroups(context: WorkspaceContext): Promise<TaskGro
   const plans = [...index.documents.values()].filter(
     (document) => document.metadata.id.startsWith("GRP-") && basename(document.path) === "plan.md",
   );
-  return plans.map((plan) => {
-    const archived =
-      plan.path.startsWith(`todo${sep}_archived${sep}`) ||
-      plan.path.startsWith("todo/_archived/") ||
-      plan.path.startsWith(`todo${sep}_archive${sep}`) ||
-      plan.path.startsWith("todo/_archive/");
-    const finished =
-      plan.path.startsWith(`todo${sep}_completed${sep}`) ||
-      plan.path.startsWith("todo/_completed/");
-    const groupPath = dirname(plan.path);
-    const last = basename(groupPath);
-    const slug = archived || finished ? last.replace(/^\d{4}-\d{2}-\d{2}-/, "") : last;
-    const tasks = [...index.documents.values()].filter(
-      (document) => document.metadata.type === "task" && dirname(document.path) === groupPath,
-    );
-    return {
-      id: plan.metadata.id,
-      name: plan.metadata.name,
-      slug,
-      path: groupPath,
-      archived,
-      finished,
-      total: tasks.length,
-      completed: tasks.filter((task) => task.metadata.status === "completed").length,
-    };
-  });
+  return plans
+    .map((plan) => {
+      const archived =
+        plan.path.startsWith(`todo${sep}_archived${sep}`) ||
+        plan.path.startsWith("todo/_archived/") ||
+        plan.path.startsWith(`todo${sep}_archive${sep}`) ||
+        plan.path.startsWith("todo/_archive/");
+      const finished =
+        plan.path.startsWith(`todo${sep}_completed${sep}`) ||
+        plan.path.startsWith("todo/_completed/");
+      const groupPath = dirname(plan.path);
+      const last = basename(groupPath);
+      const slug = (archived || finished ? last.replace(/^\d{4}-\d{2}-\d{2}-/, "") : last).replace(
+        /--[a-z0-9]{6}$/i,
+        "",
+      );
+      const tasks = [...index.documents.values()].filter(
+        (document) => document.metadata.type === "task" && dirname(document.path) === groupPath,
+      );
+      return {
+        id: plan.metadata.id,
+        name: plan.metadata.name,
+        slug,
+        path: groupPath,
+        archived,
+        finished:
+          finished ||
+          (tasks.length > 0 &&
+            tasks.every(
+              (task) => task.metadata.status === "completed" || task.metadata.status === "archived",
+            )),
+        total: tasks.length,
+        completed: tasks.filter((task) => task.metadata.status === "completed").length,
+        archivedTasks: tasks.filter((task) => task.metadata.status === "archived").length,
+        resolved: tasks.filter(
+          (task) => task.metadata.status === "completed" || task.metadata.status === "archived",
+        ).length,
+      };
+    })
+    .sort((left, right) => {
+      const leftCreated = index.documents.get(`${left.path}/plan.md`)?.metadata.extra?.created_at;
+      const rightCreated = index.documents.get(`${right.path}/plan.md`)?.metadata.extra?.created_at;
+      const leftTime = typeof leftCreated === "string" ? Date.parse(leftCreated) : 0;
+      const rightTime = typeof rightCreated === "string" ? Date.parse(rightCreated) : 0;
+      return rightTime - leftTime || left.path.localeCompare(right.path);
+    });
 }
 
 export async function findGroup(context: WorkspaceContext, identifier: string): Promise<TaskGroup> {

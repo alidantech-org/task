@@ -42,6 +42,8 @@ describe("TUI workspace view model", () => {
       archived: false,
       total: 1,
       completed: 0,
+      archivedTasks: 0,
+      resolved: 0,
     },
   ];
 

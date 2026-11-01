@@ -1,22 +1,30 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
   archiveTask,
+  archiveTaskGroup,
+  autoArchiveResolvedGroups,
   buildWorkspaceIndex,
+  createDocument,
   createTask,
   createTaskGroup,
   getDocument,
   getWorkspaceOverview,
+  type IndexChange,
   listTaskGroups,
+  migrateLegacyGroups,
   type ResolvedWorkspace,
   replaceDocumentBody,
   resolveWorkspace,
   restoreTask,
+  restoreTaskGroup,
   searchWorkspace,
+  type TaskPriority,
   updateTask,
+  updateWorkspaceOrganization,
   validateWorkspace,
   WorkspaceError,
   type WorkspaceIndex,
@@ -35,6 +43,8 @@ type RuntimeState = {
   monitor?: Awaited<ReturnType<typeof monitorWorkspace>>;
   workspaceError?: string;
   capability: string;
+  maintenanceTimer?: ReturnType<typeof setInterval>;
+  maintenance?: Promise<void>;
 };
 
 type TrustedProject = { path: string; addedAt: string };
@@ -42,6 +52,39 @@ type TrustedProjectRegistry = { version: 1; projects: TrustedProject[] };
 
 const runtimeState: RuntimeState = { capability: randomBytes(32).toString("hex") };
 const allowedOrigins = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
+const eventClients = new Set<ServerResponse>();
+let eventCursor = 0;
+
+function publishWorkspaceChange(change: IndexChange): void {
+  const projectRoot = runtimeState.workspace?.projectRoot ?? "";
+  const event = {
+    type: change.type === "reset" ? "workspace.reset" : "workspace.changed",
+    workspaceId: createHash("sha256").update(projectRoot).digest("hex").slice(0, 20),
+    cursor: ++eventCursor,
+    changedAt: new Date().toISOString(),
+    changeType: change.type,
+    path:
+      change.type === "reset"
+        ? undefined
+        : change.type === "invalid"
+          ? change.diagnostic.path
+          : change.type === "repaired" || change.type === "removed"
+            ? change.path
+            : change.document.path,
+    recordId:
+      change.type === "added" || change.type === "updated"
+        ? change.document.metadata.id
+        : undefined,
+  };
+  const frame = `id: ${event.cursor}\nevent: workspace\ndata: ${JSON.stringify(event)}\n\n`;
+  for (const client of eventClients) {
+    if (client.destroyed || client.writableEnded) {
+      eventClients.delete(client);
+      continue;
+    }
+    client.write(frame);
+  }
+}
 
 export async function configureWorkspace(projectRoot: string): Promise<void> {
   const selected = await resolveWorkspace({ cwd: projectRoot });
@@ -128,19 +171,50 @@ async function selectTrustedProject(pathInput: string): Promise<void> {
 }
 
 async function configureResolvedWorkspace(selected: ResolvedWorkspace): Promise<void> {
-  const monitor = await monitorWorkspace(selected.root);
+  const monitor = await monitorWorkspace(selected.root, publishWorkspaceChange);
   const previousMonitor = runtimeState.monitor;
+  if (runtimeState.maintenanceTimer) clearInterval(runtimeState.maintenanceTimer);
   runtimeState.workspace = selected;
   runtimeState.monitor = monitor;
   runtimeState.workspaceError = undefined;
   previousMonitor?.watcher.close();
+  publishWorkspaceChange({ type: "reset", index: monitor.index });
+  runtimeState.maintenanceTimer = setInterval(() => void maintainWorkspace(), 60_000);
+  await maintainWorkspace();
 }
 
 export function closeLocalWorkspace(): void {
+  if (runtimeState.maintenanceTimer) clearInterval(runtimeState.maintenanceTimer);
+  runtimeState.maintenanceTimer = undefined;
   runtimeState.monitor?.watcher.close();
   runtimeState.monitor = undefined;
   runtimeState.workspace = undefined;
   runtimeState.workspaceError = undefined;
+  for (const client of eventClients) client.end();
+  eventClients.clear();
+}
+
+async function maintainWorkspace(): Promise<void> {
+  if (runtimeState.maintenance) return runtimeState.maintenance;
+  const workspace = runtimeState.workspace;
+  const monitor = runtimeState.monitor;
+  if (!workspace || !monitor) return;
+  runtimeState.maintenance = (async () => {
+    const moved = await autoArchiveResolvedGroups(
+      workspace,
+      workspace.config.organization?.autoArchiveAfterDays,
+    );
+    if (moved.length > 0) await monitor.watcher.reconcile();
+  })();
+  try {
+    await runtimeState.maintenance;
+  } catch (error) {
+    process.stderr.write(
+      `Workspace maintenance failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  } finally {
+    runtimeState.maintenance = undefined;
+  }
 }
 
 function authorized(
@@ -203,11 +277,20 @@ function authorized(
 async function snapshot(index: WorkspaceIndex): Promise<object> {
   const workspace = runtimeState.workspace;
   if (!workspace) throw new Error("No workspace is selected");
+  await maintainWorkspace();
+  index = runtimeState.monitor?.index ?? index;
   return {
     projectName: basename(workspace.projectRoot),
     projectRoot: workspace.projectRoot,
     workspaceRoot: workspace.root,
     workspaceDirectory: workspace.config.workspace,
+    organization: {
+      weekStart: workspace.config.organization?.weekStart ?? 1,
+      autoArchiveAfterDays:
+        workspace.config.organization?.autoArchiveAfterDays === undefined
+          ? 2
+          : workspace.config.organization.autoArchiveAfterDays,
+    },
     source: workspace.source,
     scannedAt: index.scannedAt,
     overview: getWorkspaceOverview(index),
@@ -388,6 +471,102 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         send(response, 200, { workspace: await snapshot(monitor.index), requestId }, requestId);
         return;
       }
+      if (path === "/workspace/events" && method === "GET") {
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+          "x-request-id": requestId,
+        });
+        response.write(
+          `id: ${eventCursor}\nevent: workspace\ndata: ${JSON.stringify({
+            type: "workspace.reset",
+            workspaceId: createHash("sha256")
+              .update(workspace.projectRoot)
+              .digest("hex")
+              .slice(0, 20),
+            cursor: eventCursor,
+            changedAt: new Date().toISOString(),
+            changeType: "reset",
+          })}\n\n`,
+        );
+        eventClients.add(response);
+        const heartbeat = setInterval(() => {
+          if (!response.destroyed && !response.writableEnded) response.write(": keep-alive\n\n");
+        }, 15_000);
+        const cleanup = () => {
+          clearInterval(heartbeat);
+          eventClients.delete(response);
+        };
+        response.on("close", cleanup);
+        return;
+      }
+      if (path === "/workspace/settings" && method === "PATCH") {
+        const input = await readJson(request);
+        assertKeys(input, ["weekStart", "autoArchiveAfterDays"]);
+        const weekStart =
+          input.weekStart === undefined
+            ? (workspace.config.organization?.weekStart ?? 1)
+            : Number(input.weekStart);
+        const autoArchiveAfterDays =
+          input.autoArchiveAfterDays === undefined
+            ? (workspace.config.organization?.autoArchiveAfterDays ?? 2)
+            : input.autoArchiveAfterDays === null
+              ? null
+              : Number(input.autoArchiveAfterDays);
+        if (!Number.isInteger(weekStart) || weekStart < 1 || weekStart > 7)
+          throw new Error("weekStart must be an integer from 1 to 7");
+        if (
+          autoArchiveAfterDays !== null &&
+          (!Number.isInteger(autoArchiveAfterDays) || autoArchiveAfterDays < 0)
+        )
+          throw new Error("autoArchiveAfterDays must be a non-negative integer or null");
+        const updated = await updateWorkspaceOrganization(workspace, {
+          weekStart,
+          autoArchiveAfterDays,
+        });
+        await configureResolvedWorkspace(updated);
+        const selectedMonitor = runtimeState.monitor;
+        if (!selectedMonitor)
+          throw new WorkspaceError("workspace_not_found", "Workspace monitor unavailable");
+        send(
+          response,
+          200,
+          { workspace: await snapshot(selectedMonitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/migrate" && method === "POST") {
+        const groups = await migrateLegacyGroups(workspace);
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { groups, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/documents" && method === "POST") {
+        const input = await readJson(request, 3_000_000);
+        assertKeys(input, ["title", "path", "body", "tags"]);
+        const document = await createDocument(workspace, {
+          title: stringField(input, "title"),
+          path: stringField(input, "path"),
+          body: optionalString(input, "body"),
+          tags: stringArrayField(input, "tags"),
+        });
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          201,
+          { document, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
       if (path === "/workspace/search" && method === "GET") {
         const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams.get("q") ?? "";
         if (!query.trim()) {
@@ -485,6 +664,29 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         );
         return;
       }
+      if (path.startsWith("/workspace/task-groups/") && method === "POST") {
+        const suffix = path.endsWith("/archive")
+          ? "/archive"
+          : path.endsWith("/restore")
+            ? "/restore"
+            : "";
+        if (!suffix) throw new WorkspaceError("not_found", "Task group action not found");
+        const identifier = decodeURIComponent(
+          path.slice("/workspace/task-groups/".length, -suffix.length),
+        );
+        const group =
+          suffix === "/archive"
+            ? await archiveTaskGroup(workspace, identifier)
+            : await restoreTaskGroup(workspace, identifier);
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { group, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
       if (path === "/workspace/tasks" && method === "POST") {
         const input = await readJson(request);
         assertKeys(input, ["title", "group", "description", "startAt", "dueAt"]);
@@ -510,9 +712,18 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       }
       if (path.startsWith("/workspace/task/") && method === "PATCH") {
         const input = await readJson(request);
-        assertKeys(input, ["status", "dueAt", "hiddenFromRecent", "expectedHash"]);
+        assertKeys(input, ["status", "dueAt", "priority", "hiddenFromRecent", "expectedHash"]);
+        if (input.dueAt !== undefined && input.dueAt !== null && typeof input.dueAt !== "string") {
+          throw new Error("dueAt must be a date string or null");
+        }
         if (input.hiddenFromRecent !== undefined && typeof input.hiddenFromRecent !== "boolean") {
           throw new Error("hiddenFromRecent must be a boolean");
+        }
+        if (
+          input.priority !== undefined &&
+          !["low", "medium", "high"].includes(String(input.priority))
+        ) {
+          throw new Error("priority must be low, medium, or high");
         }
         const identifier = decodeURIComponent(path.slice("/workspace/task/".length));
         const task = await updateTask(
@@ -525,10 +736,18 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
                     | "planned"
                     | "in-progress"
                     | "blocked"
-                    | "completed",
+                    | "completed"
+                    | "archived",
                 }
               : {}),
-            ...(optionalString(input, "dueAt") ? { dueAt: optionalString(input, "dueAt") } : {}),
+            ...(optionalString(input, "priority")
+              ? { priority: optionalString(input, "priority") as TaskPriority }
+              : {}),
+            ...(input.dueAt === null
+              ? { dueAt: null }
+              : optionalString(input, "dueAt")
+                ? { dueAt: optionalString(input, "dueAt") }
+                : {}),
             ...(typeof input.hiddenFromRecent === "boolean"
               ? { hiddenFromRecent: input.hiddenFromRecent }
               : {}),
@@ -638,16 +857,31 @@ function optionalString(input: Record<string, unknown>, key: string): string | u
   return value;
 }
 
+function stringArrayField(
+  input: Record<string, unknown>,
+  key: string,
+): readonly string[] | undefined {
+  const value = input[key];
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${key} must be an array of strings`);
+  }
+  return value;
+}
+
 export function createLocalServer(): Server {
   return createServer((request, response) => void route(request, response));
 }
 
-export async function monitorWorkspace(root: string): Promise<{
+export async function monitorWorkspace(
+  root: string,
+  listener: (change: IndexChange) => void = () => undefined,
+): Promise<{
   get index(): WorkspaceIndex;
   watcher: WorkspaceWatcher;
 }> {
   const index = await buildWorkspaceIndex({ root });
-  const watcher = watchWorkspaceIndex({ root }, index, () => undefined, {
+  const watcher = watchWorkspaceIndex({ root }, index, listener, {
     reconcileEveryMs: 30_000,
     onError: (error) =>
       process.stderr.write(`Workspace index reconciliation failed: ${error.message}\n`),
