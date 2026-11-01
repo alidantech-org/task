@@ -5,17 +5,18 @@ import { TaskChecklist } from "@/components/task-checklist";
 const body = "# T\n\n## Design\n- [x] sketch\n- [ ] review\n\n## Build\n- [ ] implement\n";
 
 describe("TaskChecklist", () => {
-  test("shows checkboxes under their headings with progress and bulk controls", () => {
+  test("shows checkboxes under their headings with a toggle in each section header", () => {
     const markup = renderToStaticMarkup(
       <TaskChecklist body={body} disabled={false} onChange={() => undefined} />,
     );
-    expect(markup).toContain("1/3 done");
     expect(markup).toContain("<h3>Design</h3>");
     expect(markup).toContain("<h3>Build</h3>");
     expect(markup).toContain('type="checkbox" class="check-input" checked=""');
-    expect(markup).toContain("Check all");
-    expect(markup).toContain("Uncheck all");
-    expect(markup).toContain("Check group");
+    expect(markup).toContain("Check or uncheck every step in Design");
+    expect(markup).toContain("Check or uncheck every step in Build");
+    expect(markup).not.toContain("Check all</button>");
+    expect(markup).not.toContain("Uncheck all</button>");
+    expect(markup).not.toContain("done</strong>");
   });
 
   test("explains how to add checkboxes when there are none", () => {
@@ -29,6 +30,6 @@ describe("TaskChecklist", () => {
     const markup = renderToStaticMarkup(
       <TaskChecklist body={body} disabled onChange={() => undefined} />,
     );
-    expect((markup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((markup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(5);
   });
 });

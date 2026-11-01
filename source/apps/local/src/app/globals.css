@@ -1462,3 +1462,22 @@ html[data-theme="dark"] .code-token,
   width: 14px;
   height: 14px;
 }
+
+.check-group-toggle {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  cursor: pointer;
+}
+.check-group-toggle .check-box.all,
+.check-group-toggle .check-box.some {
+  border-color: var(--dn);
+  background: var(--dn);
+}
+.check-group-toggle .check-input:focus-visible + .check-box {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+.check-group > header {
+  align-items: center;
+}

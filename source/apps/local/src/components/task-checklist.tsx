@@ -1,7 +1,8 @@
 "use client";
 
 import { type ChecklistSelector, parseChecklist } from "@task/workspace/documents/checklist";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 type TaskChecklistProps = {
   body: string;
@@ -25,6 +26,46 @@ function Progress({ completed, total }: { completed: number; total: number }) {
   );
 }
 
+function GroupToggle({
+  done,
+  total,
+  disabled,
+  label,
+  onToggle,
+}: {
+  done: number;
+  total: number;
+  disabled: boolean;
+  label: string;
+  onToggle(checked: boolean): void;
+}) {
+  const reference = useRef<HTMLInputElement>(null);
+  const all = done === total;
+  const some = done > 0 && !all;
+  useEffect(() => {
+    if (reference.current) reference.current.indeterminate = some;
+  }, [some]);
+  return (
+    <label
+      className="check-group-toggle"
+      title={all ? "Uncheck all in this section" : "Check all in this section"}
+    >
+      <input
+        ref={reference}
+        type="checkbox"
+        className="check-input"
+        checked={all}
+        disabled={disabled}
+        aria-label={`Check or uncheck every step in ${label}`}
+        onChange={() => onToggle(!all)}
+      />
+      <span className={`check-box ${all ? "all" : some ? "some" : ""}`} aria-hidden="true">
+        {all ? <Check className="size-3" /> : some ? <Minus className="size-3" /> : null}
+      </span>
+    </label>
+  );
+}
+
 /** Checkboxes from the task Markdown, grouped under their headings, editable without opening the file. */
 export function TaskChecklist({ body, disabled, onChange }: TaskChecklistProps) {
   const checklist = parseChecklist(body);
@@ -37,48 +78,23 @@ export function TaskChecklist({ body, disabled, onChange }: TaskChecklistProps) 
     );
   return (
     <div className="task-checklist">
-      <div className="check-summary">
-        <div className="min-w-0 flex-1">
-          <strong>
-            {checklist.completed}/{checklist.total} done
-          </strong>
-          <Progress completed={checklist.completed} total={checklist.total} />
-        </div>
-        <button
-          type="button"
-          className="chip"
-          disabled={disabled}
-          onClick={() => onChange({ all: true }, true)}
-        >
-          Check all
-        </button>
-        <button
-          type="button"
-          className="chip"
-          disabled={disabled}
-          onClick={() => onChange({ all: true }, false)}
-        >
-          Uncheck all
-        </button>
-      </div>
       {checklist.groups.map((group) => {
         const done = group.items.filter((item) => item.checked).length;
         const indexes = group.items.map((item) => item.index);
         return (
           <section key={`${group.line}:${group.heading}`} className="check-group">
             <header>
+              <GroupToggle
+                done={done}
+                total={group.items.length}
+                disabled={disabled}
+                label={group.heading || "General"}
+                onToggle={(checked) => onChange({ items: indexes }, checked)}
+              />
               <h3>{group.heading || "General"}</h3>
               <span className="sub">
                 {done}/{group.items.length}
               </span>
-              <span className="gap" />
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onChange({ items: indexes }, done !== group.items.length)}
-              >
-                {done === group.items.length ? "Uncheck group" : "Check group"}
-              </button>
             </header>
             <Progress completed={done} total={group.items.length} />
             <ul>
