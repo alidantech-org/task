@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DragDropProvider } from "@dnd-kit/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BoardTask } from "@/components/calendar";
+import { BoardTask } from "@/components/board-task";
 
 const task = {
   id: "TSK-1",
