@@ -124,9 +124,11 @@ export function DocumentEditorSheet({
   const inFlight = useRef(false);
   const toolbar = useRef<HTMLDivElement>(null);
   const dirty = value !== savedValue;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   useEffect(() => {
-    if (!dirty) {
+    if (value === savedValue) {
       if (!inFlight.current) setState("saved");
       return;
     }
@@ -135,7 +137,8 @@ export function DocumentEditorSheet({
       if (inFlight.current) return;
       inFlight.current = true;
       setState("saving");
-      void onSave()
+      void onSaveRef
+        .current()
         .then((ok) => setState(ok ? "saved" : "error"))
         .catch(() => setState("error"))
         .finally(() => {
@@ -143,7 +146,6 @@ export function DocumentEditorSheet({
         });
     }, saveDelay);
     return () => window.clearTimeout(timer);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the delay on every edit or save.
   }, [value, savedValue]);
 
   // Fit as many tool groups as the bar allows; the rest move into the "…" menu.

@@ -259,6 +259,7 @@ function CodeSurface({ value, onChange, controller }: SurfaceProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  const initialValue = useRef(value);
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -267,7 +268,7 @@ function CodeSurface({ value, onChange, controller }: SurfaceProps) {
     const editor = new EditorView({
       parent: element,
       state: EditorState.create({
-        doc: value,
+        doc: initialValue.current,
         extensions: [
           history(),
           drawSelection(),
@@ -334,7 +335,6 @@ function CodeSurface({ value, onChange, controller }: SurfaceProps) {
       view.current = null;
       editor.destroy();
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: The editor is created once; later values sync below.
   }, [controller]);
 
   // Keep the document in step when the value is replaced from outside, for example by Revert.
