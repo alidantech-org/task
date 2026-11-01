@@ -1554,3 +1554,21 @@ html[data-theme="dark"] .code-token,
   padding-top: 0;
   padding-bottom: 0;
 }
+
+/* Highlighted code only gets syntax colours: undo inline-code chrome inherited from Markdown styles */
+.code-viewer .code-line code,
+.task-markdown .code-viewer .code-line code,
+.mdb.task-markdown .code-viewer .code-line code,
+.doc-reader-match .mdb.task-markdown .code-viewer .code-line code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+}
+.code-viewer .code-token {
+  padding: 0;
+  background: none;
+}
