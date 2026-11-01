@@ -54,7 +54,7 @@ import {
 import { isOneOf, isString, isStringOrNull, usePersistentState } from "@/lib/persistent-state";
 import { parseQuickAdd } from "@/lib/quick-add";
 
-type RecordItem = {
+export type RecordItem = {
   path: string;
   id: string;
   name: string;
@@ -71,6 +71,11 @@ type RecordItem = {
   archived_at?: string;
   depends_on?: string[];
   groupName?: string;
+  estimate?: number;
+  order?: number;
+  parent?: string;
+  watchers?: string[];
+  commentCount?: number;
   checklist?: { completed: number; total: number };
   extra?: {
     group_id?: string;

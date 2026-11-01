@@ -1714,3 +1714,147 @@ html[data-theme="dark"] .code-token,
     transform: none;
   }
 }
+
+/* Day and week sheets */
+.day-open {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 6px;
+  color: inherit;
+}
+.day-open svg {
+  opacity: 0;
+  color: var(--mut);
+}
+.day:hover .day-open svg,
+.day-open:focus-visible svg {
+  opacity: 1;
+}
+.day-open:hover {
+  background: var(--soft);
+}
+button.more {
+  display: block;
+  padding: 0;
+  text-align: left;
+  color: var(--acc);
+  cursor: pointer;
+}
+button.more:hover {
+  text-decoration: underline;
+}
+.sch-tiles {
+  margin-bottom: 14px;
+}
+.sch-nav {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--ln);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--pn);
+}
+.sch-step,
+.sch-today {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0 9px;
+  font-size: 13px;
+  color: var(--mut);
+}
+.sch-today {
+  border-inline: 1px solid var(--ln);
+  color: var(--ink);
+}
+.sch-step:hover,
+.sch-today:hover {
+  background: var(--soft);
+}
+.sch-add {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--ln);
+  border-radius: 10px;
+  background: var(--pn);
+  font-size: 13px;
+}
+.sch-add:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.sch-add.small {
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+.sch-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sch-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--ln);
+}
+.sch-row .custom-select.icon,
+.sch-row .date-picker.icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 8px;
+}
+.sch-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+.sch-title span {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sch-title small {
+  overflow: hidden;
+  font-size: 10.5px;
+  color: var(--mut);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sch-title:hover span {
+  color: var(--acc);
+}
+.sch-day {
+  margin-bottom: 16px;
+}
+.sch-day > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--ln);
+}
+.sch-day > header > button:first-child {
+  font-size: 13px;
+  font-weight: 600;
+}
+.sch-day > header > button:first-child:hover {
+  color: var(--acc);
+}
+.sch-empty {
+  margin: 6px 0 0;
+}

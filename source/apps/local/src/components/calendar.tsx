@@ -1,10 +1,11 @@
 "use client";
 
 import { useDraggable, useDroppable } from "@dnd-kit/react";
-import { ChevronLeft, PanelRight, Plus } from "lucide-react";
+import { ChevronLeft, PanelRight, PanelRightOpen, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { type CalendarTask, OpenButton } from "@/components/board-task";
+import { DaySheet, WeekSheet } from "@/components/schedule-sheets";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
 import { restartSectionEntrance } from "@/lib/entrance";
 import { isOneOf, usePersistentState } from "@/lib/persistent-state";
@@ -45,6 +46,7 @@ function DateCell({
   week,
   onCreate,
   onSelect,
+  onOpenDay,
 }: {
   date: Date;
   inMonth: boolean;
@@ -52,6 +54,7 @@ function DateCell({
   week: boolean;
   onCreate(date: string): void;
   onSelect(task: CalendarTask): void;
+  onOpenDay(date: string): void;
 }) {
   const key = dateKey(date);
   const { ref, isDropTarget } = useDroppable({ id: `date:${key}`, data: { date: key } });
@@ -63,7 +66,16 @@ function DateCell({
       data-dropday={key}
     >
       <div className="xd">
-        <b>{date.getDate()}</b>
+        <button
+          type="button"
+          className="day-open"
+          aria-label={`Open ${date.toLocaleDateString("en", { month: "long", day: "numeric" })}`}
+          title="Open this day"
+          onClick={() => onOpenDay(key)}
+        >
+          <b>{date.getDate()}</b>
+          <PanelRightOpen className="size-3" />
+        </button>
         <button
           type="button"
           className="add"
@@ -76,7 +88,11 @@ function DateCell({
       {tasks.slice(0, maximum).map((task) => (
         <CalendarTaskCard key={task.id} task={task} onSelect={() => onSelect(task)} />
       ))}
-      {tasks.length > maximum && <span className="more">+{tasks.length - maximum} more</span>}
+      {tasks.length > maximum && (
+        <button type="button" className="more" onClick={() => onOpenDay(key)}>
+          +{tasks.length - maximum} more
+        </button>
+      )}
     </div>
   );
 }
@@ -132,6 +148,7 @@ export function CalendarView({
     "month",
     isOneOf(["month", "week"] as const),
   );
+  const [sheet, setSheet] = useState<{ kind: "day" | "week"; date: string } | null>(null);
   const [unscheduledVisibility, setUnscheduledVisibility] = usePersistentState<boolean | null>(
     "calendar:tray",
     null,
@@ -203,6 +220,15 @@ export function CalendarView({
         <span className="gap" />
         <button
           type="button"
+          className="btn2"
+          title="Manage the tasks of this week"
+          onClick={() => setSheet({ kind: "week", date: dateKey(cursor) })}
+        >
+          <PanelRightOpen className="size-4" />
+          <span>Week sheet</span>
+        </button>
+        <button
+          type="button"
           className={`btn2 calendar-unscheduled-toggle ${showUnscheduled ? "on" : ""}`}
           aria-label={`${showUnscheduled ? "Hide" : "Show"} unscheduled tasks`}
           aria-expanded={showUnscheduled}
@@ -243,6 +269,7 @@ export function CalendarView({
               week={mode === "week"}
               onCreate={onCreate}
               onSelect={onSelect}
+              onOpenDay={(day) => setSheet({ kind: "day", date: day })}
             />
           ))}
         </section>
@@ -250,6 +277,31 @@ export function CalendarView({
           <UnscheduledTray id="calendar-unscheduled-tray" tasks={unscheduled} onSelect={onSelect} />
         )}
       </div>
+      {sheet?.kind === "day" && (
+        <DaySheet
+          date={sheet.date}
+          onDate={(day) => setSheet({ kind: "day", date: day })}
+          onClose={() => setSheet(null)}
+          onOpenTask={(task) => onSelect(task)}
+          onCreate={(day) => {
+            setSheet(null);
+            onCreate(day);
+          }}
+        />
+      )}
+      {sheet?.kind === "week" && (
+        <WeekSheet
+          date={sheet.date}
+          onDate={(day) => setSheet({ kind: "week", date: day })}
+          onClose={() => setSheet(null)}
+          onOpenDay={(day) => setSheet({ kind: "day", date: day })}
+          onOpenTask={(task) => onSelect(task)}
+          onCreate={(day) => {
+            setSheet(null);
+            onCreate(day);
+          }}
+        />
+      )}
     </div>
   );
 }
