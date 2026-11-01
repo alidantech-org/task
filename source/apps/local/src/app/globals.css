@@ -2165,3 +2165,70 @@ button.more:hover {
 .fb-icon:disabled {
   opacity: 0.4;
 }
+
+/* Bulk selection */
+.bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--acc);
+  border-radius: 12px;
+  background: var(--pn);
+  box-shadow: var(--sh);
+  font-size: 13px;
+}
+.bulk-bar select,
+.bulk-bar input,
+.bulk-bar > button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ln);
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+.bulk-bar > button:hover:not(:disabled) {
+  border-color: var(--acc);
+}
+.bulk-bar :disabled {
+  opacity: 0.45;
+}
+.bulk-danger {
+  color: var(--bl) !important;
+}
+.card-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--mut);
+  border-radius: 6px;
+  background: var(--pn);
+  color: var(--pn);
+  font-size: 12px;
+  line-height: 1;
+}
+.card-check.on {
+  border-color: var(--acc);
+  background: var(--acc);
+}
+.card-check.inline {
+  position: static;
+  flex: none;
+  margin-right: 8px;
+}
+.card-shell.is-picked .card,
+.lrow.is-picked {
+  outline: 2px solid var(--acc);
+  outline-offset: -2px;
+}

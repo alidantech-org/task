@@ -205,6 +205,11 @@ type WorkspaceAppContextValue = {
   updateTaskFields(task: RecordItem, patch: Record<string, unknown>): Promise<boolean>;
   /** Adds a subtask in the same group as its parent. */
   createSubtask(parent: RecordItem, title: string): Promise<boolean>;
+  /** Applies one change to many tasks and reports how each one went. */
+  bulkUpdate(
+    ids: readonly string[],
+    patch: Record<string, unknown>,
+  ): Promise<{ ok: number; failed: string[] }>;
   /** Applies a board drop: optionally a new status, then a position next to a neighbour. */
   moveOnBoard(
     task: RecordItem,
@@ -395,6 +400,8 @@ export function App({
   const [newGroup, setNewGroup] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [creating, setCreating] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [templateId, setTemplateId] = useState("none");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const creatingDocument = useRef(false);
   const pendingTaskSelection = useRef<string | null>(null);
@@ -1081,6 +1088,36 @@ export function App({
       return false;
     }
   }
+  async function bulkUpdate(
+    ids: readonly string[],
+    patch: Record<string, unknown>,
+  ): Promise<{ ok: number; failed: string[] }> {
+    try {
+      const response = await fetch("/api/runtime/workspace/tasks/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, patch }),
+      });
+      const clone = response.clone();
+      await acceptWorkspaceResponse(response);
+      const payload = (await clone.json()) as {
+        results?: { id: string; ok: boolean; error?: string }[];
+      };
+      const results = payload.results ?? [];
+      const failed = results
+        .filter((item) => !item.ok)
+        .map((item) => `${item.id}: ${item.error ?? "failed"}`);
+      setNotice(
+        failed.length
+          ? `${results.length - failed.length} updated, ${failed.length} failed. ${failed[0]}`
+          : `${results.length} task${results.length === 1 ? "" : "s"} updated`,
+      );
+      return { ok: results.length - failed.length, failed };
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the tasks");
+      return { ok: 0, failed: [...ids] };
+    }
+  }
   async function moveOnBoard(
     task: RecordItem,
     status: string | undefined,
@@ -1403,6 +1440,20 @@ export function App({
     setLastSidebarMode("full");
   }
 
+  useEffect(() => {
+    if (!dialog) return;
+    let active = true;
+    void fetch("/api/runtime/workspace/templates", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as { templates?: { id: string; name: string }[] };
+        if (active && response.ok) setTemplates(payload.templates ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [dialog]);
+
   async function createTask(): Promise<void> {
     const quickAdd = parseQuickAdd(
       title,
@@ -1438,6 +1489,7 @@ export function App({
           title: quickAdd.title,
           group: activeGroup,
           ...(quickAdd.dueDate ? { dueAt: quickAdd.dueDate } : {}),
+          ...(templateId !== "none" ? { template: templateId } : {}),
         }),
       });
       const payload = (await response.json()) as {
@@ -1447,6 +1499,7 @@ export function App({
       if (!response.ok) throw new Error(payload.error?.message ?? "Could not create task");
       if (payload.workspace) setWorkspace(payload.workspace);
       setDialog(false);
+      setTemplateId("none");
       setNewGroup("");
       setSelected(null);
       setNotice("Task created");
@@ -1621,6 +1674,7 @@ export function App({
           deleteRecord,
           undoDelete,
           moveOnBoard,
+          bulkUpdate,
           updateTaskFields,
           createSubtask,
           setChecklist,
@@ -1958,6 +2012,17 @@ export function App({
                     placeholder="Create your first task group"
                     aria-label="New task group name"
                     className="quick-add-title"
+                  />
+                )}
+                {templates.length > 0 && (
+                  <CustomSelect
+                    label="Template"
+                    value={templateId}
+                    onValueChange={setTemplateId}
+                    options={[
+                      { value: "none", label: "No template" },
+                      ...templates.map((item) => ({ value: item.id, label: item.name })),
+                    ]}
                   />
                 )}
                 <div className="quick-add-submit">

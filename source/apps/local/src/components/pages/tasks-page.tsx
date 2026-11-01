@@ -5,6 +5,7 @@ import { isSortable } from "@dnd-kit/react/sortable";
 import { Archive, Columns3, List } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BoardTask, BoardTaskPreview } from "@/components/board-task";
+import { BulkBar } from "@/components/bulk-bar";
 import { StatusDropZone } from "@/components/calendar";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { TaskFilterBar } from "@/components/task-filter-bar";
@@ -42,7 +43,17 @@ export function TasksPageContent() {
     setTaskView,
     openRecord,
     moveOnBoard,
+    bulkUpdate,
   } = useWorkspaceApp();
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggle = (id: string) =>
+    setPicked((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  const selectionFor = (id: string) =>
+    selecting ? { checked: picked.includes(id), onToggle: () => toggle(id) } : undefined;
   const [filters, setFilters] = usePersistentState("task:filters", emptyFilters, isFilters);
   const [views, setViews] = usePersistentState<SavedView[]>("task:views", [], isSavedViews);
   const [me, setMe] = useState("");
@@ -111,6 +122,17 @@ export function TasksPageContent() {
             <h1>Tasks</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={`btn2 ${selecting ? "on" : ""}`}
+              aria-pressed={selecting}
+              onClick={() => {
+                setSelecting(!selecting);
+                setPicked([]);
+              }}
+            >
+              {selecting ? "Cancel selection" : "Select"}
+            </button>
             <fieldset className="seg" aria-label="Task view">
               {(["Board", "List"] as const).map((view) => (
                 <button
@@ -135,6 +157,25 @@ export function TasksPageContent() {
           tags={labelNames}
           matching={displayed.length}
         />
+        {selecting && (
+          <BulkBar
+            count={picked.length}
+            total={displayed.length}
+            groups={groups}
+            busy={bulkBusy}
+            onSelectAll={() => setPicked(displayed.map((task) => task.id))}
+            onClear={() => {
+              setSelecting(false);
+              setPicked([]);
+            }}
+            onApply={(patch) => {
+              setBulkBusy(true);
+              void bulkUpdate(picked, patch)
+                .then((result) => setPicked(result.failed.map((line) => line.split(":")[0] ?? "")))
+                .finally(() => setBulkBusy(false));
+            }}
+          />
+        )}
         <div className="chips">
           <button
             type="button"
@@ -192,6 +233,7 @@ export function TasksPageContent() {
                       task={task}
                       index={index}
                       onSelect={() => openRecord(task)}
+                      selection={selectionFor(task.id)}
                     />
                   ))}
                 {displayed.every((task) => task.status !== status) && (
@@ -219,9 +261,18 @@ export function TasksPageContent() {
                   type="button"
                   key={task.id}
                   data-tid={task.id}
-                  className="lrow"
-                  onClick={() => openRecord(task)}
+                  className={`lrow ${selecting && picked.includes(task.id) ? "is-picked" : ""}`}
+                  aria-pressed={selecting ? picked.includes(task.id) : undefined}
+                  onClick={() => (selecting ? toggle(task.id) : openRecord(task))}
                 >
+                  {selecting && (
+                    <span
+                      className={`card-check inline ${picked.includes(task.id) ? "on" : ""}`}
+                      aria-hidden="true"
+                    >
+                      {picked.includes(task.id) ? "✓" : ""}
+                    </span>
+                  )}
                   <span className="t">
                     <b>{task.name}</b>
                     <small>

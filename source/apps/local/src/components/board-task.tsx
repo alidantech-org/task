@@ -117,11 +117,14 @@ export function BoardTask({
   task,
   index,
   onSelect,
+  selection,
 }: {
   task: CalendarTask;
   /** Position within the column, which is also the sortable group. */
   index: number;
   onSelect(): void;
+  /** In selection mode a click toggles the card instead of opening it. */
+  selection?: { checked: boolean; onToggle(): void };
 }) {
   const { ref, handleRef, isDragging, isDropTarget } = useSortable({
     id: `task:${task.id}`,
@@ -133,7 +136,7 @@ export function BoardTask({
   });
   return (
     <div
-      className={`card-shell ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-target" : ""}`}
+      className={`card-shell ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-target" : ""} ${selection?.checked ? "is-picked" : ""}`}
     >
       <button
         type="button"
@@ -144,11 +147,18 @@ export function BoardTask({
         data-tid={task.id}
         className={`card w-full text-left ${isDragging ? "drag" : ""}`}
         aria-label={`Open task ${task.id}: ${task.name}`}
-        onClick={onSelect}
+        onClick={selection ? selection.onToggle : onSelect}
+        aria-pressed={selection ? selection.checked : undefined}
       >
         <CardContent task={task} />
       </button>
-      <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
+      {selection ? (
+        <span className={`card-check ${selection.checked ? "on" : ""}`} aria-hidden="true">
+          {selection.checked ? "✓" : ""}
+        </span>
+      ) : (
+        <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
+      )}
     </div>
   );
 }

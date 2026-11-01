@@ -46,4 +46,21 @@ describe("BoardTask", () => {
     expect(bare).toContain("Ungrouped");
     expect(bare).not.toContain("progressbar");
   });
+
+  test("in selection mode the card shows a check mark instead of the open button", () => {
+    const markup = renderToStaticMarkup(
+      <DragDropProvider>
+        <BoardTask
+          task={task}
+          index={0}
+          onSelect={() => undefined}
+          selection={{ checked: true, onToggle: () => undefined }}
+        />
+      </DragDropProvider>,
+    );
+    expect(markup).toContain('class="card-check on"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("is-picked");
+    expect(markup).not.toContain("card-open");
+  });
 });
