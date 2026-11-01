@@ -1166,7 +1166,7 @@ html[data-theme="dark"] .code-token,
   text-decoration: line-through;
 }
 
-/* Compact task sheet: less height, no wrapping, icon-only when narrow */
+/* Task sheet: compact header, roomier sub-header, normal-size content */
 .task-sheet-head {
   gap: 6px;
   align-items: center;
@@ -1203,13 +1203,14 @@ html[data-theme="dark"] .code-token,
 }
 .task-sheet-subhead {
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 4px 8px 4px 10px;
+  padding: 7px 12px 7px 14px;
 }
 .task-sheet-tabs {
   flex: 1 1 auto;
   min-width: 0;
+  padding: 3px;
   scrollbar-width: none;
 }
 .task-sheet-tabs::-webkit-scrollbar {
@@ -1218,41 +1219,58 @@ html[data-theme="dark"] .code-token,
 .task-sheet-tabs button {
   display: inline-flex;
   flex: none;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
-  padding: 3px 9px;
-  font-size: 12px;
+  padding: 5px 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .task-sheet.compact .task-sheet-tabs button {
-  padding: 4px 8px;
+  padding: 6px 10px;
 }
 .tab-badge {
-  min-width: 15px;
+  min-width: 16px;
   padding: 0 4px;
   border-radius: 99px;
   background: var(--bl);
   color: #fff;
   font-size: 10px;
-  line-height: 15px;
+  line-height: 16px;
   text-align: center;
 }
 .task-sheet-edit {
-  gap: 4px;
+  flex: none;
+  gap: 6px;
 }
-.task-sheet-edit > * {
-  width: 130px;
-  height: 28px;
-  min-width: 0;
-  font-size: 12px;
+.task-sheet .task-sheet-edit .date-picker,
+.task-sheet .task-sheet-edit .custom-select {
+  width: 140px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ln);
+  border-radius: 9px;
+  background: var(--pn);
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
 }
-.task-sheet.compact .task-sheet-edit > *,
-.task-sheet-edit > .icon {
+.task-sheet .task-sheet-edit .date-picker:hover,
+.task-sheet .task-sheet-edit .custom-select:hover {
+  border-color: var(--acc);
+}
+.task-sheet .task-sheet-edit .icon,
+.task-sheet.compact .task-sheet-edit .date-picker,
+.task-sheet.compact .task-sheet-edit .custom-select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 32px;
   padding: 0;
+}
+.task-sheet .task-sheet-edit .date-picker svg {
+  width: 15px;
+  height: 15px;
 }
 .custom-select-dot {
   width: 10px;
@@ -1260,34 +1278,23 @@ html[data-theme="dark"] .code-token,
   border-radius: 99px;
 }
 .task-sheet-body {
-  padding: 8px 12px 14px;
-}
-.task-sheet .check-summary {
-  margin-bottom: 8px;
-}
-.task-sheet .check-group {
-  margin-bottom: 8px;
-  padding: 8px 10px;
-}
-.task-sheet .check-row {
-  padding: 3px 2px;
-  font-size: 13px;
+  padding: 16px 20px 28px;
 }
 .task-overview section {
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 .ov-desc p {
-  margin: 0 0 3px;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.6;
 }
 .ov-link {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--acc);
 }
 .ov-title {
-  margin: 0 0 6px;
-  font-size: 11px;
+  margin: 0 0 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1295,31 +1302,31 @@ html[data-theme="dark"] .code-token,
 }
 .ov-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
 }
 .ov-tile {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 6px 9px;
+  gap: 3px;
+  padding: 12px 14px;
   border: 1px solid var(--ln);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--soft);
   text-align: left;
 }
 .ov-tile span {
-  font-size: 10.5px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--mut);
 }
 .ov-tile strong {
-  font-size: 14px;
+  font-size: 17px;
 }
 .ov-tile small {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mut);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1340,16 +1347,16 @@ html[data-theme="dark"] .code-token,
   border-color: var(--acc);
 }
 .ov-activity {
-  margin: 8px 0 0;
+  margin: 14px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 12px;
+  font-size: 13px;
 }
 .ov-activity li {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  padding: 3px 0;
+  gap: 10px;
+  padding: 7px 0;
   border-bottom: 1px solid var(--ln);
 }
 .ov-activity time {
@@ -1359,10 +1366,10 @@ html[data-theme="dark"] .code-token,
   margin: 0;
 }
 .task-change-list > li > button {
-  padding: 3px 4px;
+  padding: 6px 6px;
 }
 .change-preview {
-  margin: 2px 0 8px;
+  margin: 4px 0 12px;
 }
 .diff-viewer.preview .code-viewer-body {
   overflow: hidden;
@@ -1372,97 +1379,24 @@ html[data-theme="dark"] .code-token,
   text-overflow: ellipsis;
 }
 .diff-more {
-  margin: 2px 8px 0;
-  font-size: 11px;
+  margin: 4px 8px 0;
+  font-size: 12px;
 }
 .change-preview-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 8px;
+  margin-top: 8px;
 }
 .change-preview-actions button {
-  padding: 2px 10px;
+  padding: 4px 12px;
   border: 1px solid var(--ln);
   border-radius: 99px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--acc);
 }
 .change-preview-actions button:hover {
   background: var(--soft);
 }
-.change-viewer {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-.viewer-head {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--ln);
-}
-.viewer-back,
-.viewer-open {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  color: var(--mut);
-}
-.viewer-back:hover,
-.viewer-open:hover {
-  background: var(--soft);
-  color: var(--ink);
-}
-.viewer-name {
-  display: flex;
-  flex: 1;
-  gap: 6px;
-  align-items: baseline;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.viewer-name strong {
-  font-size: 13px;
-}
-.viewer-name span {
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--mut);
-  text-overflow: ellipsis;
-}
-.viewer-modes button {
-  padding: 3px 10px;
-  font-size: 12px;
-}
-.viewer-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 8px;
-}
-.task-sheet .task-sheet-edit .date-picker,
-.task-sheet .task-sheet-edit .custom-select {
-  height: 28px;
-  min-height: 28px;
-  padding: 0 8px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-.task-sheet .task-sheet-edit .icon {
-  width: 28px;
-  padding: 0;
-}
-.task-sheet .task-sheet-edit .date-picker svg {
-  width: 14px;
-  height: 14px;
-}
-
 .check-group-toggle {
   position: relative;
   display: inline-grid;
@@ -1480,4 +1414,85 @@ html[data-theme="dark"] .code-token,
 }
 .check-group > header {
   align-items: center;
+}
+
+/* Full-height file and diff viewer: flat, no card */
+.change-viewer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.viewer-head {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px 7px 8px;
+  border-bottom: 1px solid var(--ln);
+}
+.viewer-back,
+.viewer-open {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--mut);
+}
+.viewer-back:hover,
+.viewer-open:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+.viewer-name {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.viewer-name strong {
+  font-size: 14px;
+}
+.viewer-name span {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--mut);
+  text-overflow: ellipsis;
+}
+.viewer-modes {
+  flex: none;
+}
+.viewer-modes button {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.viewer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+}
+.viewer-body .code-viewer.flat {
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.viewer-body .code-viewer.flat .code-viewer-bar {
+  display: none;
+}
+.viewer-body .code-viewer.flat .code-viewer-body,
+.viewer-body .diff-viewer .code-viewer-body {
+  padding: 8px 0 24px;
+}
+.viewer-body .diff-viewer {
+  min-height: 100%;
+}
+.viewer-body > p {
+  padding: 12px 16px;
 }

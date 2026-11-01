@@ -110,7 +110,7 @@ export function ChangeViewer({
           (loaded.binary ? (
             <p className="sub">Binary file — not shown.</p>
           ) : (
-            <CodeViewer code={loaded.content} language={language} />
+            <CodeViewer code={loaded.content} language={language} flat />
           ))}
       </div>
     </div>

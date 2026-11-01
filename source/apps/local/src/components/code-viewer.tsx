@@ -59,6 +59,8 @@ type CodeViewerProps = {
   highlightFrom?: number;
   highlightTo?: number;
   compact?: boolean;
+  /** No border, rounded corners or toolbar: for full-height views. */
+  flat?: boolean;
   showLineNumbers?: boolean;
 };
 
@@ -69,6 +71,7 @@ export function CodeViewer({
   highlightFrom,
   highlightTo,
   compact = false,
+  flat = false,
   showLineNumbers = !compact,
 }: CodeViewerProps) {
   const tokens = useHighlightedLines(code, language);
@@ -89,7 +92,9 @@ export function CodeViewer({
     }
   }
   return (
-    <div className={`code-viewer ${compact ? "compact" : ""}`}>
+    <div
+      className={["code-viewer", compact && "compact", flat && "flat"].filter(Boolean).join(" ")}
+    >
       <div className="code-viewer-bar">
         <span>{language}</span>
         <button type="button" onClick={() => void copy()} aria-label="Copy code">
