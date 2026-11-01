@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { discoverMarkdown } from "@task/workspace/discovery/scan";
 import { checklistProgress } from "@task/workspace/documents/checklist";
 import { classifyDocument } from "@task/workspace/documents/classify";
+import { parseComments } from "@task/workspace/documents/comments";
 import { hashContent, parseFrontmatter, parseMetadata } from "@task/workspace/indexing/metadata";
 import type {
   DocumentSummary,
@@ -54,7 +55,13 @@ async function scanWorkspaceIndex(
         changeTime: stat.ctimeMs,
         fileId: `${stat.dev}:${stat.ino}`,
         ...(metadata.type === "task"
-          ? { checklist: checklistProgress(parseFrontmatter(content).body) }
+          ? (() => {
+              const body = parseFrontmatter(content).body;
+              return {
+                checklist: checklistProgress(body),
+                commentCount: parseComments(body).length,
+              };
+            })()
           : {}),
       });
     } catch (error) {

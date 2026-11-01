@@ -4,15 +4,23 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
+  addFileAttachment,
+  addLinkAttachment,
+  addTaskComment,
   archiveTask,
   archiveTaskGroup,
   autoArchiveResolvedGroups,
+  buildActivity,
   buildWorkspaceIndex,
+  bulkUpdateTasks,
   createDocument,
   createTask,
+  createTaskFromTemplate,
   createTaskGroup,
+  createTemplate,
   deleteDocument,
   deleteTask,
+  deleteTaskComment,
   deleteTaskGroup,
   findDocument,
   getDocument,
@@ -20,14 +28,22 @@ import {
   getTaskFileDiff,
   getWorkspaceOverview,
   type IndexChange,
+  listTaskComments,
   listTaskGroups,
+  listTemplates,
   listTrash,
   migrateLegacyGroups,
+  moveTask,
+  type Recurrence,
   type ResolvedWorkspace,
+  readAttachment,
   readDocumentChecklist,
   readProjectFile,
   readWorkspaceIndex,
+  removeAttachment,
+  reorderTask,
   replaceDocumentBody,
+  resolveAuthor,
   resolveQuality,
   resolveWorkspace,
   restoreFromTrash,
@@ -35,7 +51,10 @@ import {
   restoreTaskGroup,
   searchWorkspace,
   setDocumentChecklist,
+  type TaskLink,
   type TaskPriority,
+  type TaskStatus,
+  type TemplateDefaults,
   updateTask,
   updateWorkspaceOrganization,
   validateWorkspace,
@@ -331,6 +350,14 @@ async function snapshot(index: WorkspaceIndex): Promise<object> {
       contentHash: document.contentHash,
       classification: document.classification,
       checklist: document.checklist,
+      commentCount: document.commentCount,
+      order: document.metadata.order,
+      parent: document.metadata.parent,
+      estimate: document.metadata.estimate,
+      links: document.metadata.links,
+      watchers: document.metadata.watchers,
+      recurrence: document.metadata.recurrence,
+      attachments: document.metadata.attachments,
     })),
     diagnostics: index.diagnostics,
   };
@@ -611,6 +638,224 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         send(response, 200, { diagnostics: result, requestId }, requestId);
         return;
       }
+      const taskRoute =
+        /^\/workspace\/task\/([^/]+)\/(reorder|comments|activity|attachments)(?:\/([^/]+))?$/.exec(
+          path,
+        );
+      if (taskRoute) {
+        const identifier = decodeURIComponent(taskRoute[1] ?? "");
+        const part = taskRoute[2];
+        const rest = taskRoute[3] === undefined ? undefined : decodeURIComponent(taskRoute[3]);
+        if (part === "reorder" && method === "POST" && rest === undefined) {
+          const input = await readJson(request);
+          assertKeys(input, ["before", "after", "order", "expectedHash"]);
+          if (input.order !== undefined && typeof input.order !== "number")
+            throw new Error("order must be a number");
+          const task = await reorderTask(
+            workspace,
+            identifier,
+            {
+              ...(optionalString(input, "before")
+                ? { before: optionalString(input, "before") }
+                : {}),
+              ...(optionalString(input, "after") ? { after: optionalString(input, "after") } : {}),
+              ...(typeof input.order === "number" ? { order: input.order } : {}),
+            },
+            optionalString(input, "expectedHash"),
+          );
+          await monitor.watcher.reconcile();
+          send(
+            response,
+            200,
+            { task, workspace: await snapshot(monitor.index), requestId },
+            requestId,
+          );
+          return;
+        }
+        if (part === "comments" && method === "GET" && rest === undefined) {
+          const comments = (await listTaskComments(workspace, identifier)).map(
+            ({ start: _start, end: _end, ...entry }) => entry,
+          );
+          send(response, 200, { comments, requestId }, requestId);
+          return;
+        }
+        if (part === "comments" && method === "POST" && rest === undefined) {
+          const input = await readJson(request);
+          assertKeys(input, ["text", "expectedHash"]);
+          const result = await addTaskComment(
+            workspace,
+            identifier,
+            stringField(input, "text"),
+            undefined,
+            optionalString(input, "expectedHash"),
+          );
+          await monitor.watcher.reconcile();
+          send(
+            response,
+            201,
+            {
+              task: result.task,
+              comments: result.comments.map(({ start: _start, end: _end, ...entry }) => entry),
+              workspace: await snapshot(monitor.index),
+              requestId,
+            },
+            requestId,
+          );
+          return;
+        }
+        if (part === "comments" && method === "DELETE" && rest !== undefined) {
+          const result = await deleteTaskComment(workspace, identifier, Number(rest));
+          await monitor.watcher.reconcile();
+          send(
+            response,
+            200,
+            {
+              task: result.task,
+              comments: result.comments.map(({ start: _start, end: _end, ...entry }) => entry),
+              workspace: await snapshot(monitor.index),
+              requestId,
+            },
+            requestId,
+          );
+          return;
+        }
+        if (part === "activity" && method === "GET" && rest === undefined) {
+          const task = findDocument(await readWorkspaceIndex(workspace), identifier);
+          const comments = await listTaskComments(workspace, identifier);
+          send(
+            response,
+            200,
+            { activity: buildActivity(task.metadata, comments), requestId },
+            requestId,
+          );
+          return;
+        }
+        if (part === "attachments" && method === "GET" && rest === undefined) {
+          const task = findDocument(await readWorkspaceIndex(workspace), identifier);
+          send(
+            response,
+            200,
+            { attachments: task.metadata.attachments ?? [], requestId },
+            requestId,
+          );
+          return;
+        }
+        if (part === "attachments" && method === "GET" && rest !== undefined) {
+          const file = await readAttachment(workspace, identifier, rest);
+          response.writeHead(200, {
+            "content-type": "application/octet-stream",
+            "content-length": String(file.data.byteLength),
+            "content-disposition": `attachment; filename="${file.name.replace(/[^A-Za-z0-9._ -]/g, "_")}"`,
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "DENY",
+            "x-request-id": requestId,
+          });
+          response.end(Buffer.from(file.data));
+          return;
+        }
+        if (part === "attachments" && method === "POST" && rest === undefined) {
+          const input = await readJson(request, 1_700_000);
+          assertKeys(input, ["name", "contentBase64", "url"]);
+          const author = await resolveAuthor(workspace);
+          const task =
+            typeof input.url === "string"
+              ? await addLinkAttachment(
+                  workspace,
+                  identifier,
+                  { url: input.url, name: optionalString(input, "name") },
+                  author,
+                )
+              : await addFileAttachment(
+                  workspace,
+                  identifier,
+                  {
+                    name: stringField(input, "name"),
+                    data: new Uint8Array(
+                      Buffer.from(stringField(input, "contentBase64"), "base64"),
+                    ),
+                  },
+                  author,
+                );
+          await monitor.watcher.reconcile();
+          send(
+            response,
+            201,
+            { task, workspace: await snapshot(monitor.index), requestId },
+            requestId,
+          );
+          return;
+        }
+        if (part === "attachments" && method === "DELETE" && rest !== undefined) {
+          const task = await removeAttachment(workspace, identifier, rest);
+          await monitor.watcher.reconcile();
+          send(
+            response,
+            200,
+            { task, workspace: await snapshot(monitor.index), requestId },
+            requestId,
+          );
+          return;
+        }
+      }
+      if (path === "/workspace/identity" && method === "GET") {
+        send(response, 200, { author: await resolveAuthor(workspace), requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/templates" && method === "GET") {
+        send(response, 200, { templates: await listTemplates(workspace), requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/templates" && method === "POST") {
+        const input = await readJson(request, 300_000);
+        assertKeys(input, ["name", "body", "defaults"]);
+        const template = await createTemplate(workspace, {
+          name: stringField(input, "name"),
+          body: stringField(input, "body"),
+          ...(typeof input.defaults === "object" && input.defaults !== null
+            ? { defaults: input.defaults as TemplateDefaults }
+            : {}),
+        });
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          201,
+          { template, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
+      if (path === "/workspace/tasks/bulk" && method === "POST") {
+        const input = await readJson(request, 300_000);
+        assertKeys(input, ["ids", "patch"]);
+        const ids = stringArrayField(input, "ids") ?? [];
+        const patch =
+          typeof input.patch === "object" && input.patch !== null
+            ? (input.patch as Record<string, unknown>)
+            : {};
+        assertKeys(patch, ["status", "priority", "assignee", "tags", "group", "archive", "delete"]);
+        const results = await bulkUpdateTasks(workspace, ids, {
+          ...(optionalString(patch, "status")
+            ? { status: optionalString(patch, "status") as TaskStatus }
+            : {}),
+          ...(optionalString(patch, "priority")
+            ? { priority: optionalString(patch, "priority") as TaskPriority }
+            : {}),
+          ...(typeof patch.assignee === "string" ? { assignee: patch.assignee } : {}),
+          ...(stringArrayField(patch, "tags") ? { tags: stringArrayField(patch, "tags") } : {}),
+          ...(optionalString(patch, "group") ? { group: optionalString(patch, "group") } : {}),
+          ...(patch.archive === true ? { archive: true } : {}),
+          ...(patch.delete === true ? { delete: true } : {}),
+        });
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          { results, workspace: await snapshot(monitor.index), requestId },
+          requestId,
+        );
+        return;
+      }
       const checklistRoute = /^\/workspace\/(?:task|document)\/([^/]+)\/checklist$/.exec(path);
       if (checklistRoute && (method === "GET" || method === "POST")) {
         const identifier = decodeURIComponent(checklistRoute[1] ?? "");
@@ -753,8 +998,24 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
       }
       if (path === "/workspace/tasks" && method === "POST") {
         const input = await readJson(request);
-        assertKeys(input, ["title", "group", "description", "startAt", "dueAt"]);
-        const task = await createTask(workspace, {
+        assertKeys(input, [
+          "title",
+          "group",
+          "description",
+          "startAt",
+          "dueAt",
+          "priority",
+          "assignee",
+          "tags",
+          "estimate",
+          "parent",
+          "template",
+        ]);
+        const create = optionalString(input, "template")
+          ? (value: Parameters<typeof createTask>[1]) =>
+              createTaskFromTemplate(workspace, optionalString(input, "template") ?? "", value)
+          : (value: Parameters<typeof createTask>[1]) => createTask(workspace, value);
+        const task = await create({
           title: stringField(input, "title"),
           group: stringField(input, "group"),
           ...(optionalString(input, "description")
@@ -764,6 +1025,15 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
             ? { startAt: optionalString(input, "startAt") }
             : {}),
           ...(optionalString(input, "dueAt") ? { dueAt: optionalString(input, "dueAt") } : {}),
+          ...(optionalString(input, "priority")
+            ? { priority: optionalString(input, "priority") as TaskPriority }
+            : {}),
+          ...(optionalString(input, "assignee")
+            ? { assignee: optionalString(input, "assignee") }
+            : {}),
+          ...(stringArrayField(input, "tags") ? { tags: stringArrayField(input, "tags") } : {}),
+          ...(typeof input.estimate === "number" ? { estimate: input.estimate } : {}),
+          ...(optionalString(input, "parent") ? { parent: optionalString(input, "parent") } : {}),
         });
         await monitor.watcher.reconcile();
         send(
@@ -782,8 +1052,33 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
           "priority",
           "hiddenFromRecent",
           "track",
+          "order",
+          "assignee",
+          "tags",
+          "startAt",
+          "estimate",
+          "parent",
+          "links",
+          "watchers",
+          "recurrence",
+          "group",
           "expectedHash",
         ]);
+        for (const key of ["order", "estimate"] as const)
+          if (input[key] !== undefined && input[key] !== null && typeof input[key] !== "number")
+            throw new Error(`${key} must be a number or null`);
+        if (input.parent !== undefined && input.parent !== null && typeof input.parent !== "string")
+          throw new Error("parent must be a task id or null");
+        if (input.assignee !== undefined && typeof input.assignee !== "string")
+          throw new Error("assignee must be a string");
+        if (input.links !== undefined && !Array.isArray(input.links))
+          throw new Error("links must be an array");
+        if (
+          input.recurrence !== undefined &&
+          input.recurrence !== null &&
+          (typeof input.recurrence !== "object" || Array.isArray(input.recurrence))
+        )
+          throw new Error("recurrence must be an object or null");
         if (input.track !== undefined && typeof input.track !== "boolean")
           throw new Error("track must be a boolean");
         if (input.dueAt !== undefined && input.dueAt !== null && typeof input.dueAt !== "string") {
@@ -825,15 +1120,33 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
               ? { hiddenFromRecent: input.hiddenFromRecent }
               : {}),
             ...(input.track === true ? { track: true } : {}),
+            ...(input.order !== undefined ? { order: input.order as number | null } : {}),
+            ...(input.estimate !== undefined ? { estimate: input.estimate as number | null } : {}),
+            ...(input.parent !== undefined ? { parent: input.parent as string | null } : {}),
+            ...(typeof input.assignee === "string" ? { assignee: input.assignee } : {}),
+            ...(stringArrayField(input, "tags") ? { tags: stringArrayField(input, "tags") } : {}),
+            ...(optionalString(input, "startAt")
+              ? { startAt: optionalString(input, "startAt") }
+              : {}),
+            ...(input.links !== undefined ? { links: input.links as TaskLink[] } : {}),
+            ...(stringArrayField(input, "watchers")
+              ? { watchers: stringArrayField(input, "watchers") }
+              : {}),
+            ...(input.recurrence !== undefined
+              ? { recurrence: input.recurrence as Recurrence | null }
+              : {}),
           },
           stringField(input, "expectedHash"),
         );
+        const movedTask = optionalString(input, "group")
+          ? await moveTask(workspace, identifier, optionalString(input, "group") ?? "")
+          : undefined;
         await monitor.watcher.reconcile();
         send(
           response,
           200,
           {
-            task: task.task,
+            task: movedTask ?? task.task,
             ...(task.warnings ? { warnings: task.warnings } : {}),
             workspace: await snapshot(monitor.index),
             requestId,

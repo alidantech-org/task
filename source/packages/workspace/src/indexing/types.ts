@@ -76,6 +76,8 @@ export type DocumentSummary = {
   fileId: string;
   /** Checkbox progress of a task body, computed while indexing. */
   checklist?: { completed: number; total: number };
+  /** Number of comments in a task body, computed while indexing. */
+  commentCount?: number;
 };
 export type ValidationCategory =
   | "metadata"

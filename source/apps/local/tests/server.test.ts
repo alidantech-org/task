@@ -249,6 +249,174 @@ describe("local runtime HTTP boundary", () => {
     }
   });
 
+  test("serves ordering, comments, attachments, templates, bulk updates and new task fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-features-"));
+    try {
+      await writeFile(join(root, "task.yaml"), 'workspace: "tasks"\nquality:\n  mode: off\n');
+      const context = { root: join(root, "tasks"), projectRoot: root };
+      await mkdir(context.root, { recursive: true });
+      const group = await createTaskGroup(context, "Work");
+      const other = await createTaskGroup(context, "Other");
+      const alpha = await createTask(context, { title: "Alpha", group: group.id });
+      const beta = await createTask(context, { title: "Beta", group: group.id });
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const { capability } = (await (await fetch(`${baseUrl}/internal/session`)).json()) as {
+        capability: string;
+      };
+      const headers = { "x-task-capability": capability, "content-type": "application/json" };
+      const call = (method: string, path: string, body?: object) =>
+        fetch(`${baseUrl}${path}`, {
+          method,
+          headers,
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+      const a = alpha.metadata.id;
+      const b = beta.metadata.id;
+
+      expect((await fetch(`${baseUrl}/workspace/task/${a}/comments`)).status).toBe(401);
+
+      const reorder = await call("POST", `/workspace/task/${b}/reorder`, { before: a });
+      expect(reorder.status).toBe(200);
+      expect(
+        ((await reorder.json()) as { task: { metadata: { order: number } } }).task.metadata.order,
+      ).toBeLessThan(alpha.metadata.order ?? 1024);
+      expect(
+        (await call("POST", `/workspace/task/${b}/reorder`, { before: "TSK-NOPE" })).status,
+      ).toBe(404);
+      expect((await call("POST", `/workspace/task/${b}/reorder`, { order: "x" })).status).toBe(400);
+
+      const comment = await call("POST", `/workspace/task/${a}/comments`, { text: "Hello @beta" });
+      expect(comment.status).toBe(201);
+      const commented = (await comment.json()) as { comments: { author?: string; text: string }[] };
+      expect(commented.comments[0]?.text).toBe("Hello @beta");
+      expect(typeof commented.comments[0]?.author).toBe("string");
+      expect((await call("POST", `/workspace/task/${a}/comments`, { text: "  " })).status).toBe(
+        400,
+      );
+      const listed = (await (await call("GET", `/workspace/task/${a}/comments`)).json()) as {
+        comments: unknown[];
+      };
+      expect(listed.comments).toHaveLength(1);
+      const activity = (await (await call("GET", `/workspace/task/${a}/activity`)).json()) as {
+        activity: { kind: string }[];
+      };
+      expect(activity.activity.map((entry) => entry.kind)).toContain("comment");
+      expect((await call("DELETE", `/workspace/task/${a}/comments/0`)).status).toBe(200);
+      expect((await call("DELETE", `/workspace/task/${a}/comments/7`)).status).toBe(404);
+
+      const upload = await call("POST", `/workspace/task/${a}/attachments`, {
+        name: "note.txt",
+        contentBase64: Buffer.from("hello").toString("base64"),
+      });
+      expect(upload.status).toBe(201);
+      const download = await fetch(`${baseUrl}/workspace/task/${a}/attachments/note.txt`, {
+        headers,
+      });
+      expect(download.status).toBe(200);
+      expect(download.headers.get("content-disposition")).toContain("attachment");
+      expect(download.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(await download.text()).toBe("hello");
+      const tooBig = await call("POST", `/workspace/task/${a}/attachments`, {
+        name: "big.bin",
+        contentBase64: Buffer.alloc(1_000_001).toString("base64"),
+      });
+      expect(tooBig.status).toBe(400);
+      expect(
+        (
+          await call("POST", `/workspace/task/${a}/attachments`, {
+            name: "id_rsa",
+            contentBase64: "AA==",
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await call("POST", `/workspace/task/${a}/attachments`, {
+            url: "https://example.com/x",
+            name: "Spec",
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (await call("POST", `/workspace/task/${a}/attachments`, { url: "ftp://x" })).status,
+      ).toBe(400);
+      expect((await call("DELETE", `/workspace/task/${a}/attachments/note.txt`)).status).toBe(200);
+
+      const template = await call("POST", "/workspace/templates", {
+        name: "Standard",
+        body: "# Std\n\n## Goal\nWhy.\n\n## Acceptance checklist\n- [ ] One\n",
+        defaults: { priority: "high", estimate: 2 },
+      });
+      expect(template.status).toBe(201);
+      const templates = (await (await call("GET", "/workspace/templates")).json()) as {
+        templates: { id: string }[];
+      };
+      const created = await call("POST", "/workspace/tasks", {
+        title: "From template",
+        group: group.id,
+        template: templates.templates[0]?.id,
+      });
+      expect(created.status).toBe(201);
+      expect(
+        ((await created.json()) as { task: { metadata: { priority: string; estimate: number } } })
+          .task.metadata,
+      ).toMatchObject({
+        priority: "high",
+        estimate: 2,
+      });
+
+      const detail = (await (await call("GET", `/workspace/document/${a}`)).json()) as {
+        document: { contentHash: string };
+      };
+      const patched = await call("PATCH", `/workspace/task/${a}`, {
+        assignee: "ann",
+        estimate: 5,
+        parent: b,
+        watchers: ["peter"],
+        links: [{ type: "relates", task: b }],
+        recurrence: { every: "week", interval: 1 },
+        tags: ["x"],
+        expectedHash: detail.document.contentHash,
+      });
+      expect(patched.status).toBe(200);
+      expect(
+        ((await patched.json()) as { task: { metadata: Record<string, unknown> } }).task.metadata,
+      ).toMatchObject({
+        assignee: "ann",
+        estimate: 5,
+        parent: b,
+        watchers: ["peter"],
+      });
+      expect(
+        (await call("PATCH", `/workspace/task/${a}`, { estimate: "lots", expectedHash: "x" }))
+          .status,
+      ).toBe(400);
+
+      const results = (await (
+        await call("POST", "/workspace/tasks/bulk", {
+          ids: [a, "TSK-NOPE", b],
+          patch: { priority: "low", group: other.id },
+        })
+      ).json()) as { results: { ok: boolean }[] };
+      expect(results.results.map((result) => result.ok)).toEqual([true, false, true]);
+      expect((await call("POST", "/workspace/tasks/bulk", { ids: [], patch: {} })).status).toBe(
+        400,
+      );
+      expect(
+        ((await (await call("GET", "/workspace/identity")).json()) as { author: string }).author
+          .length,
+      ).toBeGreaterThan(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("streams external workspace edits to live dashboard subscribers", async () => {
     const root = await mkdtemp(join(tmpdir(), "task-runtime-live-"));
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
