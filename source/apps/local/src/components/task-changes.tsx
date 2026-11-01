@@ -2,6 +2,7 @@
 
 import { languageForPath } from "@task/workspace/files/language";
 import { useEffect, useState } from "react";
+import type { ViewerTarget } from "@/components/change-viewer";
 import { DiffViewer } from "@/components/code-viewer";
 
 type FileChange = {
@@ -28,6 +29,7 @@ type ChangesPayload = {
       };
 };
 
+const previewLines = 12;
 const statusLetter: Record<FileChange["status"], string> = {
   added: "A",
   modified: "M",
@@ -46,10 +48,12 @@ function FileDiff({
   taskId,
   file,
   segment,
+  limit,
 }: {
   taskId: string;
   file: FileChange;
   segment: number;
+  limit?: number;
 }) {
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +80,7 @@ function FileDiff({
   if (file.denied) return <p className="sub">Contents of protected files are never shown.</p>;
   if (error) return <p role="alert">{error}</p>;
   if (diff === null) return <p className="sub">Loading diff…</p>;
-  return <DiffViewer diff={diff} language={languageForPath(file.path)} />;
+  return <DiffViewer diff={diff} language={languageForPath(file.path)} limit={limit} />;
 }
 
 export function TaskChanges({
@@ -84,6 +88,7 @@ export function TaskChanges({
   refreshKey,
   showEmpty = false,
   trackedHint = false,
+  onView,
 }: {
   taskId: string;
   /** Changes whenever the task record changes so the list reloads. */
@@ -91,6 +96,8 @@ export function TaskChanges({
   /** Explain the empty state instead of rendering nothing. */
   showEmpty?: boolean;
   trackedHint?: boolean;
+  /** Open a file's full diff or contents in the full-height viewer. */
+  onView?(target: ViewerTarget): void;
 }) {
   const [payload, setPayload] = useState<ChangesPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +160,45 @@ export function TaskChanges({
               <span className="diff-stat-add">+{file.insertions}</span>
               <span className="diff-stat-del">-{file.deletions}</span>
             </button>
-            {open === file.path && <FileDiff taskId={taskId} file={file} segment={lastSegment} />}
+            {open === file.path && (
+              <div className="change-preview">
+                <FileDiff taskId={taskId} file={file} segment={lastSegment} limit={previewLines} />
+                {onView && (
+                  <div className="change-preview-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onView({
+                          taskId,
+                          path: file.path,
+                          segment: lastSegment,
+                          mode: "diff",
+                          denied: file.denied,
+                        })
+                      }
+                    >
+                      View full diff
+                    </button>
+                    {file.status !== "deleted" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onView({
+                            taskId,
+                            path: file.path,
+                            segment: lastSegment,
+                            mode: "file",
+                            denied: file.denied,
+                          })
+                        }
+                      >
+                        View file
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </li>
         ))}
       </ul>

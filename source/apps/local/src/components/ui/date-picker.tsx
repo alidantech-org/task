@@ -11,10 +11,13 @@ export function DatePicker({
   value,
   onValueChange,
   label,
+  compact = false,
 }: {
   value: string;
   onValueChange(value: string): void;
   label: string;
+  /** Show only the calendar icon; the chosen date stays in the tooltip. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => (value ? new Date(`${value}T12:00:00`) : new Date()));
@@ -29,8 +32,13 @@ export function DatePicker({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <button type="button" className="date-picker" aria-label={label}>
-          <span>{shownValue}</span>
+        <button
+          type="button"
+          className={compact ? "date-picker icon" : "date-picker"}
+          aria-label={label}
+          title={compact ? `${label}: ${shownValue}` : undefined}
+        >
+          {!compact && <span>{shownValue}</span>}
           <CalendarDays className="size-4 text-muted-foreground" />
         </button>
       </Popover.Trigger>

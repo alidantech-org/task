@@ -123,19 +123,48 @@ export function CodeViewer({
   );
 }
 
-export function DiffViewer({ diff, language }: { diff: string; language: string }) {
+export function DiffViewer({
+  diff,
+  language,
+  limit,
+}: {
+  diff: string;
+  language: string;
+  /** Show at most this many diff lines; the rest are summarised instead of scrolled. */
+  limit?: number;
+}) {
   const files = parseUnifiedDiff(diff);
+  let budget = limit ?? Number.POSITIVE_INFINITY;
+  let hidden = 0;
   return (
-    <div className="diff-viewer">
+    <div className={limit === undefined ? "diff-viewer" : "diff-viewer preview"}>
       {files.map((file) => (
         <div key={`${file.oldPath}->${file.newPath}`}>
           {file.binary && <p className="sub">Binary file changed</p>}
-          {file.hunks.map((hunk) => (
-            <DiffHunkView key={hunk.header} hunk={hunk} language={language} />
-          ))}
+          {file.hunks.map((hunk) => {
+            if (budget <= 0) {
+              hidden += hunk.lines.length;
+              return null;
+            }
+            const shown = hunk.lines.slice(0, budget);
+            budget -= shown.length;
+            hidden += hunk.lines.length - shown.length;
+            return (
+              <DiffHunkView
+                key={hunk.header}
+                hunk={{ ...hunk, lines: shown }}
+                language={language}
+              />
+            );
+          })}
         </div>
       ))}
       {files.length === 0 && <p className="sub">No textual changes.</p>}
+      {hidden > 0 && (
+        <p className="sub diff-more">
+          … {hidden} more line{hidden === 1 ? "" : "s"}
+        </p>
+      )}
     </div>
   );
 }
