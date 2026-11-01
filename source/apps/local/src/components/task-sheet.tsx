@@ -53,8 +53,9 @@ const tabs = [
 ] as const;
 type TabId = (typeof tabs)[number][0];
 
-/** Below this sheet width the tabs and date/status editors collapse to icons. */
-const compactBelow = 560;
+/** Below these sheet widths the date/status editors, then the tabs, collapse to icons. */
+const compactEditorsBelow = 720;
+const compactTabsBelow = 520;
 
 const statusLabels: Record<string, string> = {
   planned: "Planned",
@@ -214,7 +215,9 @@ export function TaskSheet() {
   if (!open || !selected || !detail) return null;
   const task = selected;
   const body = detail.body;
-  const compact = Math.min(width, viewportWidth || width) < compactBelow;
+  const effectiveWidth = Math.min(width, viewportWidth || width);
+  const compact = effectiveWidth < compactTabsBelow;
+  const compactEditors = effectiveWidth < compactEditorsBelow;
   const archived = archivedTasks.some((candidate) => candidate.id === task.id);
   const group = groups.find((item) => task.path.startsWith(`${item.path}/`));
   const quality = workspace?.quality ?? defaultQuality;
@@ -426,13 +429,13 @@ export function TaskSheet() {
                 <div className="task-sheet-edit">
                   <DatePicker
                     label="Task due date"
-                    compact={compact}
+                    compact={compactEditors}
                     value={task.due_at ?? ""}
                     onValueChange={(dueDate) => void updateTaskDue(task, dueDate || null)}
                   />
                   <CustomSelect
                     label="Task status"
-                    compact={compact}
+                    compact={compactEditors}
                     value={task.status ?? "planned"}
                     onValueChange={(status) => void updateTaskStatus(task, status)}
                     options={statuses.map((status) => ({

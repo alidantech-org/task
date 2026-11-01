@@ -1532,3 +1532,25 @@ html[data-theme="dark"] .code-token,
   outline: 2px solid var(--acc);
   outline-offset: -2px;
 }
+
+/* Tabs match the editors' height and fit their content */
+.task-sheet .task-sheet-subhead {
+  align-items: center;
+}
+.task-sheet .task-sheet-tabs {
+  flex: 0 1 auto;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+}
+.task-sheet .task-sheet-tabs button,
+.task-sheet.compact .task-sheet-tabs button {
+  align-items: center;
+  height: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+}
