@@ -3,7 +3,7 @@ import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/
 import { dirname, join, resolve } from "node:path";
 import { type ChecklistSelector, setChecklistItems } from "@task/workspace/documents/checklist";
 import { WorkspaceError } from "@task/workspace/errors";
-import { endTracking, startTracking } from "@task/workspace/git/tracking";
+import { endTracking, startTracking, trackingEnabled } from "@task/workspace/git/tracking";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
 import { parseFrontmatter, serializeMarkdown } from "@task/workspace/indexing/metadata";
 import type {
@@ -468,9 +468,21 @@ export async function updateTask(
   if (open && !open.ended_at && nextStatus !== "in-progress") {
     segments[segments.length - 1] = await endTracking(context, task.metadata.id, open);
     nextExtra.tracking = { segments };
-  } else if (input.track && nextStatus === "in-progress" && !(open && !open.ended_at)) {
-    segments.push(await startTracking(context, task.metadata.id));
-    nextExtra.tracking = { segments };
+  } else if (
+    nextStatus === "in-progress" &&
+    !(open && !open.ended_at) &&
+    trackingEnabled(context) &&
+    ((input.status === "in-progress" && previousStatus !== "in-progress") || input.track === true)
+  ) {
+    try {
+      segments.push(await startTracking(context, task.metadata.id));
+      nextExtra.tracking = { segments };
+    } catch (error) {
+      warnings = [
+        ...(warnings ?? []),
+        `Change tracking is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      ];
+    }
   }
   if (Object.keys(nextExtra).length > 0) values.extra = nextExtra;
   values.updated_at = updatedAt;

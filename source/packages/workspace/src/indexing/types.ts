@@ -14,6 +14,8 @@ export type TrackingSegment = {
   end_ref?: string;
   ended_at?: string;
   end_error?: string;
+  /** The snapshot skipped files because of size or count limits. */
+  truncated?: boolean;
   summary?: TrackingSummary;
 };
 export type TaskTracking = { segments: readonly TrackingSegment[] };

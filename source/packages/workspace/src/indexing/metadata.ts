@@ -231,6 +231,7 @@ function validateTracking(tracking: unknown): void {
       "end_ref",
       "ended_at",
       "end_error",
+      "truncated",
       "summary",
     ];
     if (Object.keys(segment).some((key) => !allowed.includes(key)))
@@ -240,6 +241,8 @@ function validateTracking(tracking: unknown): void {
     if (typeof segment.started_at !== "string" || Number.isNaN(Date.parse(segment.started_at)))
       throw new Error(`${label}.started_at must be a timestamp`);
     for (const key of ["base_commit", "end_ref", "end_error"]) optionalString(segment, key, label);
+    if (segment.truncated !== undefined && typeof segment.truncated !== "boolean")
+      throw new Error(`${label}.truncated must be a boolean`);
     if (segment.ended_at !== undefined && Number.isNaN(Date.parse(String(segment.ended_at))))
       throw new Error(`${label}.ended_at must be a timestamp`);
     if (segment.summary !== undefined) {
