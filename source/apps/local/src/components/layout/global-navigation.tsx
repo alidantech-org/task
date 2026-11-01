@@ -23,6 +23,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { topLevelFolders } from "@/lib/markdown";
 
 type Project = { path: string; addedAt: string; active?: boolean };
 type WorkspaceProject = { projectName: string; projectRoot: string } | null;
@@ -47,6 +48,10 @@ type GlobalNavigationProps = {
   taskGroupFilter: string;
   selectTaskGroup(groupId: string): void;
   documentPaths: string[];
+  /** Files directly in the workspace root; they are files, not folders. */
+  rootDocuments: { id: string; path: string }[];
+  openDocument(id: string): void;
+  activeDocumentId: string | null;
   documentFolder: string;
   selectDocumentFolder(folder: string): void;
 };
@@ -79,6 +84,9 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     taskGroupFilter,
     selectTaskGroup,
     documentPaths,
+    rootDocuments,
+    openDocument,
+    activeDocumentId,
     documentFolder,
     selectDocumentFolder,
   } = props;
@@ -206,19 +214,28 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                   <span>All files</span>
                   <i>{documentPaths.length}</i>
                 </button>
-                {[...new Set(documentPaths.map((path) => path.split("/")[0] ?? ""))]
-                  .filter(Boolean)
-                  .map((folder) => (
-                    <button
-                      type="button"
-                      key={folder}
-                      className={`nv ${documentFolder === folder ? "on" : ""}`}
-                      onClick={() => selectDocumentFolder(folder)}
-                    >
-                      <span>{folder}/</span>
-                      <i>{documentPaths.filter((path) => path.startsWith(`${folder}/`)).length}</i>
-                    </button>
-                  ))}
+                {topLevelFolders(documentPaths).map((folder) => (
+                  <button
+                    type="button"
+                    key={folder.name}
+                    className={`nv ${documentFolder === folder.name ? "on" : ""}`}
+                    onClick={() => selectDocumentFolder(folder.name)}
+                  >
+                    <span>{folder.name}/</span>
+                    <i>{folder.count}</i>
+                  </button>
+                ))}
+                {rootDocuments.map((doc) => (
+                  <button
+                    type="button"
+                    key={doc.id}
+                    className={`nv ${activeDocumentId === doc.id ? "on" : ""}`}
+                    title={doc.path}
+                    onClick={() => openDocument(doc.id)}
+                  >
+                    <span>{doc.path}</span>
+                  </button>
+                ))}
               </div>
             )}
           </Fragment>

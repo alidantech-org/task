@@ -30,7 +30,8 @@ describe("BulkBar", () => {
       "Done",
     ])
       expect(markup).toContain(label);
-    expect(markup).toContain("Work");
+    expect(markup).toContain("Status…");
+    expect(markup).toContain('role="combobox"');
   });
 
   test("disables actions with nothing selected or while working", () => {

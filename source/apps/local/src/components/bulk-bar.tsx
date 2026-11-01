@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useDialogs } from "@/components/dialogs";
+import { CustomSelect } from "@/components/ui/select";
 
 type Props = {
   count: number;
@@ -14,7 +16,9 @@ type Props = {
 
 /** Changes every selected task at once; each change reports its own result. */
 export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onClear }: Props) {
+  const { confirm } = useDialogs();
   const [assignee, setAssignee] = useState("");
+  const idle = count === 0 || busy;
   const apply = (patch: Record<string, unknown>) => count > 0 && !busy && onApply(patch);
   return (
     <section className="bulk-bar" aria-label="Bulk actions">
@@ -22,42 +26,42 @@ export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onCl
       <button type="button" onClick={onSelectAll} disabled={count === total}>
         Select all {total}
       </button>
-      <select
-        aria-label="Set status"
+      <CustomSelect
+        label="Set status"
         value=""
-        disabled={count === 0 || busy}
-        onChange={(event) => event.target.value && apply({ status: event.target.value })}
-      >
-        <option value="">Status…</option>
-        <option value="planned">Planned</option>
-        <option value="in-progress">In progress</option>
-        <option value="blocked">Blocked</option>
-        <option value="completed">Completed</option>
-      </select>
-      <select
-        aria-label="Set priority"
+        placeholder="Status…"
+        disabled={idle}
+        className="bulk-select"
+        onValueChange={(status) => apply({ status })}
+        options={[
+          { value: "planned", label: "Planned", color: "var(--pl)" },
+          { value: "in-progress", label: "In progress", color: "var(--ip)" },
+          { value: "blocked", label: "Blocked", color: "var(--bl)" },
+          { value: "completed", label: "Completed", color: "var(--dn)" },
+        ]}
+      />
+      <CustomSelect
+        label="Set priority"
         value=""
-        disabled={count === 0 || busy}
-        onChange={(event) => event.target.value && apply({ priority: event.target.value })}
-      >
-        <option value="">Priority…</option>
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-        <option value="low">Low</option>
-      </select>
-      <select
-        aria-label="Move to group"
+        placeholder="Priority…"
+        disabled={idle}
+        className="bulk-select"
+        onValueChange={(priority) => apply({ priority })}
+        options={[
+          { value: "high", label: "High", color: "var(--bl)" },
+          { value: "medium", label: "Medium", color: "var(--ip)" },
+          { value: "low", label: "Low", color: "var(--pl)" },
+        ]}
+      />
+      <CustomSelect
+        label="Move to group"
         value=""
-        disabled={count === 0 || busy}
-        onChange={(event) => event.target.value && apply({ group: event.target.value })}
-      >
-        <option value="">Move to group…</option>
-        {groups.map((group) => (
-          <option key={group.id} value={group.id}>
-            {group.name}
-          </option>
-        ))}
-      </select>
+        placeholder="Move to group…"
+        disabled={idle}
+        className="bulk-select"
+        onValueChange={(group) => apply({ group })}
+        options={groups.map((group) => ({ value: group.id, label: group.name }))}
+      />
       <form
         className="bulk-assign"
         onSubmit={(event) => {
@@ -70,23 +74,23 @@ export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onCl
           onChange={(event) => setAssignee(event.target.value)}
           placeholder="Assign to…"
           aria-label="Assign to"
-          disabled={count === 0 || busy}
+          disabled={idle}
         />
       </form>
-      <button type="button" disabled={count === 0 || busy} onClick={() => apply({ archive: true })}>
+      <button type="button" disabled={idle} onClick={() => apply({ archive: true })}>
         Archive
       </button>
       <button
         type="button"
         className="bulk-danger"
-        disabled={count === 0 || busy}
+        disabled={idle}
         onClick={() => {
-          if (
-            window.confirm(
-              `Delete ${count} task${count === 1 ? "" : "s"}? They can be restored from the trash for a while.`,
-            )
-          )
-            apply({ delete: true });
+          void confirm({
+            title: `Delete ${count} task${count === 1 ? "" : "s"}?`,
+            message: "They can be restored from the trash for a while.",
+            confirmLabel: "Delete",
+            danger: true,
+          }).then((ok) => ok && apply({ delete: true }));
         }}
       >
         Delete

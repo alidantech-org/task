@@ -2232,3 +2232,90 @@ button.more:hover {
   outline: 2px solid var(--acc);
   outline-offset: -2px;
 }
+
+/* App dialogs (replace browser confirm/prompt popups) */
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgb(10 14 24 / 0.45);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.app-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 91;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
+  border: 1px solid var(--ln);
+  border-radius: 14px;
+  background: var(--pn);
+  color: var(--ink);
+  box-shadow: var(--sh);
+  transform: translate(-50%, -50%);
+}
+.app-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.app-dialog-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--mut);
+}
+.app-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--mut);
+}
+.app-dialog-field input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ln);
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 14px;
+}
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.app-dialog-danger {
+  background: var(--bl);
+  color: #fff;
+}
+
+/* Custom selects inside the filter and bulk bars, and icon-only controls in sheet rows */
+.filter-bar .fb-select,
+.bulk-bar .bulk-select {
+  width: auto;
+  min-width: 128px;
+  max-width: 220px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  gap: 8px;
+}
+.custom-select.icon,
+.date-picker.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.custom-select.icon .custom-select-dot {
+  margin: 0;
+}

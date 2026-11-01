@@ -19,7 +19,6 @@ import {
   Search,
   Sun,
   X,
-  Zap,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
@@ -35,6 +34,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDialogs } from "@/components/dialogs";
 import { GlobalNavigation } from "@/components/layout/global-navigation";
 import { ShellFrame } from "@/components/layout/shell-frame";
 import { CustomSelect } from "@/components/ui/select";
@@ -148,7 +148,6 @@ type SearchResult = {
   snippet: string;
 };
 type PaletteEntry = { key: string; label: string; detail: string; run(): void };
-type LiveChange = { id: string; name: string; status: string; changedAt: string; source: string };
 type DocumentConflict = { body: string; contentHash: string };
 type AppProps = {
   runtimeStatus: "connected" | "offline";
@@ -346,11 +345,10 @@ export function App({
   children,
 }: AppProps) {
   const router = useRouter();
+  const { confirm } = useDialogs();
   const pathname = usePathname() ?? initialPath;
   const [workspace, setWorkspace] = useState<Workspace | null>(rawWorkspace as Workspace | null);
   const [connectionStatus, setConnectionStatus] = useState(runtimeStatus);
-  const [liveOpen, setLiveOpen] = useState(false);
-  const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
   const [liveFlashId, setLiveFlashId] = useState<string | null>(null);
   const pageBodyRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<Workspace | null>(rawWorkspace as Workspace | null);
@@ -618,7 +616,6 @@ export function App({
       }
       if (event.key === "Escape") {
         setPaletteOpen(false);
-        setLiveOpen(false);
         setMobileProjectOpen(false);
         setProjectSwitcherOpen(false);
         if (dialog) setDialog(false);
@@ -734,15 +731,6 @@ export function App({
             : undefined;
           if (eventData.recordId && after && before?.contentHash !== after.contentHash) {
             const source = eventData.source ?? "External";
-            const status = after.status ?? "updated";
-            const change: LiveChange = {
-              id: after.id,
-              name: after.name,
-              status,
-              changedAt: eventData.changedAt ?? new Date().toISOString(),
-              source,
-            };
-            setLiveChanges((current) => [change, ...current].slice(0, 3));
             setLiveFlashId(after.id);
             setNotice(
               `${source} changed ${after.id}${after.status ? ` to ${statusNames[after.status] ?? after.status}` : ""}`,
@@ -1030,12 +1018,13 @@ export function App({
     record: { id: string; name: string },
     kind: "task" | "document" | "task-group",
   ): Promise<boolean> {
-    if (
-      !window.confirm(
-        `Delete "${record.name}"? It moves to the system temp folder and can be undone until that folder is cleared.`,
-      )
-    )
-      return false;
+    const accepted = await confirm({
+      title: `Delete "${record.name}"?`,
+      message: "It moves to the system temp folder and can be undone until that folder is cleared.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!accepted) return false;
     try {
       const route = kind === "task-group" ? "task-groups" : kind;
       const cascade = kind === "task-group" ? "?cascade=1" : "";
@@ -1721,6 +1710,9 @@ export function App({
             taskGroupFilter={taskGroupFilter}
             selectTaskGroup={selectTaskGroup}
             documentPaths={docs.map((doc) => doc.path)}
+            rootDocuments={docs.filter((doc) => !doc.path.includes("/"))}
+            openDocument={(id) => router.push(`/documents/${encodeURIComponent(id)}`)}
+            activeDocumentId={routeDocumentId}
             documentFolder={documentFolder}
             selectDocumentFolder={selectDocumentFolder}
           />
@@ -1772,43 +1764,6 @@ export function App({
                     <span className="sbtn-label">Search or jump to…</span>
                     <kbd>⌘K</kbd>
                   </button>
-                  <div className="lvw">
-                    <button
-                      type="button"
-                      className="live"
-                      aria-expanded={liveOpen}
-                      aria-haspopup="dialog"
-                      onClick={() => setLiveOpen((open) => !open)}
-                    >
-                      <Zap className="size-4" />
-                      <span>{connectionStatus === "connected" ? "Live" : "Offline"}</span>
-                    </button>
-                    {liveOpen && (
-                      <div className="lvp on" role="dialog" aria-label="Live sync">
-                        <b>Live sync</b>
-                        <p>
-                          Watching {workspace?.workspaceDirectory ?? "the selected workspace"}.
-                          Changes made in the workspace appear here as they are indexed.
-                        </p>
-                        <code className="cli">task move TASK-17 in-progress</code>
-                        {liveChanges.map((change) => (
-                          <p className="live-change" key={`${change.id}:${change.changedAt}`}>
-                            <span className="src">{change.source}</span>
-                            <span>
-                              {change.id} · {statusNames[change.status] ?? change.status}
-                            </span>
-                            <small>
-                              {new Date(change.changedAt).toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </small>
-                          </p>
-                        ))}
-                        {liveChanges.length === 0 && <p>No external changes yet.</p>}
-                      </div>
-                    )}
-                  </div>
                   <Button
                     variant="ghost"
                     size="icon"

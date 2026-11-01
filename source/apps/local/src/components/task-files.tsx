@@ -2,6 +2,7 @@
 
 import { Download, Link as LinkIcon, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useDialogs } from "@/components/dialogs";
 
 type Attachment = {
   kind: "file" | "link";
@@ -38,6 +39,7 @@ export function TaskFiles({
   onChanged(): void;
   onNotice(message: string): void;
 }) {
+  const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
@@ -160,14 +162,24 @@ export function TaskFiles({
                 aria-label={`Remove ${attachment.name}`}
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm(`Remove ${attachment.name}?`))
-                    void send(
-                      () =>
-                        fetch(`${base}/${encodeURIComponent(attachment.name)}`, {
-                          method: "DELETE",
-                        }),
-                      "Removed",
-                    );
+                  void confirm({
+                    title: `Remove ${attachment.name}?`,
+                    message:
+                      attachment.kind === "file"
+                        ? "The stored file is deleted."
+                        : "The link is removed.",
+                    confirmLabel: "Remove",
+                    danger: true,
+                  }).then((ok) => {
+                    if (ok)
+                      void send(
+                        () =>
+                          fetch(`${base}/${encodeURIComponent(attachment.name)}`, {
+                            method: "DELETE",
+                          }),
+                        "Removed",
+                      );
+                  });
                 }}
               >
                 <Trash2 className="size-4" />

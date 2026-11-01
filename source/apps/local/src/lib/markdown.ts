@@ -17,6 +17,25 @@ export function listDocumentFolders(paths: readonly string[]): DocumentFolder[] 
     }));
 }
 
+/** Top-level folders with their file counts; files directly in the root are not folders. */
+export function topLevelFolders(paths: readonly string[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const path of paths) {
+    const slash = path.indexOf("/");
+    if (slash <= 0) continue;
+    const name = path.slice(0, slash);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Files that sit directly in the root of the workspace. */
+export function rootFiles<T extends { path: string }>(documents: readonly T[]): T[] {
+  return documents.filter((document) => !document.path.includes("/"));
+}
+
 const taskCheckboxLine = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s+.*)$/;
 
 export function markdownChecklistProgress(body: string): { completed: number; total: number } {

@@ -30,6 +30,7 @@ import { useRouter } from "next/navigation";
 import { Dialog, DropdownMenu } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { ChangeViewer, type ViewerTarget } from "@/components/change-viewer";
+import { useDialogs } from "@/components/dialogs";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { MarkdownBody } from "@/components/markdown-body";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -139,6 +140,7 @@ export function TaskSheet() {
     setNotice,
   } = useWorkspaceApp();
   const router = useRouter();
+  const { confirm } = useDialogs();
   const [tab, setTab] = useState<TabId>("overview");
   const [width, setWidth] = useState(defaultSheetWidth);
   const [resizing, setResizing] = useState<"idle" | "drag" | "hide">("idle");
@@ -205,11 +207,16 @@ export function TaskSheet() {
     };
   }, [taskId, segmentCount, contentHash, tab === "changes"]);
 
-  function closeSheet() {
+  async function closeSheet() {
     if (
       tab === "edit" &&
       draft !== (detail?.body ?? "") &&
-      !window.confirm("Discard unsaved changes?")
+      !(await confirm({
+        title: "Discard unsaved changes?",
+        message: "Your edits to this task have not been saved.",
+        confirmLabel: "Discard",
+        danger: true,
+      }))
     )
       return;
     openRecord(null);

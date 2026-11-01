@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   appendTimestampedMarkdownComment,
   markdownChecklistProgress,
+  rootFiles,
   toggleMarkdownCheckbox,
+  topLevelFolders,
 } from "@/lib/markdown";
 
 describe("Markdown task interactions", () => {
@@ -37,5 +39,20 @@ describe("Markdown task interactions", () => {
       markdownChecklistProgress("- [x] Done\n- [ ] Open\n  1. [X] Also done\nPlain text"),
     ).toEqual({ completed: 2, total: 3 });
     expect(markdownChecklistProgress("No checklist here")).toEqual({ completed: 0, total: 0 });
+  });
+});
+
+describe("documents sidebar structure", () => {
+  test("root files are files and only real directories are folders", () => {
+    const paths = ["README.md", "AGENTS.md", "docs/a.md", "docs/sub/b.md", "decisions/0001.md"];
+    expect(topLevelFolders(paths)).toEqual([
+      { name: "decisions", count: 1 },
+      { name: "docs", count: 2 },
+    ]);
+    expect(rootFiles(paths.map((path) => ({ path }))).map((file) => file.path)).toEqual([
+      "README.md",
+      "AGENTS.md",
+    ]);
+    expect(topLevelFolders(["README.md"])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 
 import { DragOverlay, useDragDropMonitor } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
-import { Archive, Columns3, List } from "lucide-react";
+import { Columns3, List } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BoardTask, BoardTaskPreview } from "@/components/board-task";
 import { BulkBar } from "@/components/bulk-bar";
@@ -31,7 +31,6 @@ const labels: Record<string, string> = {
 };
 export function TasksPageContent() {
   const {
-    archivedTasks,
     groups,
     allGroups,
     visibleTasks,
@@ -79,7 +78,7 @@ export function TasksPageContent() {
     [visibleTasks],
   );
   const displayed = useMemo(() => {
-    const group = groups.find((item) => item.id === groupFilter);
+    const group = allGroups.find((item) => item.id === groupFilter);
     const filtered = applyFilters(visibleTasks, filters, me).filter(
       (task) => !group || task.path === group.path || task.path.startsWith(`${group.path}/`),
     );
@@ -89,7 +88,7 @@ export function TasksPageContent() {
       return position < 0 ? Number.MAX_SAFE_INTEGER : position;
     };
     return sortBoard(filtered, groupRank);
-  }, [visibleTasks, groups, groupFilter, allGroups, filters, me]);
+  }, [visibleTasks, groupFilter, allGroups, filters, me]);
   useDragDropMonitor({
     onDragEnd(event) {
       if (event.canceled) return;
@@ -155,6 +154,11 @@ export function TasksPageContent() {
           onViews={setViews}
           assignees={assignees}
           tags={labelNames}
+          groups={allGroups.filter((group) => !group.archived)}
+          groupId={groupFilter}
+          onGroup={setGroupFilter}
+          archived={taskFilter === "archived"}
+          onArchived={(archived) => setTaskFilter(archived ? "archived" : null)}
           matching={displayed.length}
         />
         {selecting && (
@@ -176,35 +180,6 @@ export function TasksPageContent() {
             }}
           />
         )}
-        <div className="chips">
-          <button
-            type="button"
-            className={`chip ${!groupFilter ? "on" : ""}`}
-            onClick={() => setGroupFilter("")}
-          >
-            All
-          </button>
-          {groups
-            .filter((group) => !group.archived && !group.finished)
-            .map((group) => (
-              <button
-                type="button"
-                key={group.id}
-                className={`chip ${groupFilter === group.id ? "on" : ""}`}
-                onClick={() => setGroupFilter(group.id)}
-              >
-                {group.name}
-              </button>
-            ))}
-          <button
-            type="button"
-            className={`chip ${taskFilter === "archived" ? "on" : ""}`}
-            style={{ marginLeft: "auto" }}
-            onClick={() => setTaskFilter(taskFilter === "archived" ? null : "archived")}
-          >
-            <Archive className="size-4" /> Archived {archivedTasks.length}
-          </button>
-        </div>
         {taskFilter !== "archived" && taskView === "Board" ? (
           <div className="board">
             {columns.map((status) => (
