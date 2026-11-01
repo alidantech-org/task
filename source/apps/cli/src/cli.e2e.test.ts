@@ -5,12 +5,18 @@ import { join } from "node:path";
 
 let root = "";
 afterEach(async () => {
+  strictQuality = false;
   if (root) await rm(root, { recursive: true, force: true });
   root = "";
 });
 
+let strictQuality = false;
+
 async function cli(workspace: string, ...args: string[]) {
   const path = join(import.meta.dir, "index.ts");
+  const config = join(root, "task.yaml");
+  if (!strictQuality && !(await Bun.file(config).exists()))
+    await Bun.write(config, 'workspace: "tasks"\nquality:\n  mode: off\n');
   return Bun.spawnSync(["bun", "run", path, ...args], {
     cwd: root,
     env: { ...process.env, TASK_WORKSPACE_ROOT: workspace },
@@ -73,6 +79,7 @@ describe("workspace-connected CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout.toString()).valid).toBe(true);
     await rm(workspace, { recursive: true, force: true });
+    await rm(join(root, "task.yaml"), { force: true });
     const missing = Bun.spawnSync(["bun", "run", join(import.meta.dir, "index.ts"), "info"], {
       cwd: root,
       env: { ...process.env, TASK_WORKSPACE_ROOT: "" },
@@ -201,6 +208,112 @@ describe("workspace-connected CLI", () => {
     expect(diff.stdout.toString()).toContain("+changed");
     const text = await cli(workspace, "changes", task.id);
     expect(text.stdout.toString()).toContain("2 file(s)");
+  });
+
+  test("the quality gate rejects scaffold-only tasks and accepts detailed ones", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-quality-"));
+    strictQuality = true;
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    const words = (count: number) =>
+      Array.from({ length: count }, (_, index) => `detail${index}`).join(" ");
+    const doc = (title: string) => `# ${title}\n\n## Details\n${words(120)}\n`;
+    await Bun.write(join(root, "goal.md"), doc("Goal"));
+    await Bun.write(join(root, "plan.md"), doc("Plan"));
+    await Bun.write(
+      join(root, "body.md"),
+      `# Task\n\n## Goal\n${words(110)}\n\n## Context\n${words(40)}\n\n## Acceptance checklist\n- [ ] First concrete step\n- [ ] Second concrete step\n- [ ] Third concrete step\n`,
+    );
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Strict", "--json")).stdout.toString(),
+    );
+    const scaffold = JSON.parse(
+      (
+        await cli(workspace, "create", "--title", "Scaffold", "--group", group.id, "--json")
+      ).stdout.toString(),
+    );
+    const rejected = await cli(workspace, "update", scaffold.id, "--status", "in-progress");
+    expect(rejected.exitCode).toBe(1);
+    expect(rejected.stderr.toString()).toContain("not detailed enough");
+    const validation = await cli(workspace, "validate", "--json");
+    expect(validation.exitCode).toBe(1);
+    expect(
+      JSON.parse(validation.stdout.toString()).diagnostics.some(
+        (item: { category?: string }) => item.category === "quality",
+      ),
+    ).toBe(true);
+    const detailed = JSON.parse(
+      (
+        await cli(
+          workspace,
+          "create",
+          "--title",
+          "Detailed",
+          "--group",
+          group.id,
+          "--body-file",
+          join(root, "body.md"),
+          "--json",
+        )
+      ).stdout.toString(),
+    );
+    const stillBlocked = await cli(workspace, "update", detailed.id, "--status", "in-progress");
+    expect(stillBlocked.stderr.toString()).toContain("goal.md");
+    const goal = await Bun.file(join(workspace, group.path, "goal.md")).text();
+    expect(goal).toContain("## Goal");
+  });
+
+  test("checklist, check and uncheck update checkboxes without editing the file", async () => {
+    root = await mkdtemp(join(tmpdir(), "task-cli-checklist-"));
+    const workspace = join(root, "tasks");
+    await mkdir(workspace);
+    await Bun.write(
+      join(root, "body.md"),
+      "# T\n\n## Design\n- [ ] one\n- [ ] two\n\n## Build\n- [ ] three\n",
+    );
+    const group = JSON.parse(
+      (await cli(workspace, "group", "create", "--title", "Boxes", "--json")).stdout.toString(),
+    );
+    const task = JSON.parse(
+      (
+        await cli(
+          workspace,
+          "create",
+          "--title",
+          "Boxes",
+          "--group",
+          group.id,
+          "--body-file",
+          join(root, "body.md"),
+          "--json",
+        )
+      ).stdout.toString(),
+    );
+    const listed = JSON.parse(
+      (await cli(workspace, "checklist", task.id, "--json")).stdout.toString(),
+    );
+    expect(listed.groups.map((entry: { heading: string }) => entry.heading)).toEqual([
+      "Design",
+      "Build",
+    ]);
+    const item = JSON.parse(
+      (await cli(workspace, "check", task.id, "--item", "2", "--json")).stdout.toString(),
+    );
+    expect(item).toMatchObject({ changed: 1, completed: 1, total: 3 });
+    const section = JSON.parse(
+      (await cli(workspace, "check", task.id, "--section", "build", "--json")).stdout.toString(),
+    );
+    expect(section.completed).toBe(2);
+    const all = JSON.parse(
+      (await cli(workspace, "check", task.id, "--all", "--json")).stdout.toString(),
+    );
+    expect(all.completed).toBe(3);
+    const cleared = JSON.parse(
+      (await cli(workspace, "uncheck", task.id, "--all", "--json")).stdout.toString(),
+    );
+    expect(cleared.completed).toBe(0);
+    expect((await cli(workspace, "check", task.id, "--json")).exitCode).toBe(1);
+    expect((await cli(workspace, "check", task.id, "--item", "9", "--json")).exitCode).toBe(1);
   });
 
   test("init configures a fresh project and supports a custom workspace", async () => {

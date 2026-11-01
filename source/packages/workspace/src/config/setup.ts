@@ -31,6 +31,18 @@ function configTemplate(workspace: string): string {
     "# Directory (relative to this file) that Task manages.",
     `workspace: ${JSON.stringify(workspace)}`,
     "",
+    "# Content-quality policy for tasks and group documents (shown with its defaults).",
+    "# reject: block starting work on thin or scaffold-only files; warn: report only; off: disable.",
+    "# quality:",
+    "#   mode: reject",
+    "#   minTaskWords: 150",
+    "#   minChecklistItems: 3",
+    "#   minGroupDocWords: 100",
+    "",
+    "# Record git-style change snapshots while a task is in progress (stored outside the project).",
+    "# tracking:",
+    "#   enabled: true",
+    "",
   ].join("\n");
 }
 

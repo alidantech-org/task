@@ -29,7 +29,11 @@ async function repository(): Promise<{ root: string; projectRoot: string; taskId
   await writeFile(join(projectRoot, "src", "a.txt"), "one\ntwo\n");
   git(projectRoot, "add", "-A");
   git(projectRoot, "commit", "-q", "-m", "initial");
-  const context = { root: join(projectRoot, "tasks"), projectRoot };
+  const context = {
+    root: join(projectRoot, "tasks"),
+    projectRoot,
+    config: { workspace: "tasks", quality: { mode: "off" as const } },
+  };
   await mkdir(context.root, { recursive: true });
   const group = await createTaskGroup(context, "Work");
   const task = await createTask(context, { title: "Tracked", group: group.id });
@@ -39,7 +43,11 @@ async function repository(): Promise<{ root: string; projectRoot: string; taskId
 describe("git change tracking", () => {
   test("records only changes made while in progress and excludes the todo folder", async () => {
     const { root: workspace, projectRoot, taskId } = await repository();
-    const context = { root: workspace, projectRoot };
+    const context = {
+      root: workspace,
+      projectRoot,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     await appendFile(join(projectRoot, "src", "a.txt"), "before start\n");
     const before = git(projectRoot, "rev-list", "--count", "HEAD");
     await updateTask(context, taskId, { status: "in-progress", track: true });
@@ -86,7 +94,11 @@ describe("git change tracking", () => {
 
   test("a second in-progress window adds a segment", async () => {
     const { root: workspace, projectRoot, taskId } = await repository();
-    const context = { root: workspace, projectRoot };
+    const context = {
+      root: workspace,
+      projectRoot,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     await updateTask(context, taskId, { status: "in-progress", track: true });
     await updateTask(context, taskId, { status: "blocked" });
     await updateTask(context, taskId, { status: "in-progress", track: true });
@@ -100,7 +112,11 @@ describe("git change tracking", () => {
 
   test("tracking requires a git repository and untracked tasks stay untracked", async () => {
     root = await mkdtemp(join(tmpdir(), "task-nogit-"));
-    const context = { root: join(root, "tasks"), projectRoot: root };
+    const context = {
+      root: join(root, "tasks"),
+      projectRoot: root,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     await mkdir(context.root, { recursive: true });
     const group = await createTaskGroup(context, "Work");
     const task = await createTask(context, { title: "Plain", group: group.id });

@@ -1,5 +1,10 @@
 import { link, lstat, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  parseQualityConfig,
+  parseTrackingConfig,
+  policyYamlLines,
+} from "@task/workspace/config/policy";
 import { WorkspaceError } from "@task/workspace/errors";
 import type { ResolvedWorkspace, WorkspaceConfig } from "@task/workspace/indexing/types";
 
@@ -36,10 +41,14 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
     throw new WorkspaceError("invalid_workspace_config", "task.yaml must contain a YAML mapping");
   }
   const record = parsed as Record<string, unknown>;
-  if (Object.keys(record).some((key) => key !== "workspace" && key !== "organization")) {
+  if (
+    Object.keys(record).some(
+      (key) => !["workspace", "organization", "quality", "tracking"].includes(key),
+    )
+  ) {
     throw new WorkspaceError(
       "invalid_workspace_config",
-      "task.yaml supports workspace and organization fields",
+      "task.yaml supports workspace, organization, quality and tracking fields",
     );
   }
   if (record.workspace !== undefined && typeof record.workspace !== "string") {
@@ -112,7 +121,14 @@ async function readConfig(projectRoot: string): Promise<WorkspaceConfig> {
           }),
     };
   }
-  return { workspace, ...(organization ? { organization } : {}) };
+  const quality = record.quality === undefined ? undefined : parseQualityConfig(record.quality);
+  const tracking = record.tracking === undefined ? undefined : parseTrackingConfig(record.tracking);
+  return {
+    workspace,
+    ...(organization ? { organization } : {}),
+    ...(quality ? { quality } : {}),
+    ...(tracking ? { tracking } : {}),
+  };
 }
 
 async function result(
@@ -153,12 +169,17 @@ export async function resolveWorkspace(
       );
     const projectRoot = dirname(root);
     let organization: WorkspaceConfig["organization"];
+    let quality: WorkspaceConfig["quality"];
+    let tracking: WorkspaceConfig["tracking"];
     try {
       const configStat = await lstat(resolve(projectRoot, "task.yaml"));
       if (!configStat.isFile()) {
         throw new WorkspaceError("invalid_workspace_config", "task.yaml must be a regular file");
       }
-      organization = (await readConfig(projectRoot)).organization;
+      const fileConfig = await readConfig(projectRoot);
+      organization = fileConfig.organization;
+      quality = fileConfig.quality;
+      tracking = fileConfig.tracking;
     } catch (error) {
       if (error instanceof WorkspaceError) throw error;
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
@@ -169,6 +190,8 @@ export async function resolveWorkspace(
       config: {
         workspace: relative(projectRoot, root) || ".",
         ...(organization ? { organization } : {}),
+        ...(quality ? { quality } : {}),
+        ...(tracking ? { tracking } : {}),
       },
       source: options.workspaceOverride ? "argument" : "environment",
     };
@@ -255,7 +278,9 @@ export async function updateWorkspaceOrganization(
         : {};
     const selectedOrganization = selected.config.organization ?? {};
     if (
-      Object.keys(parsed).some((key) => key !== "workspace" && key !== "organization") ||
+      Object.keys(parsed).some(
+        (key) => !["workspace", "organization", "quality", "tracking"].includes(key),
+      ) ||
       parsed.workspace !== selected.config.workspace ||
       currentOrganization.weekStart !== selectedOrganization.weekStart ||
       currentOrganization.autoArchiveAfterDays !== selectedOrganization.autoArchiveAfterDays
@@ -293,6 +318,7 @@ export async function updateWorkspaceOrganization(
       : [
           `  autoArchiveAfterDays: ${organizationSettings.autoArchiveAfterDays === null ? "null" : organizationSettings.autoArchiveAfterDays}`,
         ]),
+    ...policyYamlLines(selected.config),
   ];
   await writeFile(temporary, `${lines.join("\n")}\n`, { encoding: "utf8", flag: "wx" });
   if (exists) {

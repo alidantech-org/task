@@ -24,6 +24,7 @@ import {
   listTrash,
   migrateLegacyGroups,
   type ResolvedWorkspace,
+  readDocumentChecklist,
   readProjectFile,
   readWorkspaceIndex,
   replaceDocumentBody,
@@ -32,6 +33,7 @@ import {
   restoreTask,
   restoreTaskGroup,
   searchWorkspace,
+  setDocumentChecklist,
   type TaskPriority,
   updateTask,
   updateWorkspaceOrganization,
@@ -606,6 +608,55 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         send(response, 200, { diagnostics: result, requestId }, requestId);
         return;
       }
+      const checklistRoute = /^\/workspace\/(?:task|document)\/([^/]+)\/checklist$/.exec(path);
+      if (checklistRoute && (method === "GET" || method === "POST")) {
+        const identifier = decodeURIComponent(checklistRoute[1] ?? "");
+        if (method === "GET") {
+          const { document, checklist } = await readDocumentChecklist(workspace, identifier);
+          send(
+            response,
+            200,
+            {
+              id: document.metadata.id,
+              contentHash: document.contentHash,
+              ...checklist,
+              requestId,
+            },
+            requestId,
+          );
+          return;
+        }
+        const input = await readJson(request);
+        assertKeys(input, ["items", "section", "all", "checked", "expectedHash"]);
+        if (typeof input.checked !== "boolean") throw new Error("checked must be a boolean");
+        const items = Array.isArray(input.items) ? input.items : undefined;
+        if (items?.some((value) => !Number.isInteger(value) || Number(value) < 0))
+          throw new Error("items must be non-negative integers");
+        const result = await setDocumentChecklist(
+          workspace,
+          identifier,
+          {
+            ...(items ? { items: items.map(Number) } : {}),
+            ...(typeof input.section === "string" ? { section: input.section } : {}),
+            ...(input.all === true ? { all: true } : {}),
+          },
+          input.checked,
+          optionalString(input, "expectedHash"),
+        );
+        await monitor.watcher.reconcile();
+        send(
+          response,
+          200,
+          {
+            changed: result.changed,
+            document: result.document,
+            workspace: await snapshot(monitor.index),
+            requestId,
+          },
+          requestId,
+        );
+        return;
+      }
       if (path.startsWith("/workspace/document/") && method === "PATCH") {
         const input = await readJson(request, 3_000_000);
         assertKeys(input, ["body", "expectedHash"]);
@@ -778,7 +829,12 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         send(
           response,
           200,
-          { task: task.task, workspace: await snapshot(monitor.index), requestId },
+          {
+            task: task.task,
+            ...(task.warnings ? { warnings: task.warnings } : {}),
+            workspace: await snapshot(monitor.index),
+            requestId,
+          },
           requestId,
         );
         return;
@@ -892,7 +948,9 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
             ? 404
             : code === "already_exists"
               ? 409
-              : 400;
+              : code === "validation_failed"
+                ? 422
+                : 400;
       send(
         response,
         status,

@@ -41,6 +41,6 @@ describe("human output rendering", () => {
     );
     expect(rows[0]).toBe("a.md");
     expect(rows[3]).toBe("z.md");
-    expect(rows.at(-1)).toBe("3 validation issues.");
+    expect(rows.at(-1)).toBe("3 errors, 0 warnings.");
   });
 });

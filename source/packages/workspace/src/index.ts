@@ -8,6 +8,17 @@ export type { DiffFile, DiffHunk, DiffLine } from "@task/workspace/diff/parse";
 export { parseUnifiedDiff } from "@task/workspace/diff/parse";
 export { shouldIgnoreDirectory } from "@task/workspace/discovery/ignore";
 export { discoverMarkdown } from "@task/workspace/discovery/scan";
+export type {
+  Checklist,
+  ChecklistGroup,
+  ChecklistItem,
+  ChecklistSelector,
+} from "@task/workspace/documents/checklist";
+export {
+  checklistProgress,
+  parseChecklist,
+  setChecklistItems,
+} from "@task/workspace/documents/checklist";
 export { classifyDocument } from "@task/workspace/documents/classify";
 export { readWorkspaceDocument } from "@task/workspace/documents/read";
 export { WorkspaceError } from "@task/workspace/errors";
@@ -28,6 +39,8 @@ export type {
   DocumentCreateInput,
   DocumentMetadata,
   DocumentSummary,
+  QualityConfig,
+  QualityMode,
   ResolvedWorkspace,
   TaskCreateInput,
   TaskExtra,
@@ -36,6 +49,7 @@ export type {
   TaskStatus,
   TaskStatusChange,
   TaskUpdateInput,
+  TrackingConfig,
   ValidationCategory,
   ValidationDiagnostic,
   WorkspaceConfig,
@@ -44,6 +58,7 @@ export type {
 } from "@task/workspace/indexing/types";
 export type { LinkContext, LinkTarget } from "@task/workspace/links/resolve";
 export { resolveLink } from "@task/workspace/links/resolve";
+export { readDocumentChecklist } from "@task/workspace/operations/checklist";
 export type { DeleteOptions, TrashEntry, TrashKind } from "@task/workspace/operations/delete";
 export {
   deleteDocument,
@@ -64,8 +79,27 @@ export {
   replaceDocumentBody,
   restoreTask,
   restoreTaskGroup,
+  setDocumentChecklist,
   updateTask,
 } from "@task/workspace/operations/mutate";
+export type {
+  QualityFinding,
+  QualityFindingCode,
+  ResolvedQuality,
+} from "@task/workspace/operations/quality";
+export {
+  assessGroupDocBody,
+  assessTaskBody,
+  countWords,
+  defaultQuality,
+  formatFindings,
+  resolveQuality,
+} from "@task/workspace/operations/quality";
+export {
+  groupQualityFindings,
+  qualityDiagnostics,
+  taskQualityFindings,
+} from "@task/workspace/operations/quality-check";
 export type { TaskFilters } from "@task/workspace/operations/query";
 export {
   findDocument,
@@ -80,7 +114,7 @@ export {
   searchWorkspace,
 } from "@task/workspace/operations/query";
 export type { ValidationScope } from "@task/workspace/operations/validate";
-export { validateWorkspace } from "@task/workspace/operations/validate";
+export { isErrorDiagnostic, validateWorkspace } from "@task/workspace/operations/validate";
 export { resolveSafeWorkspacePath, resolveWorkspacePath } from "@task/workspace/paths/safe-path";
 export type { SelfDocumentationResult } from "@task/workspace/project/self-docs";
 export { writeSelfDocumentation } from "@task/workspace/project/self-docs";

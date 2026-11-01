@@ -7,6 +7,7 @@ import type {
   ValidationDiagnostic,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
+import { qualityDiagnostics } from "@task/workspace/operations/quality-check";
 
 export type ValidationScope = "all" | "tasks" | "docs" | "links" | "references";
 
@@ -26,6 +27,11 @@ function push(
   category: ValidationCategory,
 ): void {
   diagnostics.push({ path, message, category });
+}
+
+/** Diagnostics without an explicit severity are errors. */
+export function isErrorDiagnostic(diagnostic: ValidationDiagnostic): boolean {
+  return diagnostic.severity !== "warning";
 }
 
 export async function validateWorkspace(
@@ -160,6 +166,7 @@ export async function validateWorkspace(
     }
   }
 
+  diagnostics.push(...(await qualityDiagnostics(context)));
   if (scope === "all") return diagnostics;
   if (scope === "tasks")
     return diagnostics.filter((diagnostic) => {
@@ -168,6 +175,7 @@ export async function validateWorkspace(
         diagnostic.category !== "link" &&
         (document?.metadata.type === "task" ||
           diagnostic.category === "group" ||
+          diagnostic.category === "quality" ||
           diagnostic.category === "dependency" ||
           diagnostic.category === "reference")
       );

@@ -198,6 +198,9 @@ export async function listTaskGroups(context: WorkspaceContext): Promise<TaskGro
         name: plan.metadata.name,
         slug,
         path: groupPath,
+        ...(index.documents.get(`${groupPath}/goal.md`)
+          ? { goalId: index.documents.get(`${groupPath}/goal.md`)?.metadata.id }
+          : {}),
         archived,
         finished:
           finished ||

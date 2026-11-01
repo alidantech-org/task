@@ -146,7 +146,10 @@ describe("task operations", () => {
 
   test("rolls old groups into year folders and auto-archives resolved groups by age", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const oldCreatedAt = "2025-06-01T12:00:00.000Z";
     const completedGroup = await createTaskGroup(context, "Old resolved group");
     const completedTask = await createTask(context, {
@@ -208,7 +211,10 @@ describe("task operations", () => {
 
   test("keeps current resolved groups active when automatic archiving is disabled", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Manual archive only");
     const task = await createTask(context, { group: group.id, title: "Stay visible" });
     await updateTask(context, task.metadata.id, { status: "completed" });
@@ -220,7 +226,10 @@ describe("task operations", () => {
 
   test("migrates a legacy flat group while preserving IDs and Markdown", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Legacy project");
     const task = await createTask(context, {
       group: group.id,
@@ -245,7 +254,10 @@ describe("task operations", () => {
 
   test("creates numbered tasks with defaults, filters and body preserving updates", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Workspace engine");
     const task = await createTask(context, {
       group: group.id,
@@ -282,7 +294,10 @@ describe("task operations", () => {
 
   test("records only real status transitions and validates the history shape", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Status history");
     const task = await createTask(context, { group: group.id, title: "Track transitions" });
     expect(task.metadata.extra?.status_history).toBeUndefined();
@@ -319,7 +334,10 @@ describe("task operations", () => {
 
   test("validates and persists explicit schedule dates", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Schedule fixture");
     const task = await createTask(context, {
       group: group.id,
@@ -336,7 +354,10 @@ describe("task operations", () => {
 
   test("rejects updates against a stale task content hash", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Concurrent edits");
     const task = await createTask(context, { group: group.id, title: "Avoid overwriting" });
     await updateTask(context, task.metadata.id, { status: "in-progress" });
@@ -347,7 +368,10 @@ describe("task operations", () => {
 
   test("keeps completed tasks in place and archives/restores resolved groups by group ID", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Release prep");
     const task = await createTask(context, { group: group.id, title: "Ship it" });
     const updated = await updateTask(context, task.metadata.id, { status: "completed" });
@@ -372,7 +396,10 @@ describe("task operations", () => {
 
   test("archives a task in place and restores its previous status", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Partial work");
     const task = await createTask(context, { group: group.id, title: "Pause this" });
     const started = await updateTask(context, task.metadata.id, { status: "in-progress" });
@@ -387,7 +414,10 @@ describe("task operations", () => {
 
   test("allows changing a task status from inside an archived group and restores its folder", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Status from archive");
     const task = await createTask(context, { group: group.id, title: "Return to planned" });
     await updateTask(context, task.metadata.id, { status: "completed" });
@@ -409,7 +439,10 @@ describe("task operations", () => {
 
   test("searches document bodies, detects references, and protects explicit reads", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Search fixture");
     const task = await createTask(context, {
       group: group.id,
@@ -424,7 +457,10 @@ describe("task operations", () => {
 
   test("reports duplicate task IDs, dependency cycles and broken local links", async () => {
     const { workspace } = await project();
-    const context = { root: workspace };
+    const context = {
+      root: workspace,
+      config: { workspace: "tasks", quality: { mode: "off" as const } },
+    };
     const group = await createTaskGroup(context, "Validation fixture");
     const first = await createTask(context, { group: group.id, title: "First" });
     const second = await createTask(context, { group: group.id, title: "Second" });

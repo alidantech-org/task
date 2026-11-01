@@ -128,6 +128,7 @@ describe("local runtime HTTP boundary", () => {
       await mkdir(context.root, { recursive: true });
       const group = await createTaskGroup(context, "Work");
       const task = await createTask(context, { title: "Tracked", group: group.id });
+      await writeFile(join(root, "task.yaml"), 'workspace: "tasks"\nquality:\n  mode: off\n');
       await configureWorkspace(root);
       const currentServer = createLocalServer();
       server = currentServer;
@@ -200,6 +201,49 @@ describe("local runtime HTTP boundary", () => {
       expect((await get("missing.ts")).status).toBe(404);
       expect((await get("src/app.ts", {})).status).toBe(401);
       expect((await get("src/app.ts", { method: "POST", headers })).status).toBe(404);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reads and updates checklists through the runtime with hash protection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-runtime-checklist-"));
+    try {
+      await mkdir(join(root, "tasks"), { recursive: true });
+      await writeFile(
+        join(root, "tasks", "list.md"),
+        "---\nid: D-LIST\nname: List\ntype: documentation\n---\n\n## A\n- [ ] one\n- [ ] two\n\n## B\n- [ ] three\n",
+      );
+      await configureWorkspace(root);
+      const currentServer = createLocalServer();
+      server = currentServer;
+      await new Promise<void>((resolve) => currentServer.listen(0, "127.0.0.1", resolve));
+      const address = currentServer.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP address");
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const { capability } = (await (await fetch(`${baseUrl}/internal/session`)).json()) as {
+        capability: string;
+      };
+      const headers = { "x-task-capability": capability, "content-type": "application/json" };
+      const read = (await (
+        await fetch(`${baseUrl}/workspace/document/D-LIST/checklist`, { headers })
+      ).json()) as { total: number; contentHash: string; groups: { heading: string }[] };
+      expect(read.total).toBe(3);
+      expect(read.groups.map((group) => group.heading)).toEqual(["A", "B"]);
+      const post = (body: object) =>
+        fetch(`${baseUrl}/workspace/document/D-LIST/checklist`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+      const section = await post({ section: "A", checked: true, expectedHash: read.contentHash });
+      expect(section.status).toBe(200);
+      expect(((await section.json()) as { changed: number }).changed).toBe(2);
+      const stale = await post({ all: true, checked: true, expectedHash: read.contentHash });
+      expect(stale.status).toBe(409);
+      expect((await post({ items: [99], checked: true })).status).toBe(400);
+      expect((await post({ all: true })).status).toBe(400);
+      expect(await readFile(join(root, "tasks", "list.md"), "utf8")).toContain("- [x] one");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -293,6 +337,7 @@ describe("local runtime HTTP boundary", () => {
     const root = await mkdtemp(join(tmpdir(), "task-runtime-settings-"));
     try {
       await mkdir(join(root, "tasks"), { recursive: true });
+      await writeFile(join(root, "task.yaml"), 'workspace: "tasks"\nquality:\n  mode: off\n');
       await configureWorkspace(root);
       const currentServer = createLocalServer();
       server = currentServer;
@@ -328,6 +373,7 @@ describe("local runtime HTTP boundary", () => {
     try {
       await mkdir(join(root, "tasks"), { recursive: true });
       await writeFile(join(root, "tasks", "one.md"), "---\nid: T-1\nname: One\ntype: task\n---\n");
+      await writeFile(join(root, "task.yaml"), 'workspace: "tasks"\nquality:\n  mode: off\n');
       await configureWorkspace(root);
       const monitor = await monitorWorkspace(root);
       expect(monitor.index.documents.size).toBe(1);

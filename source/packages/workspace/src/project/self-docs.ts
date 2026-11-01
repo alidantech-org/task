@@ -1,6 +1,8 @@
 import { lstat, open, realpath } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { serializeMarkdown } from "@task/workspace/indexing/metadata";
+import type { QualityConfig } from "@task/workspace/indexing/types";
+import { resolveQuality } from "@task/workspace/operations/quality";
 import {
   applyProjectSetupPlan,
   managedSection,
@@ -32,6 +34,7 @@ async function exists(path: string): Promise<boolean> {
 export async function writeSelfDocumentation(options: {
   projectRoot: string;
   workspaceRoot: string;
+  quality?: QualityConfig;
 }): Promise<SelfDocumentationResult> {
   const projectRoot = await realpath(options.projectRoot);
   const workspaceRoot = await realpath(options.workspaceRoot);
@@ -83,6 +86,22 @@ export async function writeSelfDocumentation(options: {
       mode: "managed-section",
     });
   }
+  const quality = resolveQuality({ workspace: workspacePath, quality: options.quality });
+  changes.push({
+    path: "rules/task-writing.md",
+    content: serializeMarkdown(
+      {
+        id: "RULE-TASK-WRITING",
+        name: "Task writing standard",
+        type: "rule",
+        tags: ["task", "agent-guidance"],
+        extra: { generated_by: "task init" },
+      },
+      await renderTemplate("task-writing-rule.hbs", { ...data, ...quality }, context),
+    ),
+    purpose: "Teach agents how to write detailed tasks and group documents.",
+    mode: "create",
+  });
   const plan: ProjectSetupPlan = {
     schemaVersion: 1,
     projectRoot,

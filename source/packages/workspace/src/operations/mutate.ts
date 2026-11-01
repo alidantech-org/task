@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { type ChecklistSelector, setChecklistItems } from "@task/workspace/documents/checklist";
 import { WorkspaceError } from "@task/workspace/errors";
 import { endTracking, startTracking } from "@task/workspace/git/tracking";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
@@ -15,6 +16,8 @@ import type {
   TaskUpdateInput,
   WorkspaceContext,
 } from "@task/workspace/indexing/types";
+import { formatFindings, resolveQuality } from "@task/workspace/operations/quality";
+import { taskQualityFindings } from "@task/workspace/operations/quality-check";
 import { findDocument, findGroup, listTaskGroups } from "@task/workspace/operations/query";
 import { resolveSafeWorkspacePath } from "@task/workspace/paths/safe-path";
 
@@ -134,8 +137,31 @@ async function replaceFile(
   }
 }
 
-function taskBody(title: string, description?: string): string {
-  return `# ${title}\n${description?.trim() ? `\n${description.trim()}\n` : "\n"}`;
+function taskBody(title: string, description?: string, body?: string): string {
+  if (body?.trim()) return `${body.trimEnd()}\n`;
+  return [
+    `# ${title}`,
+    "",
+    "## Goal",
+    "",
+    ...(description?.trim() ? [description.trim(), ""] : []),
+    "<!-- Why this work matters and the outcome it must produce. Write full sentences. -->",
+    "",
+    "## Context",
+    "",
+    "<!-- Background, constraints, related documents and decisions. -->",
+    "",
+    "## Acceptance checklist",
+    "",
+    '<!-- One concrete "- [ ]" step per deliverable. Keep all steps in this one file. -->',
+    "",
+  ].join("\n");
+}
+
+function groupScaffold(name: string, kind: "goal" | "plan"): string {
+  return kind === "goal"
+    ? `# ${name} goal\n\n## Goal\n\n<!-- What this group of work achieves and why. -->\n\n## Success criteria\n\n<!-- Observable results that mean the goal is met. -->\n\n## Scope\n\n<!-- What is in and out of scope. -->\n`
+    : `# ${name} plan\n\n## Approach\n\n<!-- How the work will be done. -->\n\n## Milestones\n\n<!-- Ordered steps or phases. -->\n\n## Risks and open questions\n\n<!-- Unknowns and how to resolve them. -->\n`;
 }
 
 export function getTaskGroupWeekPath(
@@ -218,7 +244,11 @@ async function validateDependencies(
   }
 }
 
-export async function createTaskGroup(context: WorkspaceContext, name: string): Promise<TaskGroup> {
+export async function createTaskGroup(
+  context: WorkspaceContext,
+  name: string,
+  options: { goal?: string; plan?: string } = {},
+): Promise<TaskGroup> {
   const cleanName = name.trim();
   if (!cleanName) throw new WorkspaceError("invalid_input", "Group name is required");
   const slug = slugify(cleanName);
@@ -240,14 +270,33 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
     type: "documentation",
     extra: { created_at: new Date().toISOString() },
   };
+  const goalId = `GOAL-${groupId}`;
+  const goal = {
+    id: goalId,
+    name: `${cleanName} goal`,
+    type: "documentation",
+    extra: { created_at: new Date().toISOString(), group: groupId },
+  };
   try {
     await createFile(
       context,
       `${relativePath}/plan.md`,
-      serializeMarkdown(plan, `# ${cleanName}\n\n## Goal\n\n## Scope\n\n## Notes\n`),
+      serializeMarkdown(
+        plan,
+        options.plan?.trim() ? `${options.plan.trimEnd()}\n` : groupScaffold(cleanName, "plan"),
+      ),
+    );
+    await createFile(
+      context,
+      `${relativePath}/goal.md`,
+      serializeMarkdown(
+        goal,
+        options.goal?.trim() ? `${options.goal.trimEnd()}\n` : groupScaffold(cleanName, "goal"),
+      ),
     );
   } catch (error) {
     await rm(join(groupPath, "plan.md"), { force: true });
+    await rm(join(groupPath, "goal.md"), { force: true });
     await rmdir(groupPath).catch(() => undefined);
     throw error;
   }
@@ -256,6 +305,7 @@ export async function createTaskGroup(context: WorkspaceContext, name: string): 
     name: cleanName,
     slug,
     path: relativePath,
+    goalId,
     archived: false,
     total: 0,
     completed: 0,
@@ -318,7 +368,7 @@ export async function createTask(
       await createFile(
         context,
         path,
-        serializeMarkdown(values, taskBody(title, input.description)),
+        serializeMarkdown(values, taskBody(title, input.description, input.body)),
       );
       const index = await buildWorkspaceIndex(context);
       const summary = index.documents.get(path);
@@ -343,7 +393,7 @@ export async function updateTask(
   identifier: string,
   input: TaskUpdateInput,
   expectedHash?: string,
-): Promise<{ task: DocumentSummary; completedGroup?: TaskGroup }> {
+): Promise<{ task: DocumentSummary; completedGroup?: TaskGroup; warnings?: string[] }> {
   const index = await buildWorkspaceIndex(context);
   const task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
@@ -356,6 +406,25 @@ export async function updateTask(
   const parsed = parseFrontmatter(content);
   const values = { ...parsed.values };
   const previousStatus = (values.status ?? "planned") as TaskStatus;
+  let warnings: string[] | undefined;
+  if (
+    input.status !== undefined &&
+    previousStatus === "planned" &&
+    ["in-progress", "blocked", "completed"].includes(input.status)
+  ) {
+    const quality = resolveQuality(context.config);
+    if (quality.mode !== "off") {
+      const findings = await taskQualityFindings(context, task, parsed.body, quality);
+      if (findings.length > 0) {
+        if (quality.mode === "reject")
+          throw new WorkspaceError(
+            "validation_failed",
+            formatFindings(`Task ${task.metadata.id}`, findings),
+          );
+        warnings = findings.map((finding) => finding.message);
+      }
+    }
+  }
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) throw new WorkspaceError("invalid_input", "Task title cannot be empty");
@@ -472,7 +541,7 @@ export async function updateTask(
       }
     }
   }
-  return { task: updatedTask };
+  return { task: updatedTask, ...(warnings ? { warnings } : {}) };
 }
 
 export async function replaceDocumentBody(
@@ -488,6 +557,37 @@ export async function replaceDocumentBody(
   const parsed = parseFrontmatter(current);
   await replaceFile(context, document.path, serializeMarkdown(parsed.values, body), expectedHash);
   return findDocument(await buildWorkspaceIndex(context), identifier);
+}
+
+/** Checks or unchecks checklist items in a document body and saves it with an optimistic hash check. */
+export async function setDocumentChecklist(
+  context: WorkspaceContext,
+  identifier: string,
+  selector: ChecklistSelector,
+  checked: boolean,
+  expectedHash?: string,
+): Promise<{ document: DocumentSummary; changed: number; selected: number }> {
+  const document = findDocument(await buildWorkspaceIndex(context), identifier);
+  const path = await resolveSafeWorkspacePath(context.root, document.path);
+  const parsed = parseFrontmatter(await Bun.file(path).text());
+  let result: ReturnType<typeof setChecklistItems>;
+  try {
+    result = setChecklistItems(parsed.body, selector, checked);
+  } catch (error) {
+    throw new WorkspaceError(
+      "invalid_input",
+      error instanceof Error ? error.message : "Invalid checklist selection",
+      { cause: error },
+    );
+  }
+  if (result.changed === 0) return { document, changed: 0, selected: result.selected };
+  const updated = await replaceDocumentBody(
+    context,
+    identifier,
+    result.body,
+    expectedHash ?? document.contentHash,
+  );
+  return { document: updated, changed: result.changed, selected: result.selected };
 }
 
 export async function createDocument(

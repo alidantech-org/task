@@ -59,8 +59,15 @@ export type ValidationCategory =
   | "dependency"
   | "link"
   | "group"
-  | "path";
-export type ValidationDiagnostic = { path: string; message: string; category?: ValidationCategory };
+  | "path"
+  | "quality";
+export type ValidationSeverity = "error" | "warning";
+export type ValidationDiagnostic = {
+  path: string;
+  message: string;
+  category?: ValidationCategory;
+  severity?: ValidationSeverity;
+};
 export type WorkspaceIndex = {
   root: string;
   documents: ReadonlyMap<string, DocumentSummary>;
@@ -68,9 +75,19 @@ export type WorkspaceIndex = {
   scannedAt: number;
   fingerprints: ReadonlyMap<string, string>;
 };
+export type QualityMode = "reject" | "warn" | "off";
+export type QualityConfig = {
+  mode?: QualityMode;
+  minTaskWords?: number;
+  minChecklistItems?: number;
+  minGroupDocWords?: number;
+};
+export type TrackingConfig = { enabled?: boolean };
 export type WorkspaceConfig = {
   workspace: string;
   organization?: { weekStart?: number; autoArchiveAfterDays?: number | null };
+  quality?: QualityConfig;
+  tracking?: TrackingConfig;
 };
 export type ResolvedWorkspace = {
   root: string;
@@ -83,6 +100,8 @@ export type TaskGroup = {
   name: string;
   slug: string;
   path: string;
+  /** Id of the group's goal.md document, when it exists. */
+  goalId?: string;
   archived: boolean;
   finished?: boolean;
   total: number;
@@ -94,6 +113,8 @@ export type TaskCreateInput = {
   title: string;
   group: string;
   description?: string;
+  /** Full Markdown body; replaces the generated scaffold. */
+  body?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
   assignee?: string;
@@ -104,7 +125,9 @@ export type TaskCreateInput = {
   dependsOn?: readonly string[];
   extra?: Readonly<Record<string, unknown>>;
 };
-export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "group" | "description" | "dueAt">> & {
+export type TaskUpdateInput = Partial<
+  Omit<TaskCreateInput, "group" | "description" | "body" | "dueAt">
+> & {
   title?: string;
   dueAt?: string | null;
   hiddenFromRecent?: boolean;

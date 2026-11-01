@@ -43,6 +43,9 @@ export function getCliMetadata(version: string): CliMetadata {
       "edit",
       "archive",
       "restore",
+      "checklist",
+      "check",
+      "uncheck",
       "delete",
       "undelete",
       "trash",
@@ -81,6 +84,7 @@ const booleanOptions = new Set([
   "force",
   "cascade",
   "track",
+  "all",
 ]);
 const valueOptions = new Set([
   "workspace",
@@ -108,6 +112,11 @@ const valueOptions = new Set([
   "agents",
   "diff",
   "segment",
+  "body-file",
+  "item",
+  "section",
+  "goal-file",
+  "plan-file",
 ]);
 
 export function parseArgs(args: readonly string[]): ParsedArgs {

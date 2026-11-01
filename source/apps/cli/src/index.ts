@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { confirm, isCancel, multiselect, outro, select } from "@clack/prompts";
-import type { DocumentSummary, SetupSelection } from "@task/workspace";
+import type { DocumentSummary, QualityConfig, SetupSelection } from "@task/workspace";
 import {
   applyProjectSetupPlan,
   archiveTask,
@@ -23,12 +23,14 @@ import {
   getTaskFileDiff,
   initializeWorkspace,
   inspectProject,
+  isErrorDiagnostic,
   listDocuments,
   listTaskGroups,
   listTasks,
   listTrash,
   listWorkspaceTree,
   migrateLegacyGroups,
+  readDocumentChecklist,
   readWorkspaceIndex,
   replaceDocumentBody,
   resolveWorkspace,
@@ -36,6 +38,7 @@ import {
   restoreTask,
   restoreTaskGroup,
   searchWorkspace,
+  setDocumentChecklist,
   updateTask,
   validateWorkspace,
   WorkspaceError,
@@ -133,6 +136,8 @@ function printHelp(): void {
     "  restore <task-or-group> Restore an archived task or group",
     "  start <id> [--track]   Move a task to in-progress, optionally recording git changes",
     "  changes <id> [--diff <path>]  Show git changes made while the task was in progress",
+    "  checklist <id>         Show a task's checkboxes grouped by heading",
+    '  check|uncheck <id> (--item N | --section "Heading" | --all)  Tick checkboxes without editing the file',
     "  delete <id> [--yes] [--force] [--cascade]  Move a task, group or document to the temp trash",
     "  undelete <trash-id>    Restore a deleted item from the trash",
     "  trash list             List items that can be undeleted",
@@ -203,6 +208,22 @@ function extraOption(): Record<string, unknown> | undefined {
     throw new WorkspaceError("invalid_input", "--extra must be a JSON object");
   }
   return parsed as Record<string, unknown>;
+}
+
+async function readTextInput(source: string): Promise<string> {
+  const text = source === "-" ? await Bun.stdin.text() : await Bun.file(source).text();
+  if (text.length > 1_000_000) throw new WorkspaceError("invalid_input", `${source} is too large`);
+  return text;
+}
+
+async function optionalTextFile(option: string): Promise<string | undefined> {
+  const source = optionString(args, option);
+  return source === undefined ? undefined : readTextInput(source);
+}
+
+function printWarnings(warnings: readonly string[] | undefined): void {
+  for (const warning of warnings ?? [])
+    emitError(outputContext, `${stderrSymbols.warning} ${warning}`, false);
 }
 
 async function promptText(message: string, placeholder?: string): Promise<string> {
@@ -345,6 +366,7 @@ async function main(): Promise<void> {
     let projectRoot: string;
     let workspaceRoot: string;
     let createdWorkspace = false;
+    let existingQuality: QualityConfig | undefined;
     if (refreshDocs) {
       const existing = await resolveWorkspace({
         workspaceOverride: optionString(args, "workspace"),
@@ -352,6 +374,7 @@ async function main(): Promise<void> {
       });
       projectRoot = existing.projectRoot;
       workspaceRoot = existing.root;
+      existingQuality = existing.config.quality;
     } else {
       const initialized = await initializeWorkspace({
         projectRoot: process.cwd(),
@@ -361,7 +384,11 @@ async function main(): Promise<void> {
       workspaceRoot = initialized.root;
       createdWorkspace = initialized.createdWorkspace;
     }
-    const documentation = await writeSelfDocumentation({ projectRoot, workspaceRoot });
+    const documentation = await writeSelfDocumentation({
+      projectRoot,
+      workspaceRoot,
+      quality: existingQuality,
+    });
     const result = {
       workspace: workspaceRoot,
       config: join(projectRoot, "task.yaml"),
@@ -634,7 +661,10 @@ async function main(): Promise<void> {
       let name = optionString(args, "title");
       if (!name && isInteractive()) name = await promptText("Group name", "title");
       if (!name) throw new WorkspaceError("invalid_input", "Provide --title <name>");
-      const group = await createTaskGroup(context, name);
+      const group = await createTaskGroup(context, name, {
+        goal: await optionalTextFile("goal-file"),
+        plan: await optionalTextFile("plan-file"),
+      });
       if (json) output(group);
       else
         line(
@@ -791,6 +821,7 @@ async function main(): Promise<void> {
       title,
       group,
       description: optionString(args, "description"),
+      body: await optionalTextFile("body-file"),
       status: enumOption("status", taskStatuses),
       priority: enumOption("priority", taskPriorities),
       assignee: optionString(args, "assignee"),
@@ -855,7 +886,8 @@ async function main(): Promise<void> {
       extra,
       track,
     });
-    if (json) output(record(result.task));
+    printWarnings(result.warnings);
+    if (json) output({ ...record(result.task), warnings: result.warnings });
     else {
       line(
         renderMessage(
@@ -903,7 +935,8 @@ async function main(): Promise<void> {
       status: "in-progress",
       track: args.options.has("track"),
     });
-    if (json) output(record(result.task));
+    printWarnings(result.warnings);
+    if (json) output({ ...record(result.task), warnings: result.warnings });
     else
       line(
         renderMessage(
@@ -968,6 +1001,68 @@ async function main(): Promise<void> {
           "requested",
         );
     }
+    return;
+  }
+
+  if (command === "checklist") {
+    const identifier = args.positionals[0];
+    if (!identifier) throw new WorkspaceError("invalid_input", "Usage: task checklist <id>");
+    const { document, checklist } = await readDocumentChecklist(context, identifier);
+    if (json) output({ id: document.metadata.id, contentHash: document.contentHash, ...checklist });
+    else {
+      line(
+        `${document.metadata.name} · ${checklist.completed}/${checklist.total} done`,
+        "requested",
+      );
+      for (const group of checklist.groups) {
+        line(`${group.heading || "(no heading)"}`, "requested");
+        for (const item of group.items)
+          line(`  ${item.index + 1}. [${item.checked ? "x" : " "}] ${item.text}`, "requested");
+      }
+    }
+    return;
+  }
+
+  if (command === "check" || command === "uncheck") {
+    const identifier = args.positionals[0];
+    const usage = `Usage: task ${command} <id> (--item N[,N] | --section "Heading" | --all)`;
+    if (!identifier) throw new WorkspaceError("invalid_input", usage);
+    const itemOption = optionString(args, "item");
+    const section = optionString(args, "section");
+    const all = args.options.has("all");
+    if ([itemOption !== undefined, section !== undefined, all].filter(Boolean).length !== 1)
+      throw new WorkspaceError("invalid_input", usage);
+    const items = itemOption?.split(",").map((value) => Number(value.trim()) - 1);
+    if (items?.some((value) => !Number.isInteger(value) || value < 0))
+      throw new WorkspaceError("invalid_input", "--item takes 1-based item numbers");
+    const result = await setDocumentChecklist(
+      context,
+      identifier,
+      {
+        ...(items ? { items } : {}),
+        ...(section !== undefined ? { section } : {}),
+        ...(all ? { all } : {}),
+      },
+      command === "check",
+    );
+    const progress = (await readDocumentChecklist(context, identifier)).checklist;
+    if (json)
+      output({
+        id: result.document.metadata.id,
+        changed: result.changed,
+        completed: progress.completed,
+        total: progress.total,
+      });
+    else
+      line(
+        renderMessage(
+          "success",
+          `${result.changed} item(s) ${command === "check" ? "checked" : "unchecked"} · ${progress.completed}/${progress.total} done`,
+          stdoutStyle,
+          stdoutSymbols,
+        ),
+        "requested",
+      );
     return;
   }
 
@@ -1060,7 +1155,8 @@ async function main(): Promise<void> {
         "Validation scope must be all, tasks, docs, links, or references",
       );
     const diagnostics = await validateWorkspace(context, scope);
-    if (json) output({ valid: diagnostics.length === 0, diagnostics });
+    const errors = diagnostics.filter(isErrorDiagnostic);
+    if (json) output({ valid: errors.length === 0, diagnostics });
     else if (!diagnostics.length)
       line(
         renderMessage("success", "Workspace is valid.", stdoutStyle, stdoutSymbols),
@@ -1069,7 +1165,7 @@ async function main(): Promise<void> {
     else
       for (const rendered of renderDiagnostics(diagnostics, stderrStyle, stderrSymbols))
         console.error(rendered);
-    if (diagnostics.length) process.exitCode = 1;
+    if (errors.length) process.exitCode = 1;
     return;
   }
 
@@ -1142,7 +1238,7 @@ async function main(): Promise<void> {
       const diagnostics = await validateWorkspace(context);
       const result = {
         documents: index.documents.size,
-        valid: diagnostics.length === 0,
+        valid: !diagnostics.some(isErrorDiagnostic),
         diagnostics,
       };
       if (json) output(result);

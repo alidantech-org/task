@@ -2,9 +2,11 @@
 
 This project manages its work with Task (`taskcode`; `task` and `tc` are aliases). Task records, documents, decisions and handoffs live in `{{workspacePath}}/` as Markdown files with YAML frontmatter. Read `{{workspacePath}}/README.md` for how the tool works.
 
+- **Write detailed tasks.** Task rejects scaffold-only or thin files: one task file per piece of work, with a Goal, Context and an Acceptance checklist of at least a few `- [ ]` steps ("task create --body-file"). Groups need detailed `goal.md` and `plan.md`. Read `{{workspacePath}}/rules/task-writing.md` before creating work, and update the same file in follow-ups.
+- Tick checkboxes with `task check <id> --item N | --section "Heading" | --all` instead of hand-editing.
 - Create and change tasks through the CLI (`task create`, `task update <id> --status in-progress`) rather than keeping a separate TODO list. Do not hand-edit `id`, `status_history` or other managed frontmatter.
 - Use `--json` for machine-readable output; commands exit non-zero on failure, and outside an interactive terminal they require explicit arguments instead of prompting.
-- When starting work in a git repository, use `task start <id> --track` so `task changes <id>` can show what the task changed.
+- Moving a task to `in-progress` records the project's file changes automatically (with or without Git); `task changes <id>` shows what the task changed.
 - Deleting is recoverable only briefly: `task delete <id> --yes` moves items to the OS temp folder; restore with `task undelete <trash-id>`. Prefer `task archive` for work that should be kept.
 - Run `task validate` after editing anything inside `{{workspacePath}}/`. Every Markdown file there needs valid frontmatter.
 - Record meaningful decisions in `{{workspacePath}}/decisions/` and agent handoffs in `{{workspacePath}}/handoffs/`.

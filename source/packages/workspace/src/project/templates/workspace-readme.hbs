@@ -19,6 +19,8 @@ Folders are created when first needed. The workspace location is set in `task.ya
 
 ## Rules
 
+- Write detailed, purposeful tasks and group documents: see `rules/task-writing.md`. Scaffold-only files are rejected when you try to start them.
+- Every group has `goal.md` and `plan.md` (README.md optional).
 - Every Markdown file in this workspace starts with YAML frontmatter that includes `id`, `name` and `type`. Unknown top-level fields are invalid; put supplemental data under `extra`.
 - Ids (`TSK-…`, `GRP-…`, `DOC-…`) are stable. Never change or reuse them.
 - Task status is `planned`, `in-progress`, `blocked` or `completed`. Status changes are recorded in `extra.status_history` by the tool; do not edit it by hand.
@@ -31,10 +33,13 @@ Folders are created when first needed. The workspace location is set in `task.ya
 | `task` | Workspace overview |
 | `task list` | List active tasks (`--archived` for archived) |
 | `task show <id>` | Show a task or document |
-| `task create --title "…" --group <id>` | Create a task in a group |
+| `task create --title "…" --group <id> --body-file task.md` | Create a detailed task in a group (a bare create writes only a scaffold that cannot start) |
+| `task group create --title "…" --goal-file goal.md --plan-file plan.md` | Create a group with its goal and plan |
 | `task update <id> --status in-progress` | Change task fields |
 | `task edit <id>` | Edit a task's Markdown body |
-| `task start <id> --track` | Move to in-progress and record git changes (project must be a git repository; `todo/` changes are ignored) |
+| `task start <id>` | Move to in-progress; project file changes are recorded automatically (stored outside the project, `todo/` ignored) |
+| `task checklist <id>` | Show a task's checkboxes grouped by heading |
+| `task check <id> --item N \| --section "Heading" \| --all` | Tick checkboxes (`task uncheck` reverses); no manual editing needed |
 | `task changes <id>` / `--diff <path>` | Show files, line counts and diffs made while the task was in progress |
 | `task archive <id>` / `task restore <id>` | Archive or restore a task or group |
 | `task docs list` / `task docs create` | Work with documents |
