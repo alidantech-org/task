@@ -26,7 +26,7 @@ export function internalHref(
     const lines = target.startLine
       ? `&L=${target.startLine}${target.endLine ? `-${target.endLine}` : ""}`
       : "";
-    return `/files?path=${encodeURIComponent(target.path)}${lines}`;
+    return `/code?path=${encodeURIComponent(target.path)}${lines}`;
   }
   if (target.kind === "anchor") return `#${target.anchor}`;
   return undefined;

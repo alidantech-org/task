@@ -57,6 +57,14 @@ describe("applyFilters", () => {
     expect(isFiltering({ ...emptyFilters, tag: "x" })).toBe(true);
   });
 
+  test("filters by status and treats Any status as no status filter", () => {
+    expect(names({ status: "planned" })).toEqual(["Fix login", "Write docs"]);
+    expect(names({ status: "completed" })).toEqual(["Plan release"]);
+    expect(names({ status: "blocked" })).toEqual([]);
+    expect(names({ status: "" })).toHaveLength(4);
+    expect(isFiltering({ ...emptyFilters, status: "blocked" })).toBe(true);
+  });
+
   test("filters by due state and ignores finished work for overdue", () => {
     expect(names({ due: "overdue" })).toEqual(["Fix login"]);
     expect(names({ due: "week" })).toEqual(["Write docs"]);
@@ -74,5 +82,13 @@ describe("saved views", () => {
     expect(second).toHaveLength(1);
     expect(second[0]?.filters.tag).toBe("bug");
     expect(upsertView(first, "  ", emptyFilters)).toHaveLength(1);
+  });
+
+  test("preserves status filters in saved views", () => {
+    const filters = { ...emptyFilters, status: "in-progress" as const };
+    const saved = upsertView([], "In progress", filters);
+    expect(isSavedViews(saved)).toBe(true);
+    expect(saved[0]?.filters.status).toBe("in-progress");
+    expect(isSavedViews([{ id: "legacy", name: "Legacy", filters: emptyFilters }])).toBe(true);
   });
 });

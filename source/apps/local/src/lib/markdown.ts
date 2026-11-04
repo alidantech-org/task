@@ -17,6 +17,33 @@ export function listDocumentFolders(paths: readonly string[]): DocumentFolder[] 
     }));
 }
 
+/** Parent folder for a workspace-relative file path, or an empty string for a root file. */
+export function parentDocumentFolder(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+/** Immediate child folders for a workspace folder; counts include files below each child. */
+export function directChildFolders(
+  paths: readonly string[],
+  parent = "",
+): { path: string; name: string; count: number }[] {
+  const prefix = parent ? `${parent}/` : "";
+  const counts = new Map<string, number>();
+  for (const path of paths) {
+    if (prefix && !path.startsWith(prefix)) continue;
+    const relative = prefix ? path.slice(prefix.length) : path;
+    const slash = relative.indexOf("/");
+    if (slash <= 0) continue;
+    const name = relative.slice(0, slash);
+    const childPath = prefix + name;
+    counts.set(childPath, (counts.get(childPath) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([path, count]) => ({ path, name: path.split("/").at(-1) ?? path, count }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 /** Top-level folders with their file counts; files directly in the root are not folders. */
 export function topLevelFolders(paths: readonly string[]): { name: string; count: number }[] {
   const counts = new Map<string, number>();

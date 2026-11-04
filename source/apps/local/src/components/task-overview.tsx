@@ -123,7 +123,7 @@ export function TaskOverview(props: TaskOverviewProps) {
           <div className={`ov-tile ${props.findings > 0 ? "tone-late" : "tone-ok"}`}>
             <span>Quality</span>
             <strong>{props.findings > 0 ? `${props.findings} to fix` : "Detailed"}</strong>
-            <small>{props.groupName ?? "Ungrouped"}</small>
+            <small>{props.groupName ?? "No wave"}</small>
           </div>
         </div>
         <ul className="ov-activity">

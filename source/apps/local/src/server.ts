@@ -29,6 +29,7 @@ import {
   getWorkspaceOverview,
   type IndexChange,
   listDocuments,
+  listProjectTree,
   listTaskComments,
   listTaskGroups,
   listTasks,
@@ -41,6 +42,8 @@ import {
   readAttachment,
   readDocumentChecklist,
   readProjectFile,
+  readProjectFileOriginal,
+  searchProjectFiles,
   readWorkspaceIndex,
   removeAttachment,
   reorderTask,
@@ -58,6 +61,7 @@ import {
   type TaskStatus,
   type TemplateDefaults,
   updateTask,
+  writeProjectFile,
   updateWorkspaceOrganization,
   validateWorkspace,
   WorkspaceError,
@@ -209,13 +213,74 @@ async function trustProject(pathInput: string): Promise<TrustedProject> {
   }
   if (!projectRoot)
     throw new WorkspaceError("workspace_not_found", `Project path is not accessible: ${pathInput}`);
-  const selected = await resolveWorkspace({ cwd: projectRoot });
+  let selected: ResolvedWorkspace;
+  try {
+    selected = await resolveWorkspace({ cwd: projectRoot });
+  } catch (error) {
+    if (error instanceof WorkspaceError && error.code === "workspace_not_found") {
+      throw new WorkspaceError(
+        "workspace_not_found",
+        `This folder is not set up as a Task project. ${error.message} Choose a project root containing task.yaml or tasks/, or initialize it with task init.`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
   projectRoot = selected.projectRoot;
   const projects = await readTrustedProjects();
   const trusted = projects.find((entry) => entry.path === projectRoot);
   const result = trusted ?? { path: projectRoot, addedAt: new Date().toISOString() };
   if (!trusted) await writeTrustedProjects([...projects, result]);
   return result;
+}
+
+/** Opens a native directory picker without accepting an arbitrary executable or command from HTTP. */
+async function pickProjectFolder(): Promise<string | null> {
+  let command: string[] | undefined;
+  if (process.platform === "linux") {
+    const zenity = Bun.which("zenity");
+    const kdialog = Bun.which("kdialog");
+    if (zenity) {
+      command = [
+        zenity,
+        "--file-selection",
+        "--directory",
+        "--title=Choose a Taskcode project folder",
+      ];
+    } else if (kdialog) {
+      command = [kdialog, "--getexistingdirectory", homedir(), "Choose a Taskcode project folder"];
+    }
+  } else if (process.platform === "darwin") {
+    const osascript = Bun.which("osascript");
+    if (osascript) {
+      command = [
+        osascript,
+        "-e",
+        'POSIX path of (choose folder with prompt "Choose a Taskcode project folder")',
+      ];
+    }
+  }
+  if (!command) {
+    throw new WorkspaceError(
+      "invalid_input",
+      "A native folder picker is not available here. Enter the full project folder path instead.",
+    );
+  }
+  const picker = Bun.spawn(command, { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const [exitCode, output, errorOutput] = await Promise.all([
+    picker.exited,
+    new Response(picker.stdout).text(),
+    new Response(picker.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    if (!output.trim() && !errorOutput.trim()) return null;
+    throw new WorkspaceError(
+      "filesystem_error",
+      errorOutput.trim() || "The native folder picker could not open.",
+    );
+  }
+  const selectedPath = output.trim();
+  return selectedPath || null;
 }
 
 async function describeProject(project: TrustedProject): Promise<object> {
@@ -574,6 +639,10 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   if (path.startsWith("/workspace") || path.startsWith("/projects/")) {
     if (!authorized(request, response, requestId)) return;
     try {
+      if (path === "/projects/pick-folder" && method === "POST") {
+        send(response, 200, { path: await pickProjectFolder(), requestId }, requestId);
+        return;
+      }
       if (path === "/projects/trusted" && method === "GET") {
         const projects = await readTrustedProjects();
         send(
@@ -842,9 +911,16 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         const rest = taskRoute[3] === undefined ? undefined : decodeURIComponent(taskRoute[3]);
         if (part === "reorder" && method === "POST" && rest === undefined) {
           const input = await readJson(request);
-          assertKeys(input, ["before", "after", "order", "expectedHash"]);
+          assertKeys(input, ["before", "after", "order", "status", "expectedHash"]);
           if (input.order !== undefined && typeof input.order !== "number")
             throw new Error("order must be a number");
+          if (
+            input.status !== undefined &&
+            !["planned", "in-progress", "blocked", "completed", "archived"].includes(
+              String(input.status),
+            )
+          )
+            throw new Error("status must be planned, in-progress, blocked, completed or archived");
           const task = await reorderTask(
             workspace,
             identifier,
@@ -854,6 +930,9 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
                 : {}),
               ...(optionalString(input, "after") ? { after: optionalString(input, "after") } : {}),
               ...(typeof input.order === "number" ? { order: input.order } : {}),
+              ...(optionalString(input, "status")
+                ? { status: optionalString(input, "status") as TaskStatus }
+                : {}),
             },
             optionalString(input, "expectedHash"),
           );
@@ -1382,6 +1461,39 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
         const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
         const file = await readProjectFile(workspace, query.get("path") ?? "");
         send(response, 200, { file, requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/project-file" && method === "POST") {
+        const input = await readJson(request);
+        assertKeys(input, ["path", "content", "expectedHash"]);
+        const file = await writeProjectFile(
+          workspace,
+          stringField(input, "path"),
+          stringField(input, "content"),
+          stringField(input, "expectedHash"),
+        );
+        send(response, 200, { file, requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/project-tree" && method === "GET") {
+        send(response, 200, { tree: await listProjectTree(workspace), requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/project-diff" && method === "GET") {
+        const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+        const filePath = query.get("path") ?? "";
+        const original = await readProjectFileOriginal(workspace, filePath);
+        send(response, 200, { path: filePath, original, requestId }, requestId);
+        return;
+      }
+      if (path === "/workspace/project-search" && method === "GET") {
+        const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+        send(
+          response,
+          200,
+          { results: await searchProjectFiles(workspace, query.get("q") ?? ""), requestId },
+          requestId,
+        );
         return;
       }
       const changesRoute = /^\/workspace\/task\/([^/]+)\/changes(\/diff)?$/.exec(path);

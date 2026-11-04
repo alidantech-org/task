@@ -1,5 +1,5 @@
 ---
-{id: TSK-876DF4236BB7,name: "Ungrouped fix, remembered views and cleaner task cards",type: task,status: completed,priority: high,created_at: 2026-11-01T04:27:33.254Z,updated_at: 2026-11-01T04:30:46.360Z,due_at: 2026-11-01,extra: {status_history: [{from: planned,to: completed,at: 2026-11-01T04:30:46.360Z}]}}
+{id: TSK-876DF4236BB7,name: "Ungrouped fix, remembered views and cleaner task cards",type: task,status: completed,priority: high,created_at: 2026-11-01T04:27:33.254Z,updated_at: 2026-11-03T05:39:45.056Z,due_at: 2026-11-01,extra: {status_history: [{from: planned,to: completed,at: 2026-11-01T04:30:46.360Z},{from: completed,to: blocked,at: 2026-11-03T05:39:10.170Z},{from: blocked,to: completed,at: 2026-11-03T05:39:26.489Z},{from: completed,to: planned,at: 2026-11-03T05:39:39.958Z},{from: planned,to: completed,at: 2026-11-03T05:39:44.761Z}]},order: 6080}
 ---
 
 # Ungrouped fix, remembered views and cleaner task cards

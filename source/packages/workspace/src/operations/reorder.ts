@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { WorkspaceError } from "@task/workspace/errors";
 import { buildWorkspaceIndex } from "@task/workspace/indexing/incremental";
-import type { DocumentSummary, WorkspaceContext } from "@task/workspace/indexing/types";
+import type { DocumentSummary, TaskStatus, WorkspaceContext } from "@task/workspace/indexing/types";
 import { updateTask } from "@task/workspace/operations/mutate";
 import {
   effectiveOrder,
@@ -18,6 +18,8 @@ export type ReorderTarget = {
   after?: string;
   /** Set an explicit rank instead. */
   order?: number;
+  /** Change status in the same write as the order update. */
+  status?: TaskStatus;
 };
 
 /** Moves a task within its group by giving it a rank between its new neighbours. */
@@ -28,14 +30,23 @@ export async function reorderTask(
   expectedHash?: string,
 ): Promise<DocumentSummary> {
   const given = [target.before, target.after, target.order].filter((value) => value !== undefined);
-  if (given.length !== 1)
+  if (given.length > 1 || (given.length === 0 && target.status === undefined))
     throw new WorkspaceError("invalid_input", "Give exactly one of before, after or order");
+  if (given.length === 0)
+    return (await updateTask(context, identifier, { status: target.status }, expectedHash)).task;
   const index = await buildWorkspaceIndex(context);
   const task = findDocument(index, identifier);
   if (task.metadata.type !== "task")
     throw new WorkspaceError("invalid_input", `${identifier} is not a task`);
   if (target.order !== undefined)
-    return (await updateTask(context, identifier, { order: target.order }, expectedHash)).task;
+    return (
+      await updateTask(
+        context,
+        identifier,
+        { order: target.order, ...(target.status ? { status: target.status } : {}) },
+        expectedHash,
+      )
+    ).task;
   const siblings = sortTasks(
     [...index.documents.values()].filter(
       (document) =>
@@ -56,7 +67,14 @@ export async function reorderTask(
     following ? effectiveOrder(following) : undefined,
   );
   if (rank !== undefined)
-    return (await updateTask(context, identifier, { order: rank }, expectedHash)).task;
+    return (
+      await updateTask(
+        context,
+        identifier,
+        { order: rank, ...(target.status ? { status: target.status } : {}) },
+        expectedHash,
+      )
+    ).task;
   // No room between the neighbours: renumber the whole group in even steps.
   const ordered = [...siblings.slice(0, insertAt), task, ...siblings.slice(insertAt)];
   let moved = task;
@@ -66,7 +84,12 @@ export async function reorderTask(
     const result = await updateTask(
       context,
       item.metadata.id,
-      { order: wanted },
+      {
+        order: wanted,
+        ...(item.metadata.id === task.metadata.id && target.status
+          ? { status: target.status }
+          : {}),
+      },
       item.metadata.id === task.metadata.id ? expectedHash : undefined,
     );
     if (item.metadata.id === task.metadata.id) moved = result.task;

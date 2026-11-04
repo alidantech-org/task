@@ -288,8 +288,8 @@ export function TaskSheet() {
     })
     .filter((entry, index, all) => all.findIndex((other) => other.href === entry.href) === index);
   const groupDocs = [
-    ...(group?.goalId ? [{ label: "Group goal", id: group.goalId }] : []),
-    ...(group ? [{ label: "Group plan", id: group.id }] : []),
+    ...(group?.goalId ? [{ label: "Wave goal", id: group.goalId }] : []),
+    ...(group ? [{ label: "Wave plan", id: group.id }] : []),
   ];
   const childTasks = allTasks.filter((item) => item.parent === task.id);
   const parentTask = allTasks.find((item) => item.id === task.parent);
@@ -650,7 +650,7 @@ export function TaskSheet() {
                   <div className="task-docs">
                     {[
                       [
-                        "Group documents",
+                        "Wave documents",
                         groupDocs.map((entry) => ({ label: entry.label, id: entry.id })),
                       ],
                       [
@@ -741,7 +741,7 @@ export function TaskSheet() {
                       </>
                     )}
                     <p className="sub">
-                      The group's goal and plan documents are checked too when a task leaves
+                      The wave's goal and plan documents are checked too when a task leaves
                       Planned.
                     </p>
                   </div>

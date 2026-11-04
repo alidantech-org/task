@@ -1,7 +1,17 @@
 "use client";
 
 import { Button, Input } from "@task/ui";
-import { Check, LayoutDashboard, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import {
+  Check,
+  Folder,
+  FolderOpen,
+  LayoutDashboard,
+  Link2,
+  Monitor,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog, DropdownMenu } from "radix-ui";
 import { useCallback, useEffect, useState } from "react";
@@ -13,13 +23,10 @@ export type SwitcherProject = {
   addedAt: string;
   active?: boolean;
   name?: string;
-  icon?: string;
   color?: number;
 };
 export type ProjectGroup = { id: string; name: string; icon?: string; paths: string[] };
 
-const emojis = ["📦", "🚀", "🧩", "🛠️", "🌐", "📱", "🎨", "🧪", "📊", "🔒", "⚙️", "📚"];
-const hues = [215, 160, 35, 340, 270, 190, 95, 0];
 const noGroup = "__none";
 const newGroup = "__new";
 
@@ -30,33 +37,24 @@ export function projectName(project: SwitcherProject): string {
   return project.name?.trim() || folderName(project.path);
 }
 
-/** The project's icon: its emoji, or its first letter, on a coloured tile. */
+/** A plain folder mark keeps project switching visually quiet. */
+export function LocalProjectIcon({ size = 32, className }: { size?: number; className?: string }) {
+  return (
+    <Folder
+      className={`pj-folder-mark ${className ?? ""}`}
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
 export function ProjectIcon({
-  project,
-  size = 32,
+  size = 20,
 }: {
-  project: Pick<SwitcherProject, "path" | "name" | "icon" | "color">;
+  project: Pick<SwitcherProject, "path" | "name">;
   size?: number;
 }) {
-  const hue = project.color ?? (folderName(project.path).length * 47) % 360;
-  return (
-    <span
-      className="pj-icon"
-      aria-hidden="true"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.5,
-        background: `oklch(0.93 0.05 ${hue})`,
-        color: `oklch(0.45 0.14 ${hue})`,
-      }}
-    >
-      {project.icon?.trim() ||
-        projectName(project as SwitcherProject)
-          .slice(0, 1)
-          .toUpperCase()}
-    </span>
-  );
+  return <LocalProjectIcon size={size} />;
 }
 
 async function call<T>(url: string, method: string, body?: unknown): Promise<T> {
@@ -79,38 +77,95 @@ function AddProjectDialog({
 }) {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState("");
+
+  async function pickFolder() {
+    setPicking(true);
+    setError("");
+    try {
+      const result = await call<{ path: string | null }>("/pick-folder", "POST");
+      if (result.path) setPath(result.path);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open the folder picker");
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function submitProject() {
+    if (!path.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onAdd(path.trim());
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not add this project");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="new-task-overlay" />
-        <Dialog.Content className="new-task-dialog">
-          <Dialog.Title className="dialog-title">Add a project</Dialog.Title>
-          <Dialog.Description className="sub">
-            Enter the folder of a repository that has (or should have) Task set up.
-          </Dialog.Description>
+        <Dialog.Overlay className="new-task-overlay project-dialog-overlay" />
+        <Dialog.Content className="new-task-dialog project-dialog">
+          <div className="project-dialog-heading">
+            <span className="project-dialog-icon">
+              <FolderOpen aria-hidden="true" />
+            </span>
+            <div>
+              <Dialog.Title className="dialog-title">Add a local project</Dialog.Title>
+              <Dialog.Description className="sub">
+                Link a folder that contains a Task workspace. Your files stay where they are.
+              </Dialog.Description>
+            </div>
+          </div>
           <form
             className="pj-form"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!path.trim()) return;
-              setBusy(true);
-              void onAdd(path.trim())
-                .then(onClose)
-                .finally(() => setBusy(false));
+              void submitProject();
             }}
           >
-            <Input
-              autoFocus
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder="/path/to/project"
-              aria-label="Project folder"
-            />
+            <div className="fs-field">
+              <span className="fs-label">Folder location</span>
+              <div className="pj-path-entry">
+                <Input
+                  autoFocus
+                  value={path}
+                  onChange={(event) => setPath(event.target.value)}
+                  placeholder="/path/to/project"
+                  aria-label="Project folder path"
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? "project-add-error" : "project-add-help"}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={picking || busy}
+                  onClick={() => void pickFolder()}
+                >
+                  <FolderOpen className="size-4" />
+                  {picking ? "Opening…" : "Browse"}
+                </Button>
+              </div>
+              <small className="sub" id="project-add-help">
+                Choose a folder from your computer, or enter its full path.
+              </small>
+            </div>
+            {error && (
+              <p className="pj-error" id="project-add-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="pj-actions">
-              <Button type="button" variant="outline" onClick={onClose}>
+              <Button type="button" variant="outline" disabled={busy || picking} onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={busy || !path.trim()}>
+              <Button type="submit" disabled={busy || picking || !path.trim()}>
                 {busy ? "Adding…" : "Add project"}
               </Button>
             </div>
@@ -137,8 +192,6 @@ function EditProjectDialog({
   const { prompt } = useDialogs();
   const current = groups.find((group) => group.paths.includes(project.path));
   const [name, setName] = useState(project.name ?? "");
-  const [icon, setIcon] = useState(project.icon ?? "");
-  const [color, setColor] = useState<number | undefined>(project.color);
   const [groupId, setGroupId] = useState(current?.id ?? noGroup);
   const [busy, setBusy] = useState(false);
 
@@ -147,8 +200,6 @@ function EditProjectDialog({
     try {
       await call(`/trusted/${encodeURIComponent(project.path)}`, "PATCH", {
         name: name.trim() || null,
-        icon: icon.trim() || null,
-        color: color ?? null,
       });
       let target = groupId;
       if (target === newGroup) {
@@ -188,15 +239,15 @@ function EditProjectDialog({
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="new-task-overlay" />
+        <Dialog.Overlay className="new-task-overlay project-dialog-overlay" />
         <Dialog.Content className="new-task-dialog">
           <Dialog.Title className="dialog-title">Edit project</Dialog.Title>
           <Dialog.Description className="sr-only">
-            Change the project's name, icon and linked group.
+            Change the project's name and linked group.
           </Dialog.Description>
           <div className="pj-form">
             <div className="pj-preview">
-              <ProjectIcon project={{ ...project, name, icon, color }} size={44} />
+              <ProjectIcon project={{ ...project, name }} size={32} />
               <code title={project.path}>{project.path}</code>
             </div>
             <div className="fs-field">
@@ -208,44 +259,6 @@ function EditProjectDialog({
                 maxLength={60}
                 aria-label="Project name"
               />
-            </div>
-            <div className="fs-field">
-              <span className="fs-label">Icon</span>
-              <div className="pj-swatches">
-                {emojis.map((emoji) => (
-                  <button
-                    type="button"
-                    key={emoji}
-                    className={icon === emoji ? "on" : ""}
-                    onClick={() => setIcon(icon === emoji ? "" : emoji)}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-                <Input
-                  value={icon}
-                  onChange={(event) => setIcon(event.target.value)}
-                  placeholder="Or type"
-                  maxLength={8}
-                  aria-label="Icon text"
-                  className="pj-icon-input"
-                />
-              </div>
-            </div>
-            <div className="fs-field">
-              <span className="fs-label">Colour</span>
-              <div className="pj-swatches">
-                {hues.map((hue) => (
-                  <button
-                    type="button"
-                    key={hue}
-                    aria-label={`Hue ${hue}`}
-                    className={color === hue ? "on" : ""}
-                    style={{ background: `oklch(0.7 0.14 ${hue})` }}
-                    onClick={() => setColor(color === hue ? undefined : hue)}
-                  />
-                ))}
-              </div>
             </div>
             <div className="fs-field">
               <span className="fs-label">Linked group</span>
@@ -285,18 +298,18 @@ export function ProjectList({
   onProjects,
   switchProject,
   removeProjectTrust,
-  trustProjectPath,
   onNotice,
   onNavigate,
+  onDialogOpenChange = () => undefined,
 }: {
   projects: SwitcherProject[];
   onProjects(projects: SwitcherProject[]): void;
   switchProject(path: string): Promise<void>;
   removeProjectTrust(path: string): Promise<void>;
-  trustProjectPath(path: string): Promise<void>;
   onNotice(message: string): void;
   /** Called after a navigation so the switcher can close. */
   onNavigate(): void;
+  onDialogOpenChange?(open: boolean): void;
 }) {
   const router = useRouter();
   const { confirm, prompt } = useDialogs();
@@ -329,12 +342,17 @@ export function ProjectList({
       <button
         type="button"
         className="pj-main"
-        title={project.path}
+        title={`${project.path} · Local`}
+        aria-label={`${projectName(project)} · Local${project.active ? " · Current project" : " · Switch project"}`}
         disabled={project.active}
         onClick={() => void switchProject(project.path)}
       >
         <ProjectIcon project={project} />
-        <span>{projectName(project)}</span>
+        <span className="pj-project-name">{projectName(project)}</span>
+        <small className="pj-local-label">
+          <Monitor aria-hidden="true" />
+          Local
+        </small>
         {project.active ? <Check className="size-4 pj-check" /> : null}
       </button>
       <DropdownMenu.Root>
@@ -344,9 +362,28 @@ export function ProjectList({
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content className="task-sheet-menu" align="end" sideOffset={4}>
-            <DropdownMenu.Item onSelect={() => setEditing(project)}>
-              <Link2 className="size-4" /> Edit name, icon and group
+          <DropdownMenu.Content
+            className="task-sheet-menu project-actions-menu"
+            align="end"
+            sideOffset={4}
+          >
+            <DropdownMenu.Item
+              onSelect={() => {
+                setEditing(project);
+                onDialogOpenChange(true);
+              }}
+            >
+              <Link2 className="size-4" /> Edit name and group
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => {
+                void navigator.clipboard
+                  .writeText(project.path)
+                  .then(() => onNotice("Project folder path copied"))
+                  .catch(() => onNotice("Could not copy the project folder path"));
+              }}
+            >
+              <Folder className="size-4" /> Copy folder path
             </DropdownMenu.Item>
             {!project.active && (
               <DropdownMenu.Item
@@ -370,7 +407,10 @@ export function ProjectList({
           className="pj-add"
           aria-label="Add a project"
           title="Add a project"
-          onClick={() => setAdding(true)}
+          onClick={() => {
+            setAdding(true);
+            onDialogOpenChange(true);
+          }}
         >
           <Plus className="size-4" />
         </button>
@@ -446,10 +486,17 @@ export function ProjectList({
       {projects.length === 0 && <p className="sub pj-empty">No projects yet. Use + to add one.</p>}
       {adding && (
         <AddProjectDialog
-          onClose={() => setAdding(false)}
+          onClose={() => {
+            setAdding(false);
+            onDialogOpenChange(false);
+          }}
           onAdd={async (path) => {
-            await trustProjectPath(path);
-            await reload();
+            const result = await call<{ project: SwitcherProject }>("/trusted", "POST", { path });
+            onProjects([
+              ...projects.filter((project) => project.path !== result.project.path),
+              result.project,
+            ]);
+            onNotice(`${projectName(result.project)} added to your projects`);
           }}
         />
       )}
@@ -457,7 +504,10 @@ export function ProjectList({
         <EditProjectDialog
           project={editing}
           groups={groups}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            onDialogOpenChange(false);
+          }}
           onSaved={() => void reload()}
           onNotice={onNotice}
         />

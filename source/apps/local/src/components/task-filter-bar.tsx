@@ -2,7 +2,7 @@
 
 import { Bookmark, CheckSquare, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Switch } from "radix-ui";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useDialogs } from "@/components/dialogs";
 import { SheetShell } from "@/components/sheet-shell";
 import { CustomSelect } from "@/components/ui/select";
@@ -35,7 +35,7 @@ function FilterSelect({
   return (
     <CustomSelect
       label={label}
-      value={value}
+      value={value || any}
       placeholder={anyLabel}
       className="fb-select"
       options={[{ value: any, label: anyLabel }, ...options]}
@@ -48,6 +48,13 @@ const priorityOptions: Option[] = [
   { value: "high", label: "High", color: "var(--bl)" },
   { value: "medium", label: "Medium", color: "var(--ip)" },
   { value: "low", label: "Low", color: "var(--pl)" },
+];
+
+const statusOptions: Option[] = [
+  { value: "planned", label: "Planned", color: "var(--pl)" },
+  { value: "in-progress", label: "In progress", color: "var(--ip)" },
+  { value: "blocked", label: "Blocked", color: "var(--bl)" },
+  { value: "completed", label: "Completed", color: "var(--dn)" },
 ];
 
 type Props = {
@@ -67,6 +74,10 @@ type Props = {
   onSelecting(selecting: boolean): void;
   /** How many tasks match, shown next to the controls. */
   matching: number;
+  organizeByWave: boolean;
+  onOrganizeByWave(organize: boolean): void;
+  /** Optional presentation controls, aligned at the end of the filter row. */
+  viewControls?: ReactNode;
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -79,7 +90,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /**
- * Search plus the two filters used most, group and priority. Everything else (assignee, label, due
+ * Search plus the filters used most, wave, status, and priority. Everything else (assignee, label, due
  * date, archive, watching, saved views and selection mode) lives in the filters sheet.
  */
 export function TaskFilterBar({
@@ -97,6 +108,9 @@ export function TaskFilterBar({
   selecting,
   onSelecting,
   matching,
+  organizeByWave,
+  onOrganizeByWave,
+  viewControls,
 }: Props) {
   const { prompt } = useDialogs();
   const [sheet, setSheet] = useState(false);
@@ -128,11 +142,18 @@ export function TaskFilterBar({
           onChange={(event) => set({ text: event.target.value })}
         />
         <FilterSelect
-          label="Group"
+          label="Wave"
           value={groupId}
-          anyLabel="All groups"
+          anyLabel="All waves"
           options={groups.map((group) => ({ value: group.id, label: group.name }))}
           onChange={onGroup}
+        />
+        <FilterSelect
+          label="Status"
+          value={filters.status ?? ""}
+          anyLabel="Any status"
+          options={statusOptions}
+          onChange={(status) => set({ status: status as NonNullable<TaskFilters["status"]> })}
         />
         <FilterSelect
           label="Priority"
@@ -156,6 +177,7 @@ export function TaskFilterBar({
             <X className="size-3.5" /> Clear · {matching}
           </button>
         )}
+        {viewControls}
       </search>
       {sheet && (
         <SheetShell
@@ -226,6 +248,22 @@ export function TaskFilterBar({
                   className="switch"
                   checked={filters.watching}
                   onCheckedChange={(watching) => set({ watching })}
+                >
+                  <Switch.Thumb className="switch-thumb" />
+                </Switch.Root>
+              </div>
+            </section>
+            <section>
+              <h3>Display</h3>
+              <div className="fs-switch">
+                <span>
+                  Organize by wave
+                  <small>Show tasks together under their wave</small>
+                </span>
+                <Switch.Root
+                  className="switch"
+                  checked={organizeByWave}
+                  onCheckedChange={onOrganizeByWave}
                 >
                   <Switch.Thumb className="switch-thumb" />
                 </Switch.Root>

@@ -40,6 +40,24 @@ describe("BoardTask", () => {
     expect(markup).toContain('aria-valuenow="25"');
   });
 
+  test("compact cards omit group text while retaining the task title", () => {
+    const markup = renderToStaticMarkup(
+      <DragDropProvider>
+        <BoardTask
+          task={task}
+          index={0}
+          onSelect={() => undefined}
+          compact
+          showGroup={false}
+        />
+      </DragDropProvider>,
+    );
+    expect(markup).toContain("is-compact");
+    expect(markup).toContain(task.name);
+    expect(markup).not.toContain('class="cg"');
+    expect(markup).not.toContain("Release group");
+  });
+
   test("falls back to project then Ungrouped and hides the bar without checklist items", () => {
     expect(render({ groupName: undefined, project: "Website" })).toContain("Website");
     const bare = render({ groupName: undefined, checklist: undefined });

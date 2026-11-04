@@ -290,6 +290,14 @@ describe("local runtime HTTP boundary", () => {
         (await call("POST", `/workspace/task/${b}/reorder`, { before: "TSK-NOPE" })).status,
       ).toBe(404);
       expect((await call("POST", `/workspace/task/${b}/reorder`, { order: "x" })).status).toBe(400);
+      const moved = await call("POST", `/workspace/task/${b}/reorder`, {
+        after: a,
+        status: "blocked",
+      });
+      expect(moved.status).toBe(200);
+      expect(
+        ((await moved.json()) as { task: { metadata: { status: string } } }).task.metadata.status,
+      ).toBe("blocked");
 
       const comment = await call("POST", `/workspace/task/${a}/comments`, { text: "Hello @beta" });
       expect(comment.status).toBe(201);

@@ -19,6 +19,9 @@ type MarkdownBodyProps = {
   /** Enables opening documents, project files and anchors from relative links and ids. */
   linkContext?: LinkContext;
   onNavigate?: (href: string) => void;
+  knownProjectPaths?: readonly { path: string; status?: string }[];
+  knownProjectFolders?: readonly string[];
+  onMissingPath?: (path: string) => void;
 };
 
 const embeddedImageUrl = /^data:image\/(?:png|jpeg|gif|webp|avif);base64,[a-z\d+/]+=*$/i;
@@ -40,6 +43,9 @@ export function MarkdownBody({
   onWikiLink,
   linkContext,
   onNavigate,
+  knownProjectPaths = [],
+  knownProjectFolders = [],
+  onMissingPath,
 }: MarkdownBodyProps) {
   let checkboxIndex = 0;
   const headingIds = new Map(
@@ -99,6 +105,54 @@ export function MarkdownBody({
             </span>
           );
         const internal = internalHref(target);
+        if (target.kind === "file" && knownProjectFolders.includes(target.path)) {
+          const folderHref = `/code?folder=${encodeURIComponent(target.path)}`;
+          return (
+            <a
+              href={folderHref}
+              className="md-project-link"
+              title={`Open folder ${target.path}`}
+              onClick={(event) => {
+                if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                onNavigate(folderHref);
+              }}
+              {...props}
+            >
+              {children}<small>folder</small>
+            </a>
+          );
+        }
+        if (target.kind === "file") {
+          const file = knownProjectPaths.find((candidate) => candidate.path === target.path);
+          if (!file)
+            return (
+              <button
+                type="button"
+                className="bad-link md-missing-path"
+                title={`File not found: ${target.path}`}
+                onClick={() => onMissingPath?.(target.path)}
+              >
+                {children}
+              </button>
+            );
+          return (
+            <a
+              href={internal}
+              className="md-project-link"
+              title={`${target.path}${file.status ? ` · ${file.status}` : " · unchanged"}`}
+              onClick={(event) => {
+                if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                onNavigate(internal ?? `/code?path=${encodeURIComponent(target.path)}`);
+              }}
+              {...props}
+            >
+              {children}
+              <small>{file.status ?? "file"}</small>
+            </a>
+          );
+        }
         if (internal)
           return (
             <a
@@ -128,17 +182,50 @@ export function MarkdownBody({
         </a>
       );
     },
-    code: ({ className, children, node: _node, ...props }) => (
-      <code className={["md-code", className].filter(Boolean).join(" ")} {...props}>
-        {children}
-      </code>
-    ),
+    code: ({ className, children, node: _node, ...props }) => {
+      const value = headingText(children).trim();
+      if (!value || !linkContext) return <code className={["md-code", className].filter(Boolean).join(" ")} {...props}>{children}</code>;
+      const projectFile = knownProjectPaths.find((candidate) => candidate.path === value);
+      const projectFolder = knownProjectFolders.includes(value);
+      const pathLike = /[./\\]/.test(value) && !/\s/.test(value);
+      if (pathLike && !projectFile && !projectFolder)
+        return (
+          <button type="button" className="md-code-search md-missing-path" title={`Path not found: ${value}`} onClick={() => onMissingPath?.(value)}>
+            <code className={["md-code", className].filter(Boolean).join(" ")}>{children}</code>
+          </button>
+        );
+      const href = projectFile
+        ? `/code?path=${encodeURIComponent(value)}`
+        : projectFolder
+          ? `/code?folder=${encodeURIComponent(value)}`
+        : `/code?q=${encodeURIComponent(value)}`;
+      return (
+        <button
+          type="button"
+          className="md-code-search"
+          title={projectFile ? `Open ${value}${projectFile.status ? ` · ${projectFile.status}` : " · unchanged"}` : projectFolder ? `Browse folder ${value}` : `Search project for ${value}`}
+          onClick={() => onNavigate?.(href)}
+        >
+          <code className={["md-code", className].filter(Boolean).join(" ")}>{children}</code>
+          {projectFile?.status && <small className="md-file-status">{projectFile.status}</small>}
+          {projectFolder && <small className="md-file-status">folder</small>}
+        </button>
+      );
+    },
     pre: ({ children, node: _node, ...props }) => {
       const child = Children.toArray(children)[0];
       if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
         const language = /language-([\w+-]+)/.exec(child.props.className ?? "")?.[1] ?? "text";
         const code = headingText(child.props.children).replace(/\n$/, "");
-        return <CodeViewer code={code} language={language} compact />;
+        const searchable = code.split("\n").find((line) => line.trim())?.trim().slice(0, 120) ?? "";
+        return (
+          <CodeViewer
+            code={code}
+            language={language}
+            compact
+            onSearch={searchable ? () => onNavigate?.(`/code?q=${encodeURIComponent(searchable)}`) : undefined}
+          />
+        );
       }
       return <pre {...props}>{children}</pre>;
     },

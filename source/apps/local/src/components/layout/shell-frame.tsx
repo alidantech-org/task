@@ -1,23 +1,16 @@
-import type { PointerEventHandler, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 type AppLayoutProps = {
   children: ReactNode;
-  onPointerDownCapture: PointerEventHandler<HTMLDivElement>;
   sidebarMode: "full" | "mini" | "hidden";
   sidebarWidth: number;
 };
 
-export function ShellFrame({
-  children,
-  onPointerDownCapture,
-  sidebarMode,
-  sidebarWidth,
-}: AppLayoutProps) {
+export function ShellFrame({ children, sidebarMode, sidebarWidth }: AppLayoutProps) {
   return (
     <div
       data-slot="task-app-shell"
       data-sidebar-mode={sidebarMode}
-      onPointerDownCapture={onPointerDownCapture}
       style={
         {
           "--sw":

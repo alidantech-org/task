@@ -14,6 +14,7 @@ import { detailRows } from "@/lib/document-details";
 import { restartSectionEntrance } from "@/lib/entrance";
 import { buildLinkContext, internalHref } from "@/lib/link-context";
 import { extractLinks, headingEntries, toggleMarkdownCheckbox } from "@/lib/markdown";
+import type { ProjectTree } from "@task/workspace/files/tree";
 
 type LinkedSearchResult = { id: string };
 
@@ -53,6 +54,19 @@ export function DocumentReaderPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
+  const [projectTree, setProjectTree] = useState<ProjectTree | null>(null);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/runtime/workspace/project-tree", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as { tree?: ProjectTree };
+        if (active && response.ok) setProjectTree(payload.tree ?? null);
+      })
+      .catch(() => active && setProjectTree(null));
+    return () => {
+      active = false;
+    };
+  }, [workspace?.projectRoot]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the entrance when the document view changes.
   useEffect(() => {
     restartSectionEntrance(document.querySelector<HTMLElement>(".body"));
@@ -256,6 +270,9 @@ export function DocumentReaderPage() {
                 className="mdb"
                 headingAnchors
                 linkContext={linkContext}
+                knownProjectPaths={projectTree?.files.map(({ path, status }) => ({ path, status }))}
+                knownProjectFolders={projectTree?.folders.map(({ path }) => path)}
+                onMissingPath={(path) => setNotice(`Project path not found: ${path}`)}
                 onNavigate={(href) => router.push(href)}
                 knownWikiLinks={records.map((record) => record.id)}
                 onWikiLink={(id) => {
@@ -310,20 +327,32 @@ export function DocumentReaderPage() {
                     {link.label}
                     <small>{new URL(target.href).host || target.href}</small>
                   </a>
-                ) : (
-                  <button
-                    className="toc-link source"
+              ) : (
+                  (() => {
+                    const file = target.kind === "file"
+                      ? projectTree?.files.find((candidate) => candidate.path === target.path)
+                      : undefined;
+                    const folder = target.kind === "file" && projectTree?.folders.some((candidate) => candidate.path === target.path);
+                    const missing = target.kind === "file" && !file && !folder;
+                    return <button
+                    className={`toc-link source ${missing ? "bad-link" : ""}`}
                     key={link.href}
                     type="button"
-                    title={link.href}
+                    title={target.kind === "file" ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}` : link.href}
                     onClick={() => {
+                      if (missing && target.kind === "file") {
+                        setNotice(`Project path not found: ${target.path}`);
+                        return;
+                      }
                       const internal = internalHref(target);
-                      if (internal) router.push(internal);
+                      if (target.kind === "file" && folder) router.push(`/code?folder=${encodeURIComponent(target.path)}`);
+                      else if (internal) router.push(internal);
                     }}
                   >
                     {link.label}
-                    <small>{target.kind === "file" ? target.path : "Document"}</small>
-                  </button>
+                    <small>{target.kind === "file" ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}` : "Document"}</small>
+                  </button>;
+                  })()
                 ),
               )}
               <h4>Linked from</h4>
@@ -385,6 +414,9 @@ export function DocumentReaderPage() {
               className="mdb"
               headingAnchors
               linkContext={linkContext}
+              knownProjectPaths={projectTree?.files.map(({ path, status }) => ({ path, status }))}
+              knownProjectFolders={projectTree?.folders.map(({ path }) => path)}
+              onMissingPath={(path) => setNotice(`Project path not found: ${path}`)}
               onNavigate={(href) => router.push(href)}
               knownWikiLinks={records.map((record) => record.id)}
               onWikiLink={(id) => {

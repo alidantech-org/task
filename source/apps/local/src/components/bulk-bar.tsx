@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Minus } from "lucide-react";
 import { useState } from "react";
 import { useDialogs } from "@/components/dialogs";
 import { CustomSelect } from "@/components/ui/select";
@@ -11,20 +12,28 @@ type Props = {
   busy: boolean;
   onApply(patch: Record<string, unknown>): void;
   onSelectAll(): void;
+  onClearSelection(): void;
   onClear(): void;
 };
 
 /** Changes every selected task at once; each change reports its own result. */
-export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onClear }: Props) {
+export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onClearSelection, onClear }: Props) {
   const { confirm } = useDialogs();
   const [assignee, setAssignee] = useState("");
   const idle = count === 0 || busy;
   const apply = (patch: Record<string, unknown>) => count > 0 && !busy && onApply(patch);
   return (
     <section className="bulk-bar" aria-label="Bulk actions">
-      <strong>{count} selected</strong>
-      <button type="button" onClick={onSelectAll} disabled={count === total}>
-        Select all {total}
+      <button
+        type="button"
+        className="bulk-select-all"
+        role="checkbox"
+        aria-checked={count === total ? true : count > 0 ? "mixed" : false}
+        aria-label={count === total ? "Clear task selection" : `Select all ${total} tasks`}
+        title={count === total ? "Clear selection" : `Select all ${total} tasks`}
+        onClick={count === total ? onClearSelection : onSelectAll}
+      >
+        {count === total ? <Check aria-hidden="true" /> : count > 0 ? <Minus aria-hidden="true" /> : null}
       </button>
       <CustomSelect
         label="Set status"
@@ -54,9 +63,9 @@ export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onCl
         ]}
       />
       <CustomSelect
-        label="Move to group"
+        label="Move to wave"
         value=""
-        placeholder="Move to group…"
+        placeholder="Move to wave…"
         disabled={idle}
         className="bulk-select"
         onValueChange={(group) => apply({ group })}

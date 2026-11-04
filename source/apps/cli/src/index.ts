@@ -104,6 +104,10 @@ try {
   else console.error(`task: ${message}`);
   process.exit(1);
 }
+if (args.command === "wave") args = { ...args, command: "group" };
+if (args.options.has("wave") && !args.options.has("group")) {
+  args.options.set("group", args.options.get("wave") ?? "");
+}
 const metadata = getCliMetadata(version);
 const json = args.options.has("json");
 const forcedPlain = args.options.has("plain") || args.options.has("no-color");
@@ -145,26 +149,26 @@ function printHelp(): void {
     "  doctor                 Check Bun and workspace health",
     "  info | status | stats  Workspace information and counts",
     "  tree                   Show Markdown workspace paths",
-    "  group create|list      Manage task groups",
-    "  migrate                Move legacy flat task groups into week folders",
+    "  wave create|list       Manage task waves (group is a supported alias)",
+    "  migrate                Move legacy flat task waves into week folders",
     "  list [filters]         List active tasks (use --archived for archived)",
     "  show <id|path>         Show a task or document",
     "  search <query>         Search metadata and Markdown text",
-    "  create                 Create a task in a group",
+    "  create                 Create a task in a wave",
     "  update <id>            Update task metadata",
     "  edit <id>              Edit the Markdown body in $EDITOR",
-    "  archive <task-or-group> Archive a task or group",
-    "  restore <task-or-group> Restore an archived task or group",
+    "  archive <task-or-wave> Archive a task or wave",
+    "  restore <task-or-wave> Restore an archived task or wave",
     "  start <id> [--track]   Move a task to in-progress, optionally recording git changes",
     "  changes <id> [--diff <path>]  Show git changes made while the task was in progress",
     '  comment <id> --text "…"   Add a comment; comments <id> lists them',
-    "  move <id> (--before|--after <id> | --order N | --group <id>)  Reorder or move a task",
+    "  move <id> (--before|--after <id> | --order N | --wave <id>)  Reorder or move a task",
     "  attach <id> <file|url> / detach <id> <name>  Manage small attachments and links",
     "  template create|list   Reusable task templates (use with create --template <id>)",
     "  bulk <id…> [--status …]  Change many tasks; activity <id> shows the timeline",
     "  checklist <id>         Show a task's checkboxes grouped by heading",
     '  check|uncheck <id> (--item N | --section "Heading" | --all)  Tick checkboxes without editing the file',
-    "  delete <id> [--yes] [--force] [--cascade]  Move a task, group or document to the temp trash",
+    "  delete <id> [--yes] [--force] [--cascade]  Move a task, wave or document to the temp trash",
     "  undelete <trash-id>    Restore a deleted item from the trash",
     "  trash list             List items that can be undeleted",
     "  validate [scope]       Validate tasks, docs, links, and references",
@@ -173,7 +177,7 @@ function printHelp(): void {
     "",
     "Setup options: --docs project-overview,repository-map,development-setup,testing-guide --rules coding,testing,security,git --agents codex,claude,copilot,cursor,skill",
     "Options: --workspace <path> --no-open --json --plain --no-color --quiet --verbose -f/--full-screen --help --version",
-    "Task fields: --title --group --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
+    "Task fields: --title --wave (or --group) --status --priority --assignee --project --tag a,b --due YYYY-MM-DD --depends-on TSK-… --extra JSON",
   ];
   for (const row of rows) line(row, "requested");
 }
@@ -483,7 +487,7 @@ async function main(): Promise<void> {
         line(`  ${stdoutStyle.muted(`wrote ${path}`)}`, "requested");
       for (const path of documentation.skipped)
         line(`  ${stdoutStyle.muted(`kept existing ${path}`)}`, "requested");
-      if (!refreshDocs) line('  Start with: task group create --title "My project"', "requested");
+      if (!refreshDocs) line('  Start with: task wave create --title "My project"', "requested");
     }
     return;
   }
@@ -707,7 +711,7 @@ async function main(): Promise<void> {
       line(
         renderMessage(
           "success",
-          `Organized ${groups.length} legacy group(s).`,
+          `Organized ${groups.length} legacy wave(s).`,
           stdoutStyle,
           stdoutSymbols,
         ),
@@ -731,7 +735,7 @@ async function main(): Promise<void> {
     }
     if (action === "create") {
       let name = optionString(args, "title");
-      if (!name && isInteractive()) name = await promptText("Group name", "title");
+      if (!name && isInteractive()) name = await promptText("Wave name", "title");
       if (!name) throw new WorkspaceError("invalid_input", "Provide --title <name>");
       const group = await createTaskGroup(context, name, {
         goal: await optionalTextFile("goal-file"),
@@ -742,14 +746,14 @@ async function main(): Promise<void> {
         line(
           renderMessage(
             "success",
-            `Created group ${group.name} (${group.id}) · ${group.path}`,
+            `Created wave ${group.name} (${group.id}) · ${group.path}`,
             stdoutStyle,
             stdoutSymbols,
           ),
         );
       return;
     }
-    throw new WorkspaceError("invalid_input", "Use: task group create|list");
+    throw new WorkspaceError("invalid_input", "Use: task wave create|list");
   }
 
   if (command === "list") {
@@ -877,7 +881,7 @@ async function main(): Promise<void> {
       );
       if (groups.length) {
         const chosen = await select({
-          message: "Choose a task group",
+          message: "Choose a task wave",
           options: groups.map((candidate) => ({ value: candidate.id, label: candidate.name })),
         });
         if (isCancel(chosen)) {
@@ -887,9 +891,9 @@ async function main(): Promise<void> {
         group = chosen;
       } else {
         const createGroup = await select({
-          message: "There are no active task groups yet",
+          message: "There are no active task waves yet",
           options: [
-            { value: "create", label: "Create a group now" },
+            { value: "create", label: "Create a wave now" },
             { value: "cancel", label: "Cancel" },
           ],
         });
@@ -897,13 +901,13 @@ async function main(): Promise<void> {
           emitError(outputContext, "Cancelled", false);
           process.exit(130);
         }
-        const groupName = await promptText("New task group name");
+        const groupName = await promptText("New task wave name");
         const createdGroup = await createTaskGroup(context, groupName);
         group = createdGroup.id;
       }
     }
     if (!title) throw new WorkspaceError("invalid_input", "Provide --title <name>");
-    if (!group) throw new WorkspaceError("invalid_input", "Provide --group <group-id-or-slug>");
+    if (!group) throw new WorkspaceError("invalid_input", "Provide --wave <wave-id-or-slug>");
     const create = args.options.has("template")
       ? (input: Parameters<typeof createTask>[1]) =>
           createTaskFromTemplate(context, optionString(args, "template") ?? "", input)
@@ -1044,7 +1048,7 @@ async function main(): Promise<void> {
   if (command === "archive" || command === "restore") {
     const identifier = args.positionals[0];
     if (!identifier)
-      throw new WorkspaceError("invalid_input", `Usage: task ${command} <task-or-group>`);
+      throw new WorkspaceError("invalid_input", `Usage: task ${command} <task-or-wave>`);
     const isTask = identifier.startsWith("TSK-");
     const result =
       command === "archive"
@@ -1184,7 +1188,7 @@ async function main(): Promise<void> {
     if (!identifier)
       throw new WorkspaceError(
         "invalid_input",
-        "Usage: task move <task-id> (--before|--after <task-id> | --order N | --group <id>)",
+        "Usage: task move <task-id> (--before|--after <task-id> | --order N | --wave <id>)",
       );
     const group = optionString(args, "group");
     let task: DocumentSummary | undefined;
@@ -1199,7 +1203,7 @@ async function main(): Promise<void> {
         ...(order !== undefined && order !== null ? { order } : {}),
       });
     if (!task)
-      throw new WorkspaceError("invalid_input", "Provide --before, --after, --order or --group");
+      throw new WorkspaceError("invalid_input", "Provide --before, --after, --order or --wave");
     if (json) output(record(task));
     else
       line(
@@ -1313,7 +1317,7 @@ async function main(): Promise<void> {
     if (ids.length === 0)
       throw new WorkspaceError(
         "invalid_input",
-        "Usage: task bulk <task-id…> [--status … --priority … --assignee … --group … --archive]",
+        "Usage: task bulk <task-id…> [--status … --priority … --assignee … --wave … --archive]",
       );
     const results = await bulkUpdateTasks(context, ids, {
       status: enumOption("status", taskStatuses),

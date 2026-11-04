@@ -17,7 +17,7 @@ export async function workspaceMenu(workspace: string): Promise<MenuAction> {
       { value: "info", label: "Workspace overview" },
       { value: "list", label: "List tasks" },
       { value: "create", label: "Create a task" },
-      { value: "group-create", label: "Create a task group" },
+      { value: "group-create", label: "Create a task wave" },
       { value: "search", label: "Search workspace" },
       { value: "docs", label: "Browse documents" },
       { value: "validate", label: "Validate workspace" },

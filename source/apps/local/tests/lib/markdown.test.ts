@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   appendTimestampedMarkdownComment,
+  directChildFolders,
   markdownChecklistProgress,
+  parentDocumentFolder,
   rootFiles,
   toggleMarkdownCheckbox,
   topLevelFolders,
@@ -54,5 +56,15 @@ describe("documents sidebar structure", () => {
       "AGENTS.md",
     ]);
     expect(topLevelFolders(["README.md"])).toEqual([]);
+  });
+
+  test("lists immediate folders relative to a current folder", () => {
+    const paths = ["README.md", "docs/a.md", "docs/nested/b.md", "docs/nested/deep/c.md"];
+    expect(directChildFolders(paths)).toEqual([{ path: "docs", name: "docs", count: 3 }]);
+    expect(directChildFolders(paths, "docs")).toEqual([
+      { path: "docs/nested", name: "nested", count: 2 },
+    ]);
+    expect(parentDocumentFolder("README.md")).toBe("");
+    expect(parentDocumentFolder("docs/nested/b.md")).toBe("docs/nested");
   });
 });

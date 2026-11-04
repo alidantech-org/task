@@ -1,7 +1,7 @@
 "use client";
 
 import { parseUnifiedDiff } from "@task/workspace/diff/parse";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Search } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import { type HighlightedToken, highlightLines } from "@/lib/highlight";
 
@@ -62,6 +62,7 @@ type CodeViewerProps = {
   /** No border, rounded corners or toolbar: for full-height views. */
   flat?: boolean;
   showLineNumbers?: boolean;
+  onSearch?: () => void;
 };
 
 export function CodeViewer({
@@ -73,6 +74,7 @@ export function CodeViewer({
   compact = false,
   flat = false,
   showLineNumbers = !compact,
+  onSearch,
 }: CodeViewerProps) {
   const tokens = useHighlightedLines(code, language);
   const [copied, setCopied] = useState(false);
@@ -97,10 +99,13 @@ export function CodeViewer({
     >
       <div className="code-viewer-bar">
         <span>{language}</span>
-        <button type="button" onClick={() => void copy()} aria-label="Copy code">
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+        <div className="code-viewer-actions">
+          {onSearch && <button type="button" onClick={onSearch} aria-label="Search this code in the project"><Search className="size-3.5" />Search project</button>}
+          <button type="button" onClick={() => void copy()} aria-label="Copy code">
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
       <div className="code-viewer-body">
         {lines.map((text, index) => {

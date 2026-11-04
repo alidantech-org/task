@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { TasksPageContent } from "@/components/pages/tasks-page";
 
-export const metadata: Metadata = { title: "Task — Tasks" };
+export const metadata: Metadata = { title: "Taskcode — Tasks" };
 export default function TasksPage() {
   return <TasksPageContent />;
 }

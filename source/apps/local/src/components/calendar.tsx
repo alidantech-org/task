@@ -3,8 +3,8 @@
 import { useDraggable, useDroppable } from "@dnd-kit/react";
 import { ChevronLeft, PanelRight, PanelRightOpen, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { type CalendarTask, OpenButton } from "@/components/board-task";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CalendarTask } from "@/components/board-task";
 import { DaySheet, WeekSheet } from "@/components/schedule-sheets";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
 import { restartSectionEntrance } from "@/lib/entrance";
@@ -19,22 +19,23 @@ function CalendarTaskCard({ task, onSelect }: { task: CalendarTask; onSelect(): 
     id: `task:${task.id}`,
     data: { taskId: task.id },
   });
+  const dragRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      ref(element);
+      handleRef(element);
+    },
+    [ref, handleRef],
+  );
   return (
     <div
-      ref={ref}
+      ref={dragRef}
       data-tid={task.id}
       className={`mini ${statusClass(task.status)} ${isDragging ? "drag" : ""}`}
       title={task.name}
     >
-      <button
-        type="button"
-        ref={handleRef}
-        onClick={onSelect}
-        className="w-full truncate text-left"
-      >
+      <button type="button" onClick={onSelect} className="w-full min-w-0 truncate text-left">
         {task.name}
       </button>
-      <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
     </div>
   );
 }

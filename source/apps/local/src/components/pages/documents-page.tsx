@@ -1,10 +1,13 @@
 "use client";
 
 import { Button } from "@task/ui";
-import { LayoutGrid, List, Plus, Rows3, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronRight, Folder, LayoutGrid, List, Plus, Rows3, X } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
+import { CustomSelect } from "@/components/ui/select";
 import { usePersistentState } from "@/lib/persistent-state";
+import { directChildFolders, parentDocumentFolder } from "@/lib/markdown";
 
 type DocumentSearchHit = { id: string; snippet: string; type: string };
 type DocView = "list" | "table" | "grid";
@@ -20,13 +23,6 @@ function formattedDate(timestamp: number): string {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
     new Date(timestamp),
   );
-}
-
-/** A stable hue per tag so the same tag always has the same colour. */
-function tagHue(tag: string): number {
-  let hash = 0;
-  for (const char of tag) hash = (hash * 31 + char.charCodeAt(0)) % 360;
-  return hash;
 }
 
 function DocIcon() {
@@ -57,7 +53,56 @@ type Row = {
   modifiedAt: number;
 };
 
+function TagChips({
+  tags,
+  activeTag,
+  onTag,
+}: {
+  tags: readonly string[];
+  activeTag: string;
+  onTag(tag: string): void;
+}) {
+  const visible = tags.slice(0, 2);
+  const hidden = tags.slice(2);
+  return (
+    <span className="doc-tag-list">
+      {visible.map((name) => (
+        <button
+          type="button"
+          key={name}
+          className={`dchip tag ${activeTag === name ? "on" : ""}`}
+          title={`Filter by #${name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTag(name);
+          }}
+        >
+          #{name}
+        </button>
+      ))}
+      {hidden.length > 0 && (
+        <details className="doc-tag-more" onClick={(event) => event.stopPropagation()}>
+          <summary>+{hidden.length} more</summary>
+          <span className="doc-tag-menu">
+            {hidden.map((name) => (
+              <button
+                type="button"
+                key={name}
+                className={`dchip tag ${activeTag === name ? "on" : ""}`}
+                onClick={() => onTag(name)}
+              >
+                #{name}
+              </button>
+            ))}
+          </span>
+        </details>
+      )}
+    </span>
+  );
+}
+
 export function DocumentsPage() {
+  const router = useRouter();
   const {
     docs,
     documentFolder,
@@ -66,6 +111,12 @@ export function DocumentsPage() {
   } = useWorkspaceApp();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  const [groupBy, setGroupBy] = usePersistentState<"none" | "folder" | "type">(
+    "documents:group-by",
+    "none",
+    (value): value is "none" | "folder" | "type" =>
+      value === "none" || value === "folder" || value === "type",
+  );
   const [view, setView] = usePersistentState<DocView>("documents:view", "list", isDocView);
   const [creating, setCreating] = useState(false);
   const [words, setWords] = useState<Record<string, number>>({});
@@ -152,7 +203,7 @@ export function DocumentsPage() {
   }, [normalizedQuery, query]);
 
   const visible: Row[] = docs.filter((doc) => {
-    if (documentFolder && !doc.path.startsWith(`${documentFolder}/`)) return false;
+    if (documentFolder && parentDocumentFolder(doc.path) !== documentFolder) return false;
     if (tag && !doc.tags.includes(tag)) return false;
     if (!normalizedQuery) return true;
     const metadata = `${doc.name} ${doc.path} ${doc.tags.join(" ")}`.toLocaleLowerCase();
@@ -161,32 +212,47 @@ export function DocumentsPage() {
       (bodySearch?.query === normalizedQuery && bodySearch.ids.has(doc.id))
     );
   });
+  const childFolders = directChildFolders(
+    docs.filter((doc) => !tag || doc.tags.includes(tag)).map((doc) => doc.path),
+    documentFolder,
+  );
+  const navigateFolder = (path: string) => {
+    router.push(
+      path ? `/documents/${path.split("/").map(encodeURIComponent).join("/")}` : "/documents",
+    );
+  };
+  const folderPath = documentFolder ? documentFolder.split("/") : [];
+  const groupedVisible =
+    groupBy === "none"
+      ? [{ label: "", documents: visible }]
+      : [
+          ...new Set(
+            visible.map((doc) =>
+              groupBy === "folder" ? parentDocumentFolder(doc.path) || "Root" : doc.type,
+            ),
+          ),
+        ]
+          .sort((left, right) => left.localeCompare(right))
+          .map((label) => ({
+            label,
+            documents: visible.filter(
+              (doc) =>
+                (groupBy === "folder" ? parentDocumentFolder(doc.path) || "Root" : doc.type) ===
+                label,
+            ),
+          }));
 
   const chips = (doc: Row) => {
     const count = words[doc.id];
     return (
       <span className="dchips">
-        <Chip className="type">{doc.type}</Chip>
-        {doc.tags.slice(0, 3).map((name) => (
-          <button
-            type="button"
-            key={name}
-            className={`dchip tag ${tag === name ? "on" : ""}`}
-            style={{ "--h": tagHue(name) } as React.CSSProperties}
-            title={`Filter by #${name}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setTag(tag === name ? "" : name);
-            }}
-          >
-            #{name}
-          </button>
-        ))}
-        <Chip>{formattedDate(doc.modifiedAt)}</Chip>
+        <Chip className="type doc-card-meta">{doc.type}</Chip>
+        <TagChips tags={doc.tags} activeTag={tag} onTag={(name) => setTag(tag === name ? "" : name)} />
+        <Chip className="doc-card-meta">{formattedDate(doc.modifiedAt)}</Chip>
         {count === undefined ? (
-          <span className="dchip shimmer" aria-hidden="true" />
+          <span className="dchip shimmer doc-card-meta" aria-hidden="true" />
         ) : (
-          <Chip>{count} words</Chip>
+          <Chip className="doc-card-meta">{count} words</Chip>
         )}
       </span>
     );
@@ -195,9 +261,30 @@ export function DocumentsPage() {
   return (
     <div className="documents-match docs2">
       <header className="docs-bar">
-        <h1>
-          Documents <small>{visible.length}</small>
-        </h1>
+        <div className="docs-heading">
+          <h1>
+            {documentFolder ? folderPath.at(-1) : "Documents"}{" "}
+            <small>
+              {visible.length} files · {childFolders.length} folders
+            </small>
+          </h1>
+          <nav className="docs-breadcrumb" aria-label="Document path">
+            <button type="button" onClick={() => navigateFolder("")}>
+              Documents
+            </button>
+            {folderPath.map((part, index) => {
+              const path = folderPath.slice(0, index + 1).join("/");
+              return (
+                <span key={path}>
+                  <ChevronRight aria-hidden="true" />
+                  <button type="button" onClick={() => navigateFolder(path)}>
+                    {part}
+                  </button>
+                </span>
+              );
+            })}
+          </nav>
+        </div>
         <input
           type="search"
           value={query}
@@ -210,7 +297,6 @@ export function DocumentsPage() {
           <button
             type="button"
             className="dchip tag on"
-            style={{ "--h": tagHue(tag) } as React.CSSProperties}
             onClick={() => setTag("")}
           >
             #{tag} <X className="size-3" />
@@ -237,6 +323,16 @@ export function DocumentsPage() {
             </button>
           ))}
         </fieldset>
+        <CustomSelect
+          label="Group documents by"
+          value={groupBy}
+          onValueChange={(value) => setGroupBy(value as "none" | "folder" | "type")}
+          options={[
+            { value: "none", label: "Group: none" },
+            { value: "folder", label: "Group: folder" },
+            { value: "type", label: "Group: type" },
+          ]}
+        />
         <Button className="cta" onClick={() => void handleCreateDocument()} disabled={creating}>
           <Plus className="size-4" /> {creating ? "Creating…" : "New document"}
         </Button>
@@ -253,6 +349,22 @@ export function DocumentsPage() {
             </tr>
           </thead>
           <tbody>
+            {childFolders.map((folder) => (
+              <tr key={`folder:${folder.path}`} onClick={() => navigateFolder(folder.path)}>
+                <td>
+                  <b>
+                    <Folder className="docs-table-folder-icon" aria-hidden="true" />
+                    {folder.name}/
+                  </b>
+                </td>
+                <td>
+                  <code className="dpath">{folder.path}/</code>
+                </td>
+                <td>Folder</td>
+                <td>—</td>
+                <td>{folder.count} files</td>
+              </tr>
+            ))}
             {visible.map((doc) => (
               <tr key={doc.id} onClick={() => openRecord(doc as never)}>
                 <td>
@@ -262,15 +374,7 @@ export function DocumentsPage() {
                   <code className="dpath">{doc.path}</code>
                 </td>
                 <td>
-                  {doc.tags.map((name) => (
-                    <span
-                      key={name}
-                      className="dchip tag"
-                      style={{ "--h": tagHue(name) } as React.CSSProperties}
-                    >
-                      #{name}
-                    </span>
-                  ))}
+                  <TagChips tags={doc.tags} activeTag={tag} onTag={(name) => setTag(tag === name ? "" : name)} />
                 </td>
                 <td>{formattedDate(doc.modifiedAt)}</td>
                 <td>
@@ -286,26 +390,70 @@ export function DocumentsPage() {
         </table>
       ) : (
         <div className={view === "grid" ? "docs-grid" : "docs-list"}>
-          {visible.map((doc) => (
+          {childFolders.map((folder) => (
             <button
-              key={doc.id}
+              key={folder.path}
               type="button"
-              onClick={() => openRecord(doc as never)}
-              className="drow"
+              className="drow folder-row"
+              onClick={() => navigateFolder(folder.path)}
             >
-              <DocIcon />
+              <Folder className="docs-folder-icon" aria-hidden="true" />
               <span className="dtext">
-                <b>{doc.name}</b>
+                <b>{folder.name}</b>
                 <span className="dline">
-                  <code className="dpath">{doc.path}</code>
-                  {chips(doc)}
+                  <span className="dpath">{folder.path}/</span>
+                  <Chip>{folder.count} files</Chip>
                 </span>
               </span>
+              <ChevronRight className="docs-folder-next" aria-hidden="true" />
             </button>
+          ))}
+          {groupedVisible.map((group) => (
+            <Fragment key={group.label || "all"}>
+              {group.label && (
+                <h2 className="docs-group-title">
+                  {groupBy === "folder" && group.label !== "Root" ? (
+                    <button
+                      type="button"
+                      onClick={() => navigateFolder(group.label)}
+                      title={`Open ${group.label}/`}
+                    >
+                      <Folder aria-hidden="true" />
+                      {group.label}/
+                    </button>
+                  ) : (
+                    group.label
+                  )}
+                </h2>
+              )}
+              {group.documents.map((doc) => (
+                <div key={doc.id} onClick={() => openRecord(doc as never)} className="drow">
+                  <DocIcon />
+                  <span className="dtext">
+                    <button
+                      type="button"
+                      className="dopen"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openRecord(doc as never);
+                      }}
+                    >
+                      <b>{doc.name}</b>
+                    </button>
+                    <span className="dline">
+                      <code className="dpath">{doc.path}</code>
+                      {chips(doc)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </Fragment>
           ))}
         </div>
       )}
-      {visible.length === 0 && <p className="sub docs-empty">No documents match.</p>}
+      {visible.length === 0 && childFolders.length === 0 && (
+        <p className="sub docs-empty">No documents or folders match.</p>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ describe("CLI command metadata", () => {
 
   test("advertises the workspace command surface", () => {
     expect(getCliMetadata("0.1.0").commands).toContain("group");
+    expect(getCliMetadata("0.1.0").commands).toContain("wave");
     expect(getCliMetadata("0.1.0").commands).toContain("validate");
     expect(getCliMetadata("0.1.0").commands).toContain("run");
   });

@@ -1,6 +1,6 @@
 export const navigationSections = [
   "Tasks",
-  "Groups",
+  "Waves",
   "Docs",
   "Rules",
   "Agents",

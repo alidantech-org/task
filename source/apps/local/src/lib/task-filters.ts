@@ -1,5 +1,7 @@
 export type TaskFilters = {
   text: string;
+  /** A workspace task status, or empty for every status. Optional for existing saved views. */
+  status?: "" | "planned" | "in-progress" | "blocked" | "completed";
   /** An assignee name, "me", or empty for everyone. */
   assignee: string;
   tag: string;
@@ -10,6 +12,7 @@ export type TaskFilters = {
 
 export const emptyFilters: TaskFilters = {
   text: "",
+  status: "",
   assignee: "",
   tag: "",
   priority: "",
@@ -30,7 +33,7 @@ type Filterable = {
 
 export function isFiltering(filters: TaskFilters): boolean {
   return (Object.keys(emptyFilters) as (keyof TaskFilters)[]).some(
-    (key) => filters[key] !== emptyFilters[key],
+    (key) => (key === "status" ? (filters.status ?? "") : filters[key]) !== emptyFilters[key],
   );
 }
 
@@ -60,6 +63,7 @@ export function applyFilters<T extends Filterable>(
         .includes(text)
     )
       return false;
+    if (filters.status && task.status !== filters.status) return false;
     if (wantedAssignee && (task.assignee ?? "").toLowerCase() !== wantedAssignee) return false;
     if (filters.tag && !task.tags.includes(filters.tag)) return false;
     if (filters.priority && task.priority !== filters.priority) return false;
@@ -86,6 +90,8 @@ export function isFilters(value: unknown): value is TaskFilters {
   const record = value as Record<string, unknown>;
   return (
     typeof record.text === "string" &&
+    (record.status === undefined ||
+      ["", "planned", "in-progress", "blocked", "completed"].includes(String(record.status))) &&
     typeof record.assignee === "string" &&
     typeof record.tag === "string" &&
     typeof record.priority === "string" &&

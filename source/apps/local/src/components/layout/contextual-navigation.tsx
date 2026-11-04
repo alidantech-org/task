@@ -54,9 +54,9 @@ type ContextualNavigationProps = {
   embedded?: boolean;
 };
 const operations = [
-  { label: "Agent prompts", icon: BookOpen },
-  { label: "Activity", icon: Activity },
-  { label: "Workspace health", icon: Gauge },
+  { label: "Prompts", section: "Agent prompts", icon: BookOpen },
+  { label: "Activity", section: "Activity", icon: Activity },
+  { label: "Workspace health", section: "Workspace health", icon: Gauge },
 ];
 const statusNames: Record<string, string> = {
   planned: "Planned",
@@ -255,9 +255,9 @@ export function ContextualNavigation({
                   })}
               </nav>
             )}
-            {section === "Groups" && (
+            {section === "Waves" && (
               <div className="space-y-4">
-                {(["Active groups", "Completed groups", "Archived groups"] as const).map(
+                {(["Active waves", "Completed waves", "Archived waves"] as const).map(
                   (heading, index) => {
                     const items = groups.filter((item) =>
                       index === 0
@@ -280,7 +280,7 @@ export function ContextualNavigation({
                             title={
                               sidebarCompact ? `${item.name} · ${item.total} tasks` : undefined
                             }
-                            onClick={() => selectSection("Groups")}
+                            onClick={() => selectSection("Waves")}
                             className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-muted-foreground hover:bg-accent/60 ${sidebarCompact ? "justify-center" : ""}`}
                           >
                             <FolderKanban className="size-4 shrink-0" />
@@ -332,14 +332,14 @@ export function ContextualNavigation({
                   Workspace
                 </p>
               )}
-              {operations.map(({ label, icon: Icon }) => (
+              {operations.map(({ label, section: targetSection, icon: Icon }) => (
                 <button
                   key={label}
                   type="button"
                   title={sidebarCompact ? label : undefined}
-                  aria-current={section === label ? "page" : undefined}
-                  onClick={() => selectSection(label)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs ${sidebarCompact ? "justify-center px-1" : ""} ${section === label ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
+                  aria-current={section === targetSection ? "page" : undefined}
+                  onClick={() => selectSection(targetSection)}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs ${sidebarCompact ? "justify-center px-1" : ""} ${section === targetSection ? "bg-accent font-medium text-accent-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
                 >
                   <Icon className="size-4 shrink-0" />
                   {!sidebarCompact && label}

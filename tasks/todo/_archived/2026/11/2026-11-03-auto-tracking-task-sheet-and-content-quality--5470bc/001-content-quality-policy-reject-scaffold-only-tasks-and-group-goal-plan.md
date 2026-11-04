@@ -1,5 +1,5 @@
 ---
-{id: TSK-EA9618BB7702,name: "Content-quality policy: reject scaffold-only tasks and group goal/plan",type: task,status: completed,priority: high,created_at: 2026-11-01T03:18:55.070Z,updated_at: 2026-11-01T03:34:07.870Z,due_at: 2026-11-01,extra: {status_history: [{from: planned,to: completed,at: 2026-11-01T03:34:07.870Z}]}}
+{id: TSK-EA9618BB7702,name: "Content-quality policy: reject scaffold-only tasks and group goal/plan",type: task,status: completed,priority: high,created_at: 2026-11-01T03:18:55.070Z,updated_at: 2026-11-01T03:34:07.870Z,due_at: 2026-11-01,extra: {status_history: [{from: planned,to: completed,at: 2026-11-01T03:34:07.870Z}]},archived_at: 2026-11-03T05:08:30.641Z}
 ---
 
 # Content-quality policy: reject scaffold-only tasks and group goal/plan

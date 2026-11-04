@@ -80,7 +80,7 @@ function TaskRow({
       />
       <button type="button" className="sch-title" onClick={() => onOpen(task)} title={task.name}>
         <span>{task.name}</span>
-        <small>{task.groupName ?? "Ungrouped"}</small>
+        <small>{task.groupName ?? "No wave"}</small>
       </button>
       {task.priority && (
         <i

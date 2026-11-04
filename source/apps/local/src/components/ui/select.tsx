@@ -9,6 +9,8 @@ export type SelectOption = {
   color?: string;
 };
 
+const emptySelection = "__taskcode_no_selection__";
+
 export function CustomSelect({
   value,
   onValueChange,
@@ -30,7 +32,11 @@ export function CustomSelect({
   compact?: boolean;
 }) {
   return (
-    <Select.Root value={value || undefined} onValueChange={onValueChange} disabled={disabled}>
+    <Select.Root
+      value={value || emptySelection}
+      onValueChange={(next) => onValueChange(next === emptySelection ? "" : next)}
+      disabled={disabled}
+    >
       <Select.Trigger
         className={`custom-select ${compact ? "icon" : ""} ${className}`}
         aria-label={label}
@@ -47,7 +53,7 @@ export function CustomSelect({
           />
         )}
         <span className={compact ? "sr-only" : "cs-value"}>
-          <Select.Value placeholder={placeholder} />
+          {value === "" ? placeholder : <Select.Value placeholder={placeholder} />}
         </span>
         {!compact && (
           <Select.Icon>

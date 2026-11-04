@@ -5,6 +5,7 @@ export type HistoricalTask = {
   extra?: { status_history?: readonly StatusChange[]; hidden_from_recent?: boolean };
 };
 export type CompletedTaskRecord = HistoricalTask & {
+  id: string;
   status?: string;
   archived_at?: string;
   updated_at?: string;
@@ -57,6 +58,21 @@ export function getRecentCompletedTasks<T extends CompletedTaskRecord>(
         task.status === "completed" && !isArchivedTask(task) && !task.extra?.hidden_from_recent,
     ),
   ).slice(0, Math.max(0, limit));
+}
+
+/** Limits raw task presentations to recent completions while leaving grouped presentations complete. */
+export function limitRawCompletedTasks<T extends CompletedTaskRecord>(
+  tasks: readonly T[],
+  grouped: boolean,
+  limit = 10,
+): T[] {
+  if (grouped) return [...tasks];
+  const latestIds = new Set(
+    sortCompletedTasks(tasks.filter((task) => task.status === "completed"))
+      .slice(0, Math.max(0, limit))
+      .map((task) => task.id),
+  );
+  return tasks.filter((task) => task.status !== "completed" || latestIds.has(task.id));
 }
 
 export function completionWeek(tasks: readonly HistoricalTask[], now = new Date(), weekStart = 1) {

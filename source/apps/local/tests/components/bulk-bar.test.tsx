@@ -11,6 +11,7 @@ const render = (count: number, busy = false) =>
       busy={busy}
       onApply={() => undefined}
       onSelectAll={() => undefined}
+      onClearSelection={() => undefined}
       onClear={() => undefined}
     />,
   );
