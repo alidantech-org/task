@@ -1,17 +1,15 @@
 "use client";
-
-import { Button, Input } from "@task/ui";
 import {
   Calendar,
-  Check,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
+  Code2,
   File,
   Folder,
-  FolderKanban,
   LayoutGrid,
   ListChecks,
   Sparkles,
-  X,
 } from "lucide-react";
 import {
   type Dispatch,
@@ -23,8 +21,16 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  LocalProjectIcon,
+  ProjectList,
+  projectName,
+  type SwitcherProject,
+} from "@/components/layout/project-switcher";
+import { TaskcodeMark } from "@/components/layout/taskcode-mark";
+import { directChildFolders } from "@/lib/markdown";
 
-type Project = { path: string; addedAt: string; active?: boolean };
+type Project = SwitcherProject;
 type WorkspaceProject = { projectName: string; projectRoot: string } | null;
 type NavGroup = { id: string; name: string; path: string; total: number };
 type GlobalNavigationProps = {
@@ -36,6 +42,8 @@ type GlobalNavigationProps = {
   projectPathInput: string;
   setProjectPathInput(value: string): void;
   trustedProjects: Project[];
+  setTrustedProjects(projects: Project[]): void;
+  setNotice(message: string): void;
   trustProjectPath(path: string): Promise<void>;
   switchProject(path: string): Promise<void>;
   removeProjectTrust(path: string): Promise<void>;
@@ -47,6 +55,10 @@ type GlobalNavigationProps = {
   taskGroupFilter: string;
   selectTaskGroup(groupId: string): void;
   documentPaths: string[];
+  /** Files directly in the workspace root; they are files, not folders. */
+  rootDocuments: { id: string; path: string }[];
+  openDocument(id: string): void;
+  activeDocumentId: string | null;
   documentFolder: string;
   selectDocumentFolder(folder: string): void;
 };
@@ -54,8 +66,9 @@ const globalNavigation = [
   { label: "Overview", icon: LayoutGrid },
   { label: "Tasks", icon: ListChecks },
   { label: "Calendar", icon: Calendar },
-  { label: "Groups", icon: Folder },
+  { label: "Waves", icon: Folder },
   { label: "Documents", icon: File },
+  { label: "Code", icon: Code2 },
 ];
 
 export function GlobalNavigation(props: GlobalNavigationProps) {
@@ -65,9 +78,9 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     workspace,
     projectSwitcherOpen,
     setProjectSwitcherOpen,
-    projectPathInput,
-    setProjectPathInput,
     trustedProjects,
+    setTrustedProjects,
+    setNotice,
     trustProjectPath,
     switchProject,
     removeProjectTrust,
@@ -79,14 +92,19 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
     taskGroupFilter,
     selectTaskGroup,
     documentPaths,
+    rootDocuments,
+    openDocument,
+    activeDocumentId,
     documentFolder,
     selectDocumentFolder,
   } = props;
+  const activeProject = trustedProjects.find((project) => project.active);
   const switcherRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(
     null,
   );
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 
   useLayoutEffect(() => {
     if (!projectSwitcherOpen) {
@@ -119,18 +137,29 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
   useEffect(() => {
     if (!projectSwitcherOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
+      // The project dialogs are portalled outside the popover DOM. Keep their
+      // owning ProjectList mounted while the user interacts with the dialog;
+      // otherwise the first pointerdown on the overlay closes the popover and
+      // unmounts the dialog before its click handlers can run.
+      if (projectDialogOpen) return;
       const target = event.target;
       if (
         target instanceof Node &&
         !switcherRef.current?.contains(target) &&
         !popoverRef.current?.contains(target)
       ) {
+        if (
+          target instanceof Element &&
+          target.closest('[role="dialog"], [role="menu"], [data-radix-popper-content-wrapper]')
+        ) {
+          return;
+        }
         setProjectSwitcherOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [projectSwitcherOpen, setProjectSwitcherOpen]);
+  }, [projectDialogOpen, projectSwitcherOpen, setProjectSwitcherOpen]);
 
   return (
     <aside data-slot="global-navigation" className={`side ${sidebarCompact ? "msb" : ""}`}>
@@ -142,9 +171,12 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
           aria-label="Collapse or expand sidebar"
           onClick={toggleSidebarCompact}
         >
-          T
+          <TaskcodeMark className="taskcode-sidebar-mark" />
         </button>
-        <span className="lbl">Task</span>
+        <span className="lbl taskcode-wordmark">
+          <span>Task</span>
+          <span>code</span>
+        </span>
         <button
           type="button"
           className="ib sbc"
@@ -155,7 +187,7 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
           <ChevronLeft className="size-4" aria-hidden="true" />
         </button>
       </div>
-      <nav aria-label="Workspace navigation">
+      <nav className="main-navigation" aria-label="Workspace navigation">
         {globalNavigation.map(({ label, icon: Icon }) => (
           <Fragment key={label}>
             <button
@@ -180,10 +212,10 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                   className={`nv ${taskGroupFilter ? "" : "on"}`}
                   onClick={() => selectTaskGroup("")}
                 >
-                  <span>All groups</span>
+                  <span>All waves</span>
                   <i>{taskCount}</i>
                 </button>
-                {taskGroups.map((group) => (
+                {taskGroups.slice(0, 4).map((group) => (
                   <button
                     type="button"
                     key={group.id}
@@ -194,6 +226,15 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                     <i>{group.total}</i>
                   </button>
                 ))}
+                {taskGroups.length > 4 && (
+                  <button
+                    type="button"
+                    className="nv sub-more"
+                    onClick={() => selectSection("Waves")}
+                  >
+                    <span>View all waves…</span>
+                  </button>
+                )}
               </div>
             )}
             {label === "Documents" && section === "Documents" && (
@@ -206,19 +247,45 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                   <span>All files</span>
                   <i>{documentPaths.length}</i>
                 </button>
-                {[...new Set(documentPaths.map((path) => path.split("/")[0] ?? ""))]
-                  .filter(Boolean)
+                {directChildFolders(documentPaths, documentFolder)
+                  .slice(0, 4)
                   .map((folder) => (
                     <button
                       type="button"
-                      key={folder}
-                      className={`nv ${documentFolder === folder ? "on" : ""}`}
-                      onClick={() => selectDocumentFolder(folder)}
+                      key={folder.name}
+                      className="nv"
+                      onClick={() => selectDocumentFolder(folder.path)}
                     >
-                      <span>{folder}/</span>
-                      <i>{documentPaths.filter((path) => path.startsWith(`${folder}/`)).length}</i>
+                      <span title={folder.path}>{folder.name}/</span>
+                      <i>{folder.count}</i>
                     </button>
                   ))}
+                {rootDocuments
+                  .slice(
+                    0,
+                    Math.max(0, 4 - directChildFolders(documentPaths, documentFolder).length),
+                  )
+                  .map((doc) => (
+                    <button
+                      type="button"
+                      key={doc.id}
+                      className={`nv ${activeDocumentId === doc.id ? "on" : ""}`}
+                      title={doc.path}
+                      onClick={() => openDocument(doc.id)}
+                    >
+                      <span>{doc.path}</span>
+                    </button>
+                  ))}
+                {directChildFolders(documentPaths, documentFolder).length + rootDocuments.length >
+                  4 && (
+                  <button
+                    type="button"
+                    className="nv sub-more"
+                    onClick={() => selectDocumentFolder("")}
+                  >
+                    <span>Browse all documents…</span>
+                  </button>
+                )}
               </div>
             )}
           </Fragment>
@@ -229,14 +296,14 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
         <button
           type="button"
           className={`nv ${section === "Agent prompts" ? "on" : ""}`}
-          title="Agent prompts"
+          title="Prompts"
           aria-current={section === "Agent prompts" ? "page" : undefined}
           onClick={() => selectSection("Agent prompts")}
         >
           <em className="ni">
             <Sparkles className="size-[18px]" />
           </em>
-          <span>Agent prompts</span>
+          <span>Prompts</span>
         </button>
       </nav>
       <div className="gap" />
@@ -246,23 +313,20 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
             type="button"
             onClick={() => setProjectSwitcherOpen((open) => !open)}
             className="proj"
-            title={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
-            aria-label={`Project switcher: ${workspace?.projectName ?? "no project selected"}`}
+            title={`Local project: ${workspace?.projectName ?? "Select a project"} · Switch project`}
+            aria-label={`Local project: ${workspace?.projectName ?? "Select a project"} · Switch project`}
             aria-haspopup="dialog"
             aria-expanded={projectSwitcherOpen}
           >
-            <span className="grid size-[32px] shrink-0 place-items-center rounded-[9px] bg-accent text-primary">
-              <Folder className="size-4" />
+            <Folder className="project-switcher-folder" aria-hidden="true" />
+            <span className="project-label min-w-0 flex-1 truncate text-left">
+              {activeProject ? projectName(activeProject) : "Select project"}
             </span>
-            <div className="project-label min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm font-semibold">
-                {workspace?.projectName ?? "Select project"}
-              </span>
-              <small className="block truncate">
-                {workspace?.projectRoot ?? "Local workspace"}
-              </small>
-            </div>
-            <span className="sr-only">Open project switcher</span>
+            {projectSwitcherOpen ? (
+              <ChevronUp className="project-chevron size-4" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="project-chevron size-4" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>
@@ -278,36 +342,11 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
               position: "fixed",
               top: popoverPosition?.top ?? 8,
               left: popoverPosition?.left ?? 64,
-              visibility: popoverPosition ? "visible" : "hidden",
+              visibility: projectDialogOpen ? "hidden" : popoverPosition ? "visible" : "hidden",
+              pointerEvents: projectDialogOpen ? "none" : "auto",
             }}
             className="z-[100] max-h-[calc(100dvh-1rem)] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10"
           >
-            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
-              <span className="text-xs font-medium">Trusted projects</span>
-            </div>
-            <form
-              className="space-y-2 border-b border-border/60 p-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
-              }}
-            >
-              <label htmlFor="trusted-project-path" className="text-[11px] text-muted-foreground">
-                Add a project folder
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="trusted-project-path"
-                  value={projectPathInput}
-                  onChange={(event) => setProjectPathInput(event.target.value)}
-                  placeholder="/path/to/project"
-                  className="h-9 min-w-0 text-xs"
-                />
-                <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
-                  Trust
-                </Button>
-              </div>
-            </form>
             {workspace &&
               !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
                 <button
@@ -315,51 +354,21 @@ export function GlobalNavigation(props: GlobalNavigationProps) {
                   onClick={() => void trustProjectPath(workspace.projectRoot)}
                   className="flex w-full items-center gap-2 border-b border-border/60 px-3 py-2.5 text-left hover:bg-accent/60"
                 >
-                  <FolderKanban className="size-4" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">
-                      {workspace.projectName} · Current
-                    </span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      Trust this project
-                    </span>
+                  <LocalProjectIcon size={22} />
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                    Add {workspace.projectName} to your projects
                   </span>
                 </button>
               )}
-            <div className="max-h-72 overflow-y-auto">
-              {trustedProjects.map((project) => (
-                <div
-                  key={project.path}
-                  className="flex items-center gap-1 border-b border-border/50 px-2 last:border-0"
-                >
-                  <button
-                    type="button"
-                    disabled={project.active}
-                    onClick={() => void switchProject(project.path)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-1 py-2 text-left hover:bg-accent/50 disabled:opacity-70"
-                  >
-                    <Folder className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-xs">{project.path}</span>
-                    {project.active && <Check className="size-4 shrink-0 text-primary" />}
-                  </button>
-                  {!project.active && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Remove trust for ${project.path}`}
-                      title="Remove trust"
-                      onClick={() => void removeProjectTrust(project.path)}
-                      className="size-7"
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              {trustedProjects.length === 0 && !workspace && (
-                <p className="px-3 py-4 text-xs text-muted-foreground">No trusted projects yet.</p>
-              )}
-            </div>
+            <ProjectList
+              projects={trustedProjects}
+              onProjects={setTrustedProjects}
+              switchProject={switchProject}
+              removeProjectTrust={removeProjectTrust}
+              onNotice={setNotice}
+              onNavigate={() => setProjectSwitcherOpen(false)}
+              onDialogOpenChange={setProjectDialogOpen}
+            />
           </div>,
           document.body,
         )}

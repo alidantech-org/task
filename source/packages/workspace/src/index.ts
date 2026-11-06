@@ -32,6 +32,19 @@ export { WorkspaceError } from "@task/workspace/errors";
 export { languageForPath } from "@task/workspace/files/language";
 export type { ProjectFile } from "@task/workspace/files/read";
 export { maxProjectFileBytes, readProjectFile } from "@task/workspace/files/read";
+export type {
+  ProjectSearchHit,
+  ProjectTree,
+  ProjectTreeEntry,
+  ProjectTreeFile,
+  ProjectTreeFolder,
+} from "@task/workspace/files/tree";
+export {
+  listProjectTree,
+  readProjectFileOriginal,
+  searchProjectFiles,
+  writeProjectFile,
+} from "@task/workspace/files/tree";
 export { isDeniedPath } from "@task/workspace/git/deny";
 export type { FileChange, SegmentChanges, TaskChanges } from "@task/workspace/git/tracking";
 export {
@@ -108,6 +121,7 @@ export {
   getTaskGroupWeekPath,
   migrateLegacyGroups,
   replaceDocumentBody,
+  replaceFile,
   restoreTask,
   restoreTaskGroup,
   setDocumentChecklist,

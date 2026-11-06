@@ -64,11 +64,11 @@ Run `bun run cli:unlink` to remove those development commands. Make sure `$(bun 
 
 Bare `task` opens a terminal menu when attached to a TTY; in non-interactive shells it prints the overview and exits. `task --quiet` suppresses the bare overview. `task --json` returns machine-readable overview data. Workspace selection uses `--workspace`, then `TASK_WORKSPACE_ROOT`, then upward discovery of the nearest `task.yaml` or `tasks/` directory. `task --help` lists supported commands and filters. Non-interactive creation requires explicit arguments; JSON success output is written to stdout and errors to stderr. Human output uses compact width-aware task tables and grouped validation diagnostics; `--verbose` adds paths and metadata. `--plain` and `--no-color` disable color. See [CLI setup and behavior](../../../source/apps/cli/README.md) and [workspace discovery](../architecture/workspace-discovery.md).
 
-To set up a new local project, run `task init` (or `task init --workspace .tasks`) from its root. Then use `task -f` or `task tui` to open the read-only full-screen browser; it shares the CLI's resolved workspace. See [TUI setup and keys](../../../source/apps/tui/README.md).
+To set up a new local project, run `task init` (or `task init --workspace .tasks`) from its root. In a project already configured with `task.yaml`, interactive `task init` offers to refresh Task documentation; use `task init update` in scripts. This updates the generated workspace guide and Task-managed `AGENTS.md` section, while preserving the project README and custom workspace guides. Then use `task -f` or `task tui` to open the read-only full-screen browser; it shares the CLI's resolved workspace. See [TUI setup and keys](../../../source/apps/tui/README.md).
 
 After initializing a project, run `task run` to start the local dashboard and its Bun workspace runtime. The CLI starts the packaged production Next.js build, waits for runtime and dashboard readiness, opens the loopback URL in the browser, and keeps both services attached to the terminal. Ctrl+C shuts them down. Use `task run --no-open` when launching from automation or a remote terminal. The dashboard uses port 5173 because the runtime’s browser mutation boundary is restricted to that same origin; close an existing dashboard before starting another.
 
-The CLI release package is prepared with `bun run cli:package`. This builds the production dashboard from an isolated temporary checkout and bundles the local runtime alongside the CLI’s Task workspace dependencies, preserving the developer's `.next` directory. Before publishing, run `bun run cli:publish:check`; it runs the repository validation gate, prepares release assets, and rechecks CLI, workspace, and TUI tests plus a temporary global installation. Publish shared packages before the CLI in this order: `@task/contracts`, `@task/ui`, `@task/workspace`, `@task/tui`, then `taskcode`. Install the published CLI using `bun add --global taskcode`. Publication itself is a separate maintainer action and is not performed by the check command.
+The CLI release package is prepared with `bun run cli:package`. This builds the production dashboard from an isolated temporary checkout and bundles the local runtime alongside the CLI’s Task workspace dependencies, preserving the developer's `.next` directory. The GitHub Actions workflow `.github/workflows/release.yml` runs for pushes to `main` and pull requests targeting `main`. It runs `bun run cli:publish:check`, then publishes `taskcode` from `main` only when that package version is not already on npm. The publish job uses the GitHub `publish` environment and npm Trusted Publishing with GitHub Actions OIDC; it does not need a stored npm token. Configure `taskcode`'s npm Trusted Publisher with organization `alidantech-org`, repository `task`, workflow filename `release.yml`, and environment `publish` before merging a version bump to `main`. Install the published CLI using `bun add --global taskcode`.
 
 The local command starts the loopback-only local runtime and the local Next.js dashboard together. They can also be started separately:
 
@@ -114,6 +114,8 @@ The Bun test command runs tests from every Bun workspace. Flutter tests are sepa
 Audit dependency advisories:
 
     bun run audit
+
+The root dependency override keeps DOMPurify at `3.4.17` or later because Monaco 0.57.0 pins an older vulnerable release. Remove the override after Monaco updates its dependency.
 
 Run lint plus the automated test suite and dependency audit:
 

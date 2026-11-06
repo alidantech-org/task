@@ -13,21 +13,21 @@ const dots: Record<string, string> = {
 /** Child tasks of this task, with a progress rollup and a quick way to add one. */
 export function TaskSubtasks({
   task,
-  children,
+  subtasks,
   parent,
   onOpen,
   onAdd,
 }: {
   task: RecordItem;
-  children: readonly RecordItem[];
+  subtasks: readonly RecordItem[];
   parent: RecordItem | undefined;
   onOpen(task: RecordItem): void;
   onAdd(title: string): Promise<boolean>;
 }) {
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
-  const done = children.filter((child) => child.status === "completed").length;
-  const percent = children.length ? Math.round((done / children.length) * 100) : 0;
+  const done = subtasks.filter((child) => child.status === "completed").length;
+  const percent = subtasks.length ? Math.round((done / subtasks.length) * 100) : 0;
   return (
     <div className="task-subtasks">
       {parent && (
@@ -38,11 +38,11 @@ export function TaskSubtasks({
           </button>
         </p>
       )}
-      {children.length > 0 && (
+      {subtasks.length > 0 && (
         <div className="check-summary">
           <div className="min-w-0 flex-1">
             <strong>
-              {done}/{children.length} subtasks done
+              {done}/{subtasks.length} subtasks done
             </strong>
             <div
               className="check-progress"
@@ -57,7 +57,7 @@ export function TaskSubtasks({
         </div>
       )}
       <ul className="sub-list">
-        {children.map((child) => (
+        {subtasks.map((child) => (
           <li key={child.id}>
             <i className="sub-dot" style={{ background: dots[child.status ?? "planned"] }} />
             <button type="button" className="sub-title" onClick={() => onOpen(child)}>
@@ -67,7 +67,7 @@ export function TaskSubtasks({
           </li>
         ))}
       </ul>
-      {children.length === 0 && <p className="sub">No subtasks yet.</p>}
+      {subtasks.length === 0 && <p className="sub">No subtasks yet.</p>}
       <form
         className="sub-add"
         onSubmit={(event) => {

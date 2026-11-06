@@ -74,6 +74,16 @@ try {
     minify: false,
     packages: "bundle",
     external: ["@opentui/core", "@opentui/react"],
+    plugins: [
+      {
+        name: "task-workspace-source",
+        setup(build) {
+          build.onResolve({ filter: /^@task\/workspace$/ }, () => ({
+            path: join(repositoryRoot, "source/packages/workspace/src/index.ts"),
+          }));
+        },
+      },
+    ],
   });
   if (!cliBuild.success) {
     throw new Error(cliBuild.logs.map((log) => log.message).join("\n"));

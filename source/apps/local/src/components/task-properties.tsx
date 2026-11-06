@@ -144,11 +144,11 @@ export function TaskProperties({
           onValueChange={(date) => void onSave({ startAt: date || null })}
         />
       </Field>
-      <Field label="Group">
+      <Field label="Wave">
         <CustomSelect
-          label="Group"
+          label="Wave"
           value={currentGroupId ?? ""}
-          placeholder="Ungrouped"
+          placeholder="No wave"
           options={groups.map((group) => ({ value: group.id, label: group.name }))}
           onValueChange={(group) => group !== currentGroupId && void onSave({ group })}
         />

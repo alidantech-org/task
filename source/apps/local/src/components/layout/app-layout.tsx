@@ -1,16 +1,16 @@
 "use client";
 
-import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { PointerActivationConstraints } from "@dnd-kit/dom";
+import { DragDropProvider, type DragEndEvent, KeyboardSensor, PointerSensor } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
 import { Button, Input } from "@task/ui";
 import { Command as CommandMenu } from "cmdk";
 import {
   AlertTriangle,
   Calendar,
-  Check,
   type CircleDot,
+  Code2,
   File,
-  Folder,
   Folder as FolderIcon,
   LayoutGrid,
   ListChecks,
@@ -35,13 +35,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDialogs } from "@/components/dialogs";
 import { GlobalNavigation } from "@/components/layout/global-navigation";
+import { ProjectList, type SwitcherProject } from "@/components/layout/project-switcher";
 import { ShellFrame } from "@/components/layout/shell-frame";
 import { CustomSelect } from "@/components/ui/select";
 import { dateKey } from "@/lib/calendar";
+import { encodeDocumentPath, resolveDocumentRoute } from "@/lib/document-route";
 import { taskDropUpdate } from "@/lib/drop-mutation";
 import { restartSectionEntrance } from "@/lib/entrance";
 import { groupForTask, groupLabel } from "@/lib/group";
+import { parentDocumentFolder } from "@/lib/markdown";
 import {
   clampSidebarWidth,
   isArchivedTask,
@@ -98,6 +102,14 @@ export type RecordItem = {
   modifiedAt: number;
   contentHash: string;
 };
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.closest('input, textarea, select, [role="textbox"], [role="searchbox"]') !== null
+  );
+}
 type Group = {
   id: string;
   name: string;
@@ -110,6 +122,12 @@ type Group = {
   completed: number;
   archivedTasks: number;
   resolved: number;
+};
+type LiveChange = {
+  id: string;
+  summary: string;
+  source: string;
+  changedAt: number;
 };
 type Workspace = {
   projectName: string;
@@ -139,7 +157,7 @@ type Workspace = {
   documents: RecordItem[];
   diagnostics: Array<{ path: string; message: string; category?: string }>;
 };
-type TrustedProject = { path: string; addedAt: string; active?: boolean };
+type TrustedProject = SwitcherProject;
 type SearchResult = {
   path: string;
   id: string;
@@ -148,7 +166,6 @@ type SearchResult = {
   snippet: string;
 };
 type PaletteEntry = { key: string; label: string; detail: string; run(): void };
-type LiveChange = { id: string; name: string; status: string; changedAt: string; source: string };
 type DocumentConflict = { body: string; contentHash: string };
 type AppProps = {
   runtimeStatus: "connected" | "offline";
@@ -158,6 +175,7 @@ type AppProps = {
   children?: ReactNode;
 };
 type WorkspaceAppContextValue = {
+  switchProject(path: string): Promise<void>;
   workspace: Workspace | null;
   records: RecordItem[];
   tasks: RecordItem[];
@@ -205,6 +223,11 @@ type WorkspaceAppContextValue = {
   updateTaskFields(task: RecordItem, patch: Record<string, unknown>): Promise<boolean>;
   /** Adds a subtask in the same group as its parent. */
   createSubtask(parent: RecordItem, title: string): Promise<boolean>;
+  /** Applies one change to many tasks and reports how each one went. */
+  bulkUpdate(
+    ids: readonly string[],
+    patch: Record<string, unknown>,
+  ): Promise<{ ok: number; failed: string[] }>;
   /** Applies a board drop: optionally a new status, then a position next to a neighbour. */
   moveOnBoard(
     task: RecordItem,
@@ -216,12 +239,23 @@ type WorkspaceAppContextValue = {
     selector: { items?: readonly number[]; section?: string; all?: boolean },
     checked: boolean,
   ): Promise<void>;
-  saveBody(body: string): Promise<boolean>;
+  /** An empty `successMessage` saves quietly: no toast and the draft is left untouched. */
+  saveBody(body: string, successMessage?: string): Promise<boolean>;
   setNotice(message: string): void;
   refresh(): Promise<void>;
   validate(): Promise<void>;
   migrate(): Promise<void>;
 };
+const taskDragSensors = [
+  PointerSensor.configure({
+    activationConstraints: (event) =>
+      event.pointerType === "touch"
+        ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
+        : [new PointerActivationConstraints.Distance({ value: 6 })],
+  }),
+  KeyboardSensor,
+];
+
 const WorkspaceAppContext = createContext<WorkspaceAppContextValue | null>(null);
 export function useWorkspaceApp(): WorkspaceAppContextValue {
   const value = useContext(WorkspaceAppContext);
@@ -234,8 +268,9 @@ const navigation = [
   { label: "Overview", icon: LayoutGrid },
   { label: "Tasks", icon: ListChecks },
   { label: "Calendar", icon: Calendar },
-  { label: "Groups", icon: FolderIcon },
+  { label: "Waves", icon: FolderIcon },
   { label: "Documents", icon: File },
+  { label: "Code", icon: Code2 },
 ];
 const _statuses = ["planned", "in-progress", "blocked", "completed", "archived"] as const;
 const statusNames: Record<string, string> = {
@@ -250,8 +285,9 @@ function sectionFromPath(path: string): string {
   const first = path.split("?")[0]?.split("/")[1] ?? "";
   if (first === "tasks") return "Tasks";
   if (first === "calendar") return "Calendar";
-  if (first === "groups") return "Groups";
+  if (first === "groups") return "Waves";
   if (first === "documents") return "Documents";
+  if (first === "code") return "Code";
   if (first === "activity") return "Activity";
   if (first === "prompts") return "Agent prompts";
   if (first === "health") return "Workspace health";
@@ -260,35 +296,14 @@ function sectionFromPath(path: string): string {
 function sectionPath(label: string): string {
   if (label === "Tasks") return "/tasks";
   if (label === "Calendar") return "/calendar";
-  if (label === "Groups") return "/groups";
+  if (label === "Waves") return "/groups";
   if (label === "Documents") return "/documents";
+  if (label === "Code") return "/code";
   if (label === "Activity") return "/activity";
   if (label === "Agent prompts") return "/prompts";
   if (label === "Workspace health") return "/health";
   return "/";
 }
-function documentIdFromPath(path: string): string | null {
-  const match = path.match(/^\/documents\/([^/]+)$/);
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return null;
-  }
-}
-function folderFromPath(path: string): string {
-  const match = path.match(/^\/documents\/folder\/(.+)$/);
-  if (!match?.[1]) return "";
-  try {
-    return match[1].split("/").map(decodeURIComponent).join("/");
-  } catch {
-    return "";
-  }
-}
-function encodePath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
 function _statusVariant(status?: string): "success" | "warning" | "destructive" | "secondary" {
   if (status === "completed") return "success";
   if (status === "in-progress") return "warning";
@@ -341,14 +356,23 @@ export function App({
   children,
 }: AppProps) {
   const router = useRouter();
+  const { confirm } = useDialogs();
   const pathname = usePathname() ?? initialPath;
   const [workspace, setWorkspace] = useState<Workspace | null>(rawWorkspace as Workspace | null);
   const [connectionStatus, setConnectionStatus] = useState(runtimeStatus);
-  const [liveOpen, setLiveOpen] = useState(false);
-  const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
   const [liveFlashId, setLiveFlashId] = useState<string | null>(null);
+  const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const livePopoverRef = useRef<HTMLDivElement | null>(null);
   const pageBodyRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<Workspace | null>(rawWorkspace as Workspace | null);
+  const dragSettleUntilRef = useRef(0);
+  const waitForDragSettle = useCallback(async () => {
+    while (dragSettleUntilRef.current > Date.now()) {
+      const delay = dragSettleUntilRef.current - Date.now();
+      await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
+    }
+  }, []);
   const section = sectionFromPath(pathname);
   const [taskView, setTaskView] = usePersistentState<"List" | "Board" | "Calendar">(
     "task:view",
@@ -373,7 +397,9 @@ export function App({
   const [documentDraft, setDocumentDraft] = useState("");
   const [documentConflict, setDocumentConflict] = useState<DocumentConflict | null>(null);
   const [_savingDocument, setSavingDocument] = useState(false);
-  const [documentFolder, setDocumentFolder] = useState(() => folderFromPath(pathname));
+  const [documentFolder, setDocumentFolder] = useState(
+    () => resolveDocumentRoute(pathname, [])?.folder ?? "",
+  );
   const [sidebarCompact, setSidebarCompact] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [lastSidebarMode, setLastSidebarMode] = useState<"full" | "mini">("full");
@@ -395,6 +421,8 @@ export function App({
   const [newGroup, setNewGroup] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [creating, setCreating] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [templateId, setTemplateId] = useState("none");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const creatingDocument = useRef(false);
   const pendingTaskSelection = useRef<string | null>(null);
@@ -423,6 +451,23 @@ export function App({
     }, 2100);
     return () => window.clearTimeout(timer);
   }, [liveFlashId]);
+  useEffect(() => {
+    if (!liveOpen) return;
+    const closeOnOutsidePointer = (event: globalThis.PointerEvent) => {
+      if (event.target instanceof Node && !livePopoverRef.current?.contains(event.target)) {
+        setLiveOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLiveOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [liveOpen]);
   useEffect(() => {
     if (!notice) {
       setUndoTrashId("");
@@ -465,11 +510,11 @@ export function App({
     return tasks.filter((task) => task.status === taskFilter);
   }, [archivedTasks, completedTasks, tasks, taskFilter]);
   const docs = records.filter((item) => item.type !== "task");
-  const routeDocumentId = documentIdFromPath(pathname);
-  const selectedFromRoute = routeDocumentId
-    ? (records.find((item) => item.id === routeDocumentId) ?? null)
-    : null;
-  const activeSelected = routeDocumentId ? selectedFromRoute : selected;
+  const documentRoute = resolveDocumentRoute(pathname, docs);
+  const routeDocument =
+    documentRoute?.kind === "document" ? (documentRoute.document as RecordItem) : null;
+  const routeDocumentId = routeDocument?.id ?? null;
+  const activeSelected = documentRoute ? routeDocument : selected;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Re-run the entrance animation when the active view changes.
   useEffect(() => {
     restartSectionEntrance(pageBodyRef.current);
@@ -493,12 +538,11 @@ export function App({
 
   useEffect(() => {
     const nextSection = sectionFromPath(pathname);
-    const nextFolder = folderFromPath(pathname);
-    setDocumentFolder(nextFolder);
-    const nextId = documentIdFromPath(pathname);
-    if (nextId) {
-      const match = records.find((item) => item.id === nextId);
-      if (match) setSelected(match);
+    const nextDocumentRoute = resolveDocumentRoute(pathname, docs);
+    setDocumentFolder(nextDocumentRoute?.folder ?? "");
+    if (nextDocumentRoute?.kind === "document") {
+      setSelected(nextDocumentRoute.document as RecordItem);
+      if (nextDocumentRoute.needsRedirect) router.replace(nextDocumentRoute.canonicalPath);
     } else {
       const pendingId = pendingTaskSelection.current;
       if (nextSection === "Tasks" && pendingId) {
@@ -514,7 +558,7 @@ export function App({
       setEditingDocument(false);
       setDocumentConflict(null);
     }
-  }, [pathname, records, selected]);
+  }, [docs, pathname, records, router.replace, selected]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("task-theme");
@@ -601,17 +645,17 @@ export function App({
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      const editableTarget = isEditableTarget(event.target);
+      if (!editableTarget && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         openPalette();
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+      if (!editableTarget && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
         event.preventDefault();
         toggleSidebar();
       }
       if (event.key === "Escape") {
         setPaletteOpen(false);
-        setLiveOpen(false);
         setMobileProjectOpen(false);
         setProjectSwitcherOpen(false);
         if (dialog) setDialog(false);
@@ -683,6 +727,7 @@ export function App({
         const response = await fetch("/api/runtime/workspace", { cache: "no-store" });
         const payload = (await response.json()) as { workspace?: Workspace };
         if (!response.ok || !payload.workspace) throw new Error("Workspace unavailable");
+        await waitForDragSettle();
         if (active) {
           setWorkspace(payload.workspace);
           setConnectionStatus("connected");
@@ -701,7 +746,13 @@ export function App({
     const events = new EventSource("/api/runtime/workspace/events", { withCredentials: true });
     events.onopen = () => void poll();
     events.addEventListener("workspace", (rawEvent) => {
-      let eventData: { recordId?: string; changedAt?: string; source?: string } = {};
+      let eventData: {
+        recordId?: string;
+        changedAt?: string;
+        source?: string;
+        changeType?: string;
+        path?: string;
+      } = {};
       try {
         eventData = JSON.parse((rawEvent as MessageEvent<string>).data) as typeof eventData;
       } catch {
@@ -713,6 +764,7 @@ export function App({
         .then(async (response) => {
           const payload = (await response.json()) as { workspace?: Workspace };
           if (!response.ok || !payload.workspace) throw new Error("Workspace unavailable");
+          await waitForDragSettle();
           if (!active) return;
           const next = payload.workspace;
           workspaceRef.current = next;
@@ -725,21 +777,28 @@ export function App({
           const after = eventData.recordId
             ? next.documents.find((item) => item.id === eventData.recordId)
             : undefined;
-          if (eventData.recordId && after && before?.contentHash !== after.contentHash) {
-            const source = eventData.source ?? "External";
-            const status = after.status ?? "updated";
-            const change: LiveChange = {
-              id: after.id,
-              name: after.name,
-              status,
-              changedAt: eventData.changedAt ?? new Date().toISOString(),
-              source,
-            };
-            setLiveChanges((current) => [change, ...current].slice(0, 3));
-            setLiveFlashId(after.id);
-            setNotice(
-              `${source} changed ${after.id}${after.status ? ` to ${statusNames[after.status] ?? after.status}` : ""}`,
+          const changed = after && before?.contentHash !== after.contentHash;
+          const removed = eventData.changeType === "removed" && before;
+          if (changed || removed) {
+            const source =
+              eventData.source === "CLI" || eventData.source === "Editor"
+                ? eventData.source
+                : "External";
+            const id =
+              after?.id ?? before?.id ?? eventData.path ?? eventData.recordId ?? "Workspace";
+            const status = after?.status ? (statusNames[after.status] ?? after.status) : "";
+            const summary = removed
+              ? `Removed ${id}`
+              : status
+                ? `${id} · ${status}`
+                : `Updated ${id}`;
+            const parsedTime = eventData.changedAt ? Date.parse(eventData.changedAt) : Number.NaN;
+            const changedAt = Number.isFinite(parsedTime) ? parsedTime : Date.now();
+            if (after) setLiveFlashId(after.id);
+            setLiveChanges((current) =>
+              [{ id, summary, source, changedAt }, ...current].slice(0, 3),
             );
+            setNotice(`${source} ${summary}`);
           }
         })
         .catch(() => {
@@ -755,7 +814,7 @@ export function App({
       events.close();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [waitForDragSettle]);
   useEffect(() => {
     void fetch("/api/runtime/projects/trusted", { cache: "no-store" })
       .then(async (response) => {
@@ -877,9 +936,9 @@ export function App({
       }
       if (payload.document) {
         setDetail(payload.document);
-        setDocumentDraft(payload.document.body);
+        if (successMessage) setDocumentDraft(payload.document.body);
       }
-      setNotice(successMessage);
+      if (successMessage) setNotice(successMessage);
       return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save Markdown");
@@ -909,6 +968,7 @@ export function App({
     if (!response.ok)
       throw new Error(payload.error?.message ?? `Request failed (${response.status})`);
     if (payload.workspace) {
+      await waitForDragSettle();
       setWorkspace(payload.workspace);
       setConnectionStatus("connected");
       setSelected((current) =>
@@ -1014,7 +1074,7 @@ export function App({
         },
       );
       await acceptWorkspaceResponse(response);
-      setNotice(archived ? "Task moved to archived" : "Task restored to its original group");
+      setNotice(archived ? "Task moved to archived" : "Task restored to its original wave");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not update task archive state");
     }
@@ -1023,12 +1083,13 @@ export function App({
     record: { id: string; name: string },
     kind: "task" | "document" | "task-group",
   ): Promise<boolean> {
-    if (
-      !window.confirm(
-        `Delete "${record.name}"? It moves to the system temp folder and can be undone until that folder is cleared.`,
-      )
-    )
-      return false;
+    const accepted = await confirm({
+      title: `Delete "${record.name}"?`,
+      message: "It moves to the system temp folder and can be undone until that folder is cleared.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!accepted) return false;
     try {
       const route = kind === "task-group" ? "task-groups" : kind;
       const cascade = kind === "task-group" ? "?cascade=1" : "";
@@ -1067,7 +1128,7 @@ export function App({
   async function createSubtask(parent: RecordItem, title: string): Promise<boolean> {
     try {
       const group = groupForTask(parent, workspace?.groups ?? []);
-      if (!group) throw new Error("This task is not in a group");
+      if (!group) throw new Error("This task is not in a wave");
       const response = await fetch("/api/runtime/workspace/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1081,27 +1142,53 @@ export function App({
       return false;
     }
   }
+  async function bulkUpdate(
+    ids: readonly string[],
+    patch: Record<string, unknown>,
+  ): Promise<{ ok: number; failed: string[] }> {
+    try {
+      const response = await fetch("/api/runtime/workspace/tasks/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, patch }),
+      });
+      const clone = response.clone();
+      await acceptWorkspaceResponse(response);
+      const payload = (await clone.json()) as {
+        results?: { id: string; ok: boolean; error?: string }[];
+      };
+      const results = payload.results ?? [];
+      const failed = results
+        .filter((item) => !item.ok)
+        .map((item) => `${item.id}: ${item.error ?? "failed"}`);
+      setNotice(
+        failed.length
+          ? `${results.length - failed.length} updated, ${failed.length} failed. ${failed[0]}`
+          : `${results.length} task${results.length === 1 ? "" : "s"} updated`,
+      );
+      return { ok: results.length - failed.length, failed };
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the tasks");
+      return { ok: 0, failed: [...ids] };
+    }
+  }
   async function moveOnBoard(
     task: RecordItem,
     status: string | undefined,
     plan: { before: string } | { after: string } | null,
   ): Promise<void> {
     try {
-      if (status) {
-        const response = await fetch(`/api/runtime/workspace/task/${encodeURIComponent(task.id)}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status, expectedHash: task.contentHash }),
-        });
-        await acceptWorkspaceResponse(response);
-      }
-      if (plan) {
+      if (status || plan) {
         const response = await fetch(
           `/api/runtime/workspace/task/${encodeURIComponent(task.id)}/reorder`,
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(plan),
+            body: JSON.stringify({
+              ...(plan ?? {}),
+              ...(status ? { status } : {}),
+              expectedHash: task.contentHash,
+            }),
           },
         );
         await acceptWorkspaceResponse(response);
@@ -1254,7 +1341,7 @@ export function App({
     }
   }
   function selectDocumentFolder(path: string) {
-    router.push(path ? `/documents/folder/${encodePath(path)}` : "/documents");
+    router.push(path ? `/documents/${encodeDocumentPath(path)}` : "/documents");
     setDocumentFolder(path);
     setSelected(null);
     setEditingDocument(false);
@@ -1264,7 +1351,7 @@ export function App({
     if (!item) {
       router.push(
         section === "Documents" && documentFolder
-          ? `/documents/folder/${encodePath(documentFolder)}`
+          ? `/documents/${encodeDocumentPath(documentFolder)}`
           : sectionPath(section),
       );
       setSelected(null);
@@ -1279,7 +1366,7 @@ export function App({
       router.push("/tasks");
       return;
     }
-    router.push(`/documents/${encodeURIComponent(item.id)}`);
+    router.push(`/documents/${encodeDocumentPath(item.path)}`);
     setSelected(item);
     setEditingDocument(false);
   }
@@ -1320,7 +1407,12 @@ export function App({
       setDocumentConflict(null);
       setPaletteOpen(false);
       setNotice("Document created");
-      router.push(`/documents/${encodeURIComponent(id)}`);
+      const document = docs.find((item) => item.id === id);
+      router.push(
+        document
+          ? `/documents/${encodeDocumentPath(document.path)}`
+          : `/documents/${encodeURIComponent(id)}`,
+      );
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not create document");
     } finally {
@@ -1403,6 +1495,20 @@ export function App({
     setLastSidebarMode("full");
   }
 
+  useEffect(() => {
+    if (!dialog) return;
+    let active = true;
+    void fetch("/api/runtime/workspace/templates", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json()) as { templates?: { id: string; name: string }[] };
+        if (active && response.ok) setTemplates(payload.templates ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [dialog]);
+
   async function createTask(): Promise<void> {
     const quickAdd = parseQuickAdd(
       title,
@@ -1427,10 +1533,10 @@ export function App({
           error?: { message?: string };
         };
         if (!groupResponse.ok || !groupPayload.group)
-          throw new Error(groupPayload.error?.message ?? "Could not create task group");
+          throw new Error(groupPayload.error?.message ?? "Could not create task wave");
         activeGroup = groupPayload.group.id;
       }
-      if (!activeGroup) throw new Error("Choose or create a task group first.");
+      if (!activeGroup) throw new Error("Choose or create a task wave first.");
       const response = await fetch("/api/runtime/workspace/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1438,6 +1544,7 @@ export function App({
           title: quickAdd.title,
           group: activeGroup,
           ...(quickAdd.dueDate ? { dueAt: quickAdd.dueDate } : {}),
+          ...(templateId !== "none" ? { template: templateId } : {}),
         }),
       });
       const payload = (await response.json()) as {
@@ -1447,6 +1554,7 @@ export function App({
       if (!response.ok) throw new Error(payload.error?.message ?? "Could not create task");
       if (payload.workspace) setWorkspace(payload.workspace);
       setDialog(false);
+      setTemplateId("none");
       setNewGroup("");
       setSelected(null);
       setNotice("Task created");
@@ -1512,7 +1620,7 @@ export function App({
 
   const queryText = query.trim().toLocaleLowerCase();
   const fixedEntries: PaletteEntry[] = [
-    ...["Overview", "Tasks", "Groups", "Documents", "Agent prompts", "Calendar"].map((label) => ({
+    ...["Overview", "Tasks", "Waves", "Documents", "Agent prompts", "Calendar"].map((label) => ({
       key: `section:${label}`,
       label: `Go to ${label}`,
       detail: "Section",
@@ -1578,7 +1686,19 @@ export function App({
     .slice(0, 8);
   const sidebarMode = !sidebarVisible ? "hidden" : sidebarCompact ? "mini" : "full";
   return (
-    <DragDropProvider onDragEnd={(event) => void handleDrop(event)}>
+    <DragDropProvider
+      sensors={taskDragSensors}
+      onDragStart={() => {
+        dragSettleUntilRef.current = Date.now() + 650;
+      }}
+      onDragMove={() => {
+        dragSettleUntilRef.current = Date.now() + 650;
+      }}
+      onDragEnd={(event) => {
+        dragSettleUntilRef.current = Date.now() + 650;
+        void handleDrop(event);
+      }}
+    >
       <WorkspaceAppContext.Provider
         value={{
           workspace,
@@ -1621,30 +1741,19 @@ export function App({
           deleteRecord,
           undoDelete,
           moveOnBoard,
+          bulkUpdate,
           updateTaskFields,
           createSubtask,
           setChecklist,
           saveBody: persistDocumentBody,
+          switchProject,
           setNotice,
           refresh,
           validate,
           migrate,
         }}
       >
-        <ShellFrame
-          sidebarMode={sidebarMode}
-          sidebarWidth={sidebarWidth}
-          onPointerDownCapture={(event) => {
-            const target = event.target;
-            if (
-              projectSwitcherOpen &&
-              target instanceof Element &&
-              !target.closest('[data-slot="project-switcher"]')
-            ) {
-              setProjectSwitcherOpen(false);
-            }
-          }}
-        >
+        <ShellFrame sidebarMode={sidebarMode} sidebarWidth={sidebarWidth}>
           <GlobalNavigation
             section={section}
             selectSection={selectSection}
@@ -1654,6 +1763,8 @@ export function App({
             projectPathInput={projectPathInput}
             setProjectPathInput={setProjectPathInput}
             trustedProjects={trustedProjects}
+            setTrustedProjects={setTrustedProjects}
+            setNotice={setNotice}
             trustProjectPath={trustProjectPath}
             switchProject={switchProject}
             removeProjectTrust={removeProjectTrust}
@@ -1667,6 +1778,16 @@ export function App({
             taskGroupFilter={taskGroupFilter}
             selectTaskGroup={selectTaskGroup}
             documentPaths={docs.map((doc) => doc.path)}
+            rootDocuments={docs.filter((doc) => parentDocumentFolder(doc.path) === documentFolder)}
+            openDocument={(id) => {
+              const document = docs.find((item) => item.id === id);
+              router.push(
+                document
+                  ? `/documents/${encodeDocumentPath(document.path)}`
+                  : `/documents/${encodeURIComponent(id)}`,
+              );
+            }}
+            activeDocumentId={routeDocumentId}
             documentFolder={documentFolder}
             selectDocumentFolder={selectDocumentFolder}
           />
@@ -1718,42 +1839,62 @@ export function App({
                     <span className="sbtn-label">Search or jump to…</span>
                     <kbd>⌘K</kbd>
                   </button>
-                  <div className="lvw">
+                  <div className="lvw" ref={livePopoverRef}>
                     <button
                       type="button"
-                      className="live"
-                      aria-expanded={liveOpen}
+                      className="live live-trigger"
                       aria-haspopup="dialog"
+                      aria-expanded={liveOpen}
+                      aria-controls="live-sync-popover"
+                      aria-label={`Live sync ${connectionStatus}${liveChanges.length ? `, ${liveChanges.length} recent changes` : ""}`}
                       onClick={() => setLiveOpen((open) => !open)}
                     >
-                      <Zap className="size-4" />
-                      <span>{connectionStatus === "connected" ? "Live" : "Offline"}</span>
+                      <Zap className="size-[14px]" aria-hidden="true" />
+                      <span>Live</span>
                     </button>
-                    {liveOpen && (
-                      <div className="lvp on" role="dialog" aria-label="Live sync">
+                    <section
+                      id="live-sync-popover"
+                      className={`lvp live-popover ${liveOpen ? "on" : ""}`}
+                      role="dialog"
+                      aria-label="Live workspace updates"
+                      aria-hidden={!liveOpen}
+                    >
+                      <div className="live-popover-heading">
                         <b>Live sync</b>
-                        <p>
-                          Watching {workspace?.workspaceDirectory ?? "the selected workspace"}.
-                          Changes made in the workspace appear here as they are indexed.
-                        </p>
-                        <code className="cli">task move TASK-17 in-progress</code>
-                        {liveChanges.map((change) => (
-                          <p className="live-change" key={`${change.id}:${change.changedAt}`}>
-                            <span className="src">{change.source}</span>
-                            <span>
-                              {change.id} · {statusNames[change.status] ?? change.status}
-                            </span>
-                            <small>
-                              {new Date(change.changedAt).toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </small>
-                          </p>
-                        ))}
-                        {liveChanges.length === 0 && <p>No external changes yet.</p>}
+                        <span className={`live-state ${connectionStatus}`}>
+                          <i /> {connectionStatus === "connected" ? "Connected" : "Reconnecting"}
+                        </span>
                       </div>
-                    )}
+                      <p>
+                        Watching{" "}
+                        {workspace?.workspaceRoot ??
+                          workspace?.projectRoot ??
+                          "the local workspace"}
+                        . Workspace file changes appear here as they happen.
+                      </p>
+                      <code className="cli live-command">task move TASK-17 in-progress</code>
+                      <div className="live-history" aria-live="polite">
+                        {liveChanges.length ? (
+                          liveChanges.map((change) => (
+                            <div
+                              className="live-change"
+                              key={`${change.changedAt}:${change.id}:${change.source}:${change.summary}`}
+                            >
+                              <span className="source-badge">{change.source}</span>
+                              <span className="live-change-summary">{change.summary}</span>
+                              <time dateTime={new Date(change.changedAt).toISOString()}>
+                                {new Intl.DateTimeFormat("en", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                }).format(change.changedAt)}
+                              </time>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="live-empty">No external changes yet.</p>
+                        )}
+                      </div>
+                    </section>
                   </div>
                   <Button
                     variant="ghost"
@@ -1853,68 +1994,14 @@ export function App({
                     <X className="size-4" />
                   </Button>
                 </div>
-                {trustedProjects.map((project) => (
-                  <button
-                    key={project.path}
-                    type="button"
-                    disabled={project.active}
-                    onClick={() => void switchProject(project.path)}
-                    className="flex w-full items-center gap-3 border-b border-border/60 py-3 text-left disabled:opacity-70"
-                  >
-                    <Folder className="size-4" />
-                    <span className="min-w-0 flex-1 truncate text-sm">{project.path}</span>
-                    {project.active && <Check className="size-4 text-primary" />}
-                  </button>
-                ))}
-                {workspace &&
-                  !trustedProjects.some((project) => project.path === workspace.projectRoot) && (
-                    <Button
-                      className="mt-3 w-full"
-                      variant="outline"
-                      onClick={() => void trustProjectPath(workspace.projectRoot)}
-                    >
-                      Trust current project
-                    </Button>
-                  )}
-                <form
-                  className="mt-4 space-y-2 border-y border-border/60 py-3"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (projectPathInput.trim()) void trustProjectPath(projectPathInput.trim());
-                  }}
-                >
-                  <label
-                    htmlFor="mobile-trusted-project-path"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Add a project folder
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="mobile-trusted-project-path"
-                      value={projectPathInput}
-                      onChange={(event) => setProjectPathInput(event.target.value)}
-                      placeholder="/path/to/project"
-                      className="h-9 min-w-0 text-xs"
-                    />
-                    <Button type="submit" size="sm" disabled={!projectPathInput.trim()}>
-                      Trust
-                    </Button>
-                  </div>
-                </form>
-                {trustedProjects
-                  .filter((project) => !project.active)
-                  .map((project) => (
-                    <Button
-                      key={`remove:${project.path}`}
-                      className="mt-2 w-full justify-start"
-                      variant="ghost"
-                      onClick={() => void removeProjectTrust(project.path)}
-                    >
-                      <X className="size-4" />
-                      Remove trust · {project.path}
-                    </Button>
-                  ))}
+                <ProjectList
+                  projects={trustedProjects}
+                  onProjects={setTrustedProjects}
+                  switchProject={switchProject}
+                  removeProjectTrust={removeProjectTrust}
+                  onNotice={setNotice}
+                  onNavigate={() => setMobileProjectOpen(false)}
+                />
               </section>
             </div>
           )}
@@ -1925,7 +2012,7 @@ export function App({
               <Dialog.Content className="new-task-dialog">
                 <Dialog.Title className="dialog-title">New task</Dialog.Title>
                 <Dialog.Description className="sr-only">
-                  Add a task to your workspace. Date and group tokens in the title are applied
+                  Add a task to your workspace. Date and wave tokens in the title are applied
                   automatically.
                 </Dialog.Description>
                 <Input
@@ -1942,10 +2029,10 @@ export function App({
                 />
                 {workspace?.groups.some((item) => !item.archived && !item.finished) ? (
                   <CustomSelect
-                    label="Group"
+                    label="Wave"
                     value={group}
                     onValueChange={setGroup}
-                    placeholder="Select group…"
+                    placeholder="Select wave…"
                     options={(workspace.groups ?? [])
                       .filter((item) => !item.archived && !item.finished)
                       .map((item) => ({ value: item.id, label: item.name }))}
@@ -1955,9 +2042,20 @@ export function App({
                     id="new-task-group-name"
                     value={newGroup}
                     onChange={(event) => setNewGroup(event.target.value)}
-                    placeholder="Create your first task group"
-                    aria-label="New task group name"
+                    placeholder="Create your first task wave"
+                    aria-label="New task wave name"
                     className="quick-add-title"
+                  />
+                )}
+                {templates.length > 0 && (
+                  <CustomSelect
+                    label="Template"
+                    value={templateId}
+                    onValueChange={setTemplateId}
+                    options={[
+                      { value: "none", label: "No template" },
+                      ...templates.map((item) => ({ value: item.id, label: item.name })),
+                    ]}
                   />
                 )}
                 <div className="quick-add-submit">

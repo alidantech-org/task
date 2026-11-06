@@ -21,13 +21,13 @@ export function renderOverview(
   const active = groups.filter((group) => !group.archived && !group.finished);
   return [
     `${style.strong("TASK")}  ${style.muted(data.workspace)}`,
-    `${style.accent(String(data.tasks))} active ${data.tasks === 1 ? "task" : "tasks"}  ${symbols.bullet}  ${data.groups} groups${data.completedGroups ? ` · ${data.completedGroups} completed` : ""}  ${symbols.bullet}  ${data.documents} documents${data.diagnostics ? `  ${symbols.bullet}  ${style.warning(`${data.diagnostics} issues`)}` : ""}`,
+    `${style.accent(String(data.tasks))} active ${data.tasks === 1 ? "task" : "tasks"}  ${symbols.bullet}  ${data.groups} waves${data.completedGroups ? ` · ${data.completedGroups} completed` : ""}  ${symbols.bullet}  ${data.documents} documents${data.diagnostics ? `  ${symbols.bullet}  ${style.warning(`${data.diagnostics} issues`)}` : ""}`,
     ...active.map(
       (group) =>
         `  ${symbols.group} ${group.name}  ${group.completed}/${group.total} done  ${style.muted(group.path)}`,
     ),
     ...(data.tasks === 0
-      ? [style.muted('No tasks yet. Start with: task group create --title "My project"')]
+      ? [style.muted('No tasks yet. Start with: task wave create --title "My project"')]
       : []),
   ];
 }

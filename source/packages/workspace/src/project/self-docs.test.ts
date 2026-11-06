@@ -35,10 +35,11 @@ describe("self documentation", () => {
     );
   });
 
-  test("is idempotent, preserves surrounding text and updates only its own block", async () => {
+  test("preserves project README files and updates only the AGENTS.md managed block", async () => {
     const { projectRoot, workspaceRoot } = await fixture();
     await writeFile(join(projectRoot, "AGENTS.md"), "# Mine\n\nKeep this.\n");
     await writeFile(join(projectRoot, "README.md"), "# Repo\n");
+    await writeFile(join(projectRoot, "CLAUDE.md"), "# Claude\n");
     await writeSelfDocumentation({ projectRoot, workspaceRoot });
     await writeFile(join(workspaceRoot, "README.md"), "custom guide\n");
     const second = await writeSelfDocumentation({ projectRoot, workspaceRoot });
@@ -47,9 +48,25 @@ describe("self documentation", () => {
     const agents = await readFile(join(projectRoot, "AGENTS.md"), "utf8");
     expect(agents.startsWith("# Mine\n\nKeep this.\n")).toBe(true);
     expect(agents.match(/BEGIN TASK MANAGED TASK-TOOL/g)).toHaveLength(1);
-    expect(await readFile(join(projectRoot, "README.md"), "utf8")).toContain(
-      "BEGIN TASK MANAGED TASK-TOOL",
-    );
+    expect(await readFile(join(projectRoot, "README.md"), "utf8")).toBe("# Repo\n");
+    expect(await readFile(join(projectRoot, "CLAUDE.md"), "utf8")).toBe("# Claude\n");
+  });
+
+  test("refreshes a generated workspace guide but keeps custom guides", async () => {
+    const { projectRoot, workspaceRoot } = await fixture();
+    await writeSelfDocumentation({ projectRoot, workspaceRoot });
+    const guidePath = join(workspaceRoot, "README.md");
+    const generated = await readFile(guidePath, "utf8");
+    await writeFile(guidePath, generated.replace("task init update", "task init --refresh-docs"));
+
+    const refreshed = await writeSelfDocumentation({ projectRoot, workspaceRoot });
+    expect(refreshed.written).toContain(guidePath);
+    expect(await readFile(guidePath, "utf8")).toContain("task init update");
+
+    await writeFile(guidePath, "My custom workspace guide\n");
+    const custom = await writeSelfDocumentation({ projectRoot, workspaceRoot });
+    expect(custom.skipped).toContain(guidePath);
+    expect(await readFile(guidePath, "utf8")).toBe("My custom workspace guide\n");
   });
 
   test("coexists with blocks written by task setup", async () => {

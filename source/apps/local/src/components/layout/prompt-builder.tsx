@@ -1,8 +1,9 @@
 "use client";
 
 import { Button } from "@task/ui";
-import { Copy } from "lucide-react";
+import { Copy, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckBox } from "@/components/ui/checkbox";
 
 type PromptRecord = {
   path: string;
@@ -41,6 +42,60 @@ function dueLabel(dueDate: string | undefined): string {
     : new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
 }
 
+function PickerGroup({
+  title,
+  items,
+  selected,
+  onChange,
+  detail,
+}: {
+  title: string;
+  items: readonly PromptRecord[];
+  selected: string[];
+  onChange(next: string[]): void;
+  detail(record: PromptRecord): string;
+}) {
+  const ids = items.map((item) => item.id);
+  const count = ids.filter((id) => selected.includes(id)).length;
+  const all = count === ids.length;
+  return (
+    <div className="pk-group">
+      <div className="pk-head">
+        <CheckBox
+          label={`Select all in ${title}`}
+          checked={all ? true : count > 0 ? "indeterminate" : false}
+          onCheckedChange={(next) =>
+            onChange(
+              next
+                ? [...new Set([...selected, ...ids])]
+                : selected.filter((id) => !ids.includes(id)),
+            )
+          }
+        />
+        <b>{title}</b>
+        <small>
+          {count}/{ids.length}
+        </small>
+      </div>
+      {items.map((item) => (
+        <div className="pk-item" key={item.id}>
+          <CheckBox
+            label={item.name}
+            checked={selected.includes(item.id)}
+            onCheckedChange={(next) =>
+              onChange(next ? [...selected, item.id] : selected.filter((id) => id !== item.id))
+            }
+          />
+          <span>
+            {item.name}
+            <small>{detail(item)}</small>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PromptBuilder({
   records,
   workspace,
@@ -50,13 +105,9 @@ export function PromptBuilder({
   workspace: PromptWorkspace;
   setNotice(message: string): void;
 }) {
-  const [selectedTasks, setSelectedTasks] = useState<string[]>(() =>
-    records.some((record) => record.id === "TASK-17" && record.type === "task") ? ["TASK-17"] : [],
-  );
-  const [selectedDocuments, setSelectedDocuments] = useState<string[]>(() =>
-    records.some((record) => record.id === "brief" && record.type !== "task") ? ["brief"] : [],
-  );
-  const promptDefaultsApplied = useRef(false);
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [style, setStyle] = useState<PromptStyle>("Implement");
   const [bodies, setBodies] = useState<Record<string, PromptBody>>({});
   const bodiesRef = useRef(bodies);
@@ -67,6 +118,25 @@ export function PromptBuilder({
       record.type === "task" && record.status !== "completed" && record.status !== "archived",
   );
   const documents = records.filter((record) => record.type !== "task");
+  const needle = search.trim().toLocaleLowerCase();
+  const matches = (record: PromptRecord) =>
+    !needle || `${record.id} ${record.name} ${record.path}`.toLocaleLowerCase().includes(needle);
+  const statusOrder = ["in-progress", "blocked", "planned"];
+  const taskSections = statusOrder
+    .map(
+      (status) =>
+        [
+          status,
+          tasks.filter((task) => (task.status ?? "planned") === status && matches(task)),
+        ] as const,
+    )
+    .filter(([, items]) => items.length > 0);
+  const documentGroups = new Map<string, PromptRecord[]>();
+  for (const record of documents.filter(matches)) {
+    const folder = record.path.split("/")[0] ?? "Files";
+    documentGroups.set(folder, [...(documentGroups.get(folder) ?? []), record]);
+  }
+  const documentSections = [...documentGroups].sort(([left], [right]) => left.localeCompare(right));
   const selectedRecords = useMemo(
     () =>
       records.filter(
@@ -75,20 +145,6 @@ export function PromptBuilder({
     [records, selectedDocuments, selectedTasks],
   );
   const selectionKey = `${selectedTasks.join("\u0000")}\u0001${selectedDocuments.join("\u0000")}`;
-
-  useEffect(() => {
-    if (promptDefaultsApplied.current) return;
-    const hasDefaultTask = records.some(
-      (record) => record.id === "TASK-17" && record.type === "task",
-    );
-    const hasDefaultDocument = records.some(
-      (record) => record.id === "brief" && record.type !== "task",
-    );
-    if (!hasDefaultTask && !hasDefaultDocument) return;
-    promptDefaultsApplied.current = true;
-    if (hasDefaultTask) setSelectedTasks(["TASK-17"]);
-    if (hasDefaultDocument) setSelectedDocuments(["brief"]);
-  }, [records]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Selection changes must re-check body hashes.
   useEffect(() => {
@@ -186,47 +242,80 @@ export function PromptBuilder({
       </header>
       <div className="two">
         <section className="pk">
-          <b>Tasks</b>
-          <div className="prompt-records">
-            {tasks.map((task) => (
-              <label key={task.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedTasks.includes(task.id)}
-                  onChange={(event) =>
-                    setSelectedTasks((current) =>
-                      event.target.checked
-                        ? [...current, task.id]
-                        : current.filter((id) => id !== task.id),
-                    )
-                  }
-                />
-                <span>
-                  {task.id} · {task.name}
+          <label className="pk-search">
+            <Search className="size-4" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tasks and documents"
+              aria-label="Search tasks and documents"
+            />
+          </label>
+          <div className="pk-quick">
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedTasks(
+                  tasks.filter((task) => task.status === "in-progress").map((task) => task.id),
+                )
+              }
+            >
+              Select in progress
+            </button>
+            <button
+              type="button"
+              disabled={selectedTasks.length + selectedDocuments.length === 0}
+              onClick={() => {
+                setSelectedTasks([]);
+                setSelectedDocuments([]);
+              }}
+            >
+              Clear selection
+            </button>
+          </div>
+          {selectedRecords.length > 0 && (
+            <div className="pk-chosen">
+              {selectedRecords.map((record) => (
+                <span key={record.id}>
+                  {record.type === "task" ? record.id : record.name}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${record.name}`}
+                    onClick={() => {
+                      setSelectedTasks((current) => current.filter((id) => id !== record.id));
+                      setSelectedDocuments((current) => current.filter((id) => id !== record.id));
+                    }}
+                  >
+                    <X className="size-3" />
+                  </button>
                 </span>
-              </label>
-            ))}
-          </div>
-          <br />
-          <b>Context documents</b>
-          <div className="prompt-records">
-            {documents.map((document) => (
-              <label key={document.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedDocuments.includes(document.id)}
-                  onChange={(event) =>
-                    setSelectedDocuments((current) =>
-                      event.target.checked
-                        ? [...current, document.id]
-                        : current.filter((id) => id !== document.id),
-                    )
-                  }
-                />
-                <span>{document.name}</span>
-              </label>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+          {taskSections.map(([status, items]) => (
+            <PickerGroup
+              key={status}
+              title={statusLabel(status)}
+              items={items}
+              selected={selectedTasks}
+              onChange={setSelectedTasks}
+              detail={(task) => task.id}
+            />
+          ))}
+          {documentSections.map(([folder, items]) => (
+            <PickerGroup
+              key={folder}
+              title={folder}
+              items={items}
+              selected={selectedDocuments}
+              onChange={setSelectedDocuments}
+              detail={(document) => document.path}
+            />
+          ))}
+          {taskSections.length + documentSections.length === 0 && (
+            <p className="sub">Nothing matches “{search}”.</p>
+          )}
         </section>
         <section>
           <div className="dh2">

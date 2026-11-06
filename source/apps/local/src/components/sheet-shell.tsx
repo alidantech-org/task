@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@task/ui";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -24,6 +24,12 @@ type SheetShellProps = {
   onClose(): void;
   /** Where the user's chosen width is remembered. */
   storageKey: string;
+  /** Shows a back arrow before the title. */
+  onBack?: () => void;
+  /** Removes the body padding so the content spans the whole sheet. */
+  flush?: boolean;
+  /** Opens wide the first time, before the user has chosen a width. */
+  startWide?: boolean;
 };
 
 /**
@@ -39,6 +45,9 @@ export function SheetShell({
   children,
   onClose,
   storageKey,
+  onBack,
+  flush = false,
+  startWide = false,
 }: SheetShellProps) {
   const [width, setWidth] = useState(defaultSheetWidth);
   const [resizing, setResizing] = useState<"idle" | "drag" | "hide">("idle");
@@ -47,11 +56,16 @@ export function SheetShell({
 
   useEffect(() => {
     try {
-      setWidth(clampStoredWidth(window.localStorage.getItem(storageKey), window.innerWidth));
+      const stored = window.localStorage.getItem(storageKey);
+      setWidth(
+        stored === null && startWide
+          ? resolveSheetWidth(wideSheetWidth, window.innerWidth).width
+          : clampStoredWidth(stored, window.innerWidth),
+      );
     } catch {
       setWidth(defaultSheetWidth);
     }
-  }, [storageKey]);
+  }, [storageKey, startWide]);
   useEffect(() => {
     const update = () => setViewportWidth(window.innerWidth);
     update();
@@ -137,6 +151,17 @@ export function SheetShell({
             onKeyDown={resizeWithKeyboard}
           />
           <header className="task-sheet-head">
+            {onBack ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="sheet-icon"
+                aria-label="Back"
+                onClick={onBack}
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+            ) : null}
             <div className="min-w-0 flex-1">
               <Dialog.Title asChild>
                 <h2 className="task-sheet-title">{title}</h2>
@@ -166,7 +191,7 @@ export function SheetShell({
             </div>
           </header>
           {subhead ? <div className="task-sheet-subhead">{subhead}</div> : null}
-          <div className="task-sheet-body">{children}</div>
+          <div className={`task-sheet-body ${flush ? "flush" : ""}`.trim()}>{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

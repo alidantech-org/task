@@ -5,6 +5,7 @@ import {
   getCompletionTimestamp,
   getRecentCompletedTasks,
   isArchivedTask,
+  limitRawCompletedTasks,
   parseSidebarPreference,
   sortCompletedTasks,
   toggleSidebarPreference,
@@ -133,6 +134,7 @@ describe("dashboard overview helpers", () => {
     expect(isArchivedTask(completed[0])).toBe(true);
     expect(
       getCompletionTimestamp({
+        id: "completed",
         path: "todo/group/completed.md",
         modifiedAt: 100,
         status: "completed",
@@ -160,5 +162,39 @@ describe("dashboard overview helpers", () => {
     expect(visible).toHaveLength(10);
     expect(visible.map((task) => task.id)).not.toContain("task-1");
     expect(visible.map((task) => task.id)).toContain("task-11");
+  });
+
+  test("limits raw task views to the latest ten completions but preserves grouped history", () => {
+    const tasks = [
+      {
+        id: "active",
+        name: "Active task",
+        path: "todo/group/active.md",
+        modifiedAt: 200,
+        status: "in-progress",
+      },
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `completed-${index + 1}`,
+        name: `Completed ${index + 1}`,
+        path: `todo/group/${index + 1}-completed.md`,
+        modifiedAt: index,
+        status: "completed",
+        extra: {
+          status_history: [
+            {
+              from: "in-progress" as const,
+              to: "completed" as const,
+              at: new Date(Date.UTC(2026, 9, index + 1)).toISOString(),
+            },
+          ],
+        },
+      })),
+    ];
+    const raw = limitRawCompletedTasks(tasks, false);
+    expect(raw).toHaveLength(11);
+    expect(raw.map((task) => task.id)).toContain("active");
+    expect(raw.map((task) => task.id)).not.toContain("completed-1");
+    expect(raw.map((task) => task.id)).toContain("completed-12");
+    expect(limitRawCompletedTasks(tasks, true)).toHaveLength(13);
   });
 });

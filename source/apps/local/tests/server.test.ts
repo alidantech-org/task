@@ -171,7 +171,7 @@ describe("local runtime HTTP boundary", () => {
     }
   });
 
-  test("serves project files read-only and refuses protected or escaping paths", async () => {
+  test("serves project files and refuses protected or escaping paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "task-runtime-files-"));
     try {
       await mkdir(join(root, "tasks"), { recursive: true });
@@ -200,7 +200,7 @@ describe("local runtime HTTP boundary", () => {
       expect((await get("../outside")).status).toBe(400);
       expect((await get("missing.ts")).status).toBe(404);
       expect((await get("src/app.ts", {})).status).toBe(401);
-      expect((await get("src/app.ts", { method: "POST", headers })).status).toBe(404);
+      expect((await get("src/app.ts", { method: "PATCH", headers })).status).toBe(404);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -290,6 +290,14 @@ describe("local runtime HTTP boundary", () => {
         (await call("POST", `/workspace/task/${b}/reorder`, { before: "TSK-NOPE" })).status,
       ).toBe(404);
       expect((await call("POST", `/workspace/task/${b}/reorder`, { order: "x" })).status).toBe(400);
+      const moved = await call("POST", `/workspace/task/${b}/reorder`, {
+        after: a,
+        status: "blocked",
+      });
+      expect(moved.status).toBe(200);
+      expect(
+        ((await moved.json()) as { task: { metadata: { status: string } } }).task.metadata.status,
+      ).toBe("blocked");
 
       const comment = await call("POST", `/workspace/task/${a}/comments`, { text: "Hello @beta" });
       expect(comment.status).toBe(201);

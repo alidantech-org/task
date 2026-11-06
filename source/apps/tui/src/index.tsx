@@ -93,7 +93,7 @@ function TaskDetails({
       <text fg="#7DD3FC">{task.metadata.id}</text>
       <text fg="#FBBF24">{(task.metadata.status ?? "planned").toUpperCase()}</text>
       <text fg="#CBD5E1">Priority {task.metadata.priority ?? "medium"}</text>
-      <text fg="#CBD5E1">Group {group?.name ?? "Ungrouped"}</text>
+      <text fg="#CBD5E1">Wave {group?.name ?? "No wave"}</text>
       {task.metadata.assignee ? <text fg="#CBD5E1">Assignee {task.metadata.assignee}</text> : null}
       {task.metadata.project ? <text fg="#CBD5E1">Project {task.metadata.project}</text> : null}
       {task.metadata.due_at ? <text fg="#CBD5E1">Due {task.metadata.due_at}</text> : null}
@@ -212,7 +212,7 @@ function WorkspaceTui({
         current,
         section === "Tasks"
           ? visibleTasks.length
-          : section === "Groups"
+          : section === "Waves"
             ? visibleGroups.length
             : section === "Docs"
               ? visibleDocuments.length
@@ -368,7 +368,7 @@ function WorkspaceTui({
       const length =
         section === "Tasks"
           ? visibleTasks.length
-          : section === "Groups"
+          : section === "Waves"
             ? visibleGroups.length
             : section === "Docs"
               ? visibleDocuments.length
@@ -476,7 +476,7 @@ function WorkspaceTui({
   const groupsView = (
     <box style={{ flexDirection: "row", flexGrow: 1, gap: 1 }}>
       <box
-        title={`GROUPS · ${visibleGroups.length}`}
+        title={`WAVES · ${visibleGroups.length}`}
         style={{
           width: wide ? 44 : "50%",
           flexDirection: "column",
@@ -498,11 +498,11 @@ function WorkspaceTui({
             );
           })
         ) : (
-          <text fg="#94A3B8">No groups found. Create one with task group create.</text>
+          <text fg="#94A3B8">No waves found. Create one with task wave create.</text>
         )}
       </box>
       <box
-        title="GROUP DETAILS"
+        title="WAVE DETAILS"
         style={{
           flexGrow: 1,
           border: true,
@@ -523,7 +523,7 @@ function WorkspaceTui({
             <text fg="#64748B">{selectedGroup.path}</text>
           </>
         ) : (
-          <text fg="#94A3B8">No group selected.</text>
+          <text fg="#94A3B8">No wave selected.</text>
         )}
       </box>
     </box>
@@ -633,7 +633,7 @@ function WorkspaceTui({
   const view =
     section === "Tasks" ? (
       tasksView
-    ) : section === "Groups" ? (
+    ) : section === "Waves" ? (
       groupsView
     ) : section === "Docs" ? (
       docsView

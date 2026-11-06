@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   appendTimestampedMarkdownComment,
+  directChildFolders,
   markdownChecklistProgress,
+  parentDocumentFolder,
+  rootFiles,
   toggleMarkdownCheckbox,
+  topLevelFolders,
 } from "@/lib/markdown";
 
 describe("Markdown task interactions", () => {
@@ -37,5 +41,30 @@ describe("Markdown task interactions", () => {
       markdownChecklistProgress("- [x] Done\n- [ ] Open\n  1. [X] Also done\nPlain text"),
     ).toEqual({ completed: 2, total: 3 });
     expect(markdownChecklistProgress("No checklist here")).toEqual({ completed: 0, total: 0 });
+  });
+});
+
+describe("documents sidebar structure", () => {
+  test("root files are files and only real directories are folders", () => {
+    const paths = ["README.md", "AGENTS.md", "docs/a.md", "docs/sub/b.md", "decisions/0001.md"];
+    expect(topLevelFolders(paths)).toEqual([
+      { name: "decisions", count: 1 },
+      { name: "docs", count: 2 },
+    ]);
+    expect(rootFiles(paths.map((path) => ({ path }))).map((file) => file.path)).toEqual([
+      "README.md",
+      "AGENTS.md",
+    ]);
+    expect(topLevelFolders(["README.md"])).toEqual([]);
+  });
+
+  test("lists immediate folders relative to a current folder", () => {
+    const paths = ["README.md", "docs/a.md", "docs/nested/b.md", "docs/nested/deep/c.md"];
+    expect(directChildFolders(paths)).toEqual([{ path: "docs", name: "docs", count: 3 }]);
+    expect(directChildFolders(paths, "docs")).toEqual([
+      { path: "docs/nested", name: "nested", count: 2 },
+    ]);
+    expect(parentDocumentFolder("README.md")).toBe("");
+    expect(parentDocumentFolder("docs/nested/b.md")).toBe("docs/nested");
   });
 });

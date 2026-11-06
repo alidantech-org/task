@@ -216,7 +216,7 @@ export function OverviewPage() {
                 <button type="button" className="t" onClick={() => openRecord(task)}>
                   <b>{task.name}</b>
                   <small>
-                    {task.id} · {task.groupName ?? "Ungrouped"}
+                    {task.id} · {task.groupName ?? "No wave"}
                     {task.due_at
                       ? ` · ${new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(`${task.due_at}T12:00:00`))}`
                       : ""}

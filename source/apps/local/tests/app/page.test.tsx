@@ -60,6 +60,6 @@ describe("local dashboard server rendering", () => {
     expect(markup).toContain(root.split("/").at(-1) ?? "");
     expect(markup).toContain("Documents");
     expect(markup).toContain('data-slot="main-toolbar"');
-    expect(markup).not.toContain("Connected");
+    expect(markup).toContain("Connected");
   });
 });

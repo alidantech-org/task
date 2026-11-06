@@ -2,7 +2,7 @@
   "name": "task",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.2",
   "workspaces": [
     "source/api",
     "source/apps/cli",
@@ -61,6 +61,7 @@
   },
   "dependencies": {},
   "overrides": {
+    "dompurify": "^3.4.17",
     "katex": "^0.19.1"
   }
 }

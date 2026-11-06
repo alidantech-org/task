@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDialogs } from "@/components/dialogs";
 import { relativeTime, splitMentions } from "@/lib/mentions";
 
 type Comment = { index: number; at: string; author?: string; text: string };
@@ -33,6 +34,7 @@ export function TaskComments({
   onChanged(): void;
   onNotice(message: string): void;
 }) {
+  const { confirm } = useDialogs();
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -131,8 +133,14 @@ export function TaskComments({
                   aria-label="Delete comment"
                   disabled={busy}
                   onClick={() => {
-                    if (window.confirm("Delete this comment?"))
-                      void send(fetch(`${base}/${comment.index}`, { method: "DELETE" }));
+                    void confirm({
+                      title: "Delete this comment?",
+                      message: "The comment is removed from the task.",
+                      confirmLabel: "Delete",
+                      danger: true,
+                    }).then((ok) => {
+                      if (ok) void send(fetch(`${base}/${comment.index}`, { method: "DELETE" }));
+                    });
                   }}
                 >
                   Delete

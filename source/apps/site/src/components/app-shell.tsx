@@ -32,7 +32,7 @@ export function App({ apiStatus }: AppProps): JSX.Element {
       <section id="home" className="mx-auto max-w-7xl px-5 pt-20 pb-16 sm:px-8 sm:pt-28 lg:pt-36">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Task Cloud
+            Taskcode Cloud
           </p>
           <Badge variant={connected ? "secondary" : "outline"} className="gap-1.5" role="status">
             <span
@@ -45,12 +45,12 @@ export function App({ apiStatus }: AppProps): JSX.Element {
           Make room for meaningful progress.
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-          A calm home for your projects and the work behind them. Task Cloud foundations are taking
-          shape.
+          A calm home for your projects and the work behind them. Taskcode Cloud foundations are
+          taking shape.
         </p>
         {!connected && (
           <p className="mt-5 max-w-xl text-sm text-muted-foreground">
-            Cloud workflows are not available while the Task API is offline.
+            Cloud workflows are not available while the Taskcode API is offline.
           </p>
         )}
       </section>
@@ -77,7 +77,7 @@ export function App({ apiStatus }: AppProps): JSX.Element {
 
       <footer className="mx-auto flex max-w-7xl items-center gap-3 px-5 pb-8 text-xs text-muted-foreground sm:px-8">
         <Separator className="max-w-12" />
-        <span>Task Cloud is a foundation; hosted workspace workflows are not implemented.</span>
+        <span>Taskcode Cloud is a foundation; hosted workspace workflows are not implemented.</span>
       </footer>
     </main>
   );

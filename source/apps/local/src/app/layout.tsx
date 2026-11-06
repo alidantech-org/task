@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
+import "../../node_modules/monaco-editor/min/vs/editor/editor.main.css";
 import "@/app/globals.css";
 
 const heading = Bricolage_Grotesque({
@@ -15,12 +16,12 @@ const body = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Task — Local workspace",
-  description: "Your local-first Task workspace.",
+  title: "Taskcode — Local workspace",
+  description: "Your local-first Taskcode workspace.",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/taskcode-mark.svg",
+    shortcut: "/taskcode-mark.svg",
+    apple: "/taskcode-mark.svg",
   },
 };
 
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={cn("font-sans", heading.variable, body.variable)}>
       <head>
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" sizes="any" />
+        <link rel="icon" href="/taskcode-mark.svg" type="image/svg+xml" sizes="any" />
       </head>
       <body>{children}</body>
     </html>

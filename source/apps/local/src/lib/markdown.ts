@@ -17,6 +17,126 @@ export function listDocumentFolders(paths: readonly string[]): DocumentFolder[] 
     }));
 }
 
+/** Parent folder for a workspace-relative file path, or an empty string for a root file. */
+export function parentDocumentFolder(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+/** Immediate child folders for a workspace folder; counts include files below each child. */
+export function directChildFolders(
+  paths: readonly string[],
+  parent = "",
+): { path: string; name: string; count: number }[] {
+  const prefix = parent ? `${parent}/` : "";
+  const counts = new Map<string, number>();
+  for (const path of paths) {
+    if (prefix && !path.startsWith(prefix)) continue;
+    const relative = prefix ? path.slice(prefix.length) : path;
+    const slash = relative.indexOf("/");
+    if (slash <= 0) continue;
+    const name = relative.slice(0, slash);
+    const childPath = prefix + name;
+    counts.set(childPath, (counts.get(childPath) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([path, count]) => ({ path, name: path.split("/").at(-1) ?? path, count }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** Top-level folders with their file counts; files directly in the root are not folders. */
+export function topLevelFolders(paths: readonly string[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const path of paths) {
+    const slash = path.indexOf("/");
+    if (slash <= 0) continue;
+    const name = path.slice(0, slash);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Files that sit directly in the root of the workspace. */
+export function rootFiles<T extends { path: string }>(documents: readonly T[]): T[] {
+  return documents.filter((document) => !document.path.includes("/"));
+}
+
+export type HeadingEntry = { line: number; level: number; title: string; id: string };
+
+const fenceMarker = /^\s*(```|~~~)/;
+
+function plainHeadingTitle(raw: string): string {
+  return raw
+    .replace(/!?\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[`*_~]/g, "")
+    .trim();
+}
+
+/**
+ * Every heading of a Markdown document with a stable anchor id (`h-…`, numbered when a title repeats).
+ * The document body and its "On this page" list both use this, so their anchors always match.
+ */
+export function headingEntries(markdown: string): HeadingEntry[] {
+  const counts = new Map<string, number>();
+  const found: HeadingEntry[] = [];
+  let fence: string | undefined;
+  for (const [index, line] of markdown.split("\n").entries()) {
+    const marker = fenceMarker.exec(line)?.[1];
+    if (marker) {
+      fence = fence === undefined ? marker : fence === marker ? undefined : fence;
+      continue;
+    }
+    if (fence) continue;
+    const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!match?.[1] || !match[2]) continue;
+    const title = plainHeadingTitle(match[2]);
+    const slug = `h-${title
+      .toLocaleLowerCase()
+      .replace(/[^\w]+/g, "-")
+      .replace(/^-|-$/g, "")}`;
+    const occurrence = counts.get(slug) ?? 0;
+    counts.set(slug, occurrence + 1);
+    found.push({
+      line: index + 1,
+      level: match[1].length,
+      title,
+      id: occurrence ? `${slug}-${occurrence + 1}` : slug,
+    });
+  }
+  return found;
+}
+
+export type SourceLink = { label: string; href: string };
+
+/** Links in a document (Markdown links and bare web addresses), without images, anchors or code. */
+export function extractLinks(markdown: string): SourceLink[] {
+  const lines: string[] = [];
+  let fence: string | undefined;
+  for (const line of markdown.split("\n")) {
+    const marker = fenceMarker.exec(line)?.[1];
+    if (marker) {
+      fence = fence === undefined ? marker : fence === marker ? undefined : fence;
+      continue;
+    }
+    if (!fence) lines.push(line.replace(/`[^`]*`/g, ""));
+  }
+  const text = lines.join("\n");
+  const found = new Map<string, SourceLink>();
+  for (const match of text.matchAll(/(?<!!)\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
+    const href = match[2] ?? "";
+    if (!href || href.startsWith("#") || found.has(href)) continue;
+    found.set(href, { label: (match[1] ?? "").trim() || href, href });
+  }
+  const withoutMarkdownLinks = text.replace(/\[[^\]]*\]\([^)]*\)/g, " ");
+  for (const match of withoutMarkdownLinks.matchAll(/https?:\/\/[^\s<>)\]]+/g)) {
+    const href = match[0].replace(/[.,;:!?]+$/, "");
+    if (!found.has(href)) found.set(href, { label: href, href });
+  }
+  return [...found.values()];
+}
+
 const taskCheckboxLine = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s+.*)$/;
 
 export function markdownChecklistProgress(body: string): { completed: number; total: number } {

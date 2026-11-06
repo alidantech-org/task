@@ -3,7 +3,7 @@ import { clampIndex, navigationSections, wrapIndex } from "#/navigation";
 
 describe("TUI navigation model", () => {
   test("exposes the planned workspace sections", () => {
-    expect(navigationSections).toEqual(["Tasks", "Groups", "Docs", "Rules", "Agents", "Activity"]);
+    expect(navigationSections).toEqual(["Tasks", "Waves", "Docs", "Rules", "Agents", "Activity"]);
   });
 
   test("wraps section movement and clamps item movement", () => {

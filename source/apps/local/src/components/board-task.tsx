@@ -1,5 +1,7 @@
 "use client";
 
+import { Feedback } from "@dnd-kit/dom";
+import { OptimisticSortingPlugin } from "@dnd-kit/dom/sortable";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { PanelRightOpen } from "lucide-react";
 import { dateKey } from "@/lib/calendar";
@@ -37,7 +39,7 @@ export function OpenButton({ onOpen, label }: { onOpen(): void; label: string })
   );
 }
 
-function CardContent({ task }: { task: CalendarTask }) {
+function CardContent({ task, showGroup }: { task: CalendarTask; showGroup: boolean }) {
   const priorityClass = task.priority === "high" ? "p-h" : task.priority === "low" ? "p-l" : "p-m";
   const priorityLabel = task.priority
     ? `${task.priority[0]?.toLocaleUpperCase() ?? ""}${task.priority.slice(1)} priority`
@@ -53,9 +55,11 @@ function CardContent({ task }: { task: CalendarTask }) {
       <div className="ct" title={task.name}>
         {task.name}
       </div>
-      <div className="cg" title={task.groupName}>
-        {task.groupName ?? task.project ?? "Ungrouped"}
-      </div>
+      {showGroup && (
+        <div className="cg" title={task.groupName}>
+          {task.groupName ?? task.project ?? "No wave"}
+        </div>
+      )}
       <div className="cf">
         {task.due_at ? (
           <span className={`due ${overdue ? "late" : ""}`}>
@@ -103,25 +107,25 @@ function CardContent({ task }: { task: CalendarTask }) {
   );
 }
 
-/** What follows the pointer while a board card is dragged. */
-export function BoardTaskPreview({ task }: { task: CalendarTask }) {
-  return (
-    <div className="card card-preview">
-      <CardContent task={task} />
-    </div>
-  );
-}
-
 /** A board card that can be dragged to another column and reordered within its column. */
 export function BoardTask({
   task,
   index,
   onSelect,
+  selection,
+  compact = false,
+  showGroup = true,
 }: {
   task: CalendarTask;
   /** Position within the column, which is also the sortable group. */
   index: number;
   onSelect(): void;
+  /** In selection mode a click toggles the card instead of opening it. */
+  selection?: { checked: boolean; onToggle(): void };
+  /** Use a single-line title and suppress the checklist preview. */
+  compact?: boolean;
+  /** Grouped boards identify the group in the section heading. */
+  showGroup?: boolean;
 }) {
   const { ref, handleRef, isDragging, isDropTarget } = useSortable({
     id: `task:${task.id}`,
@@ -130,25 +134,37 @@ export function BoardTask({
     type: "task",
     accept: "task",
     data: { taskId: task.id },
+    plugins: (defaults) => [
+      ...defaults.filter((plugin) => plugin !== OptimisticSortingPlugin),
+      Feedback.configure({ feedback: "clone", dropAnimation: null }),
+    ],
   });
   return (
     <div
-      className={`card-shell ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-target" : ""}`}
+      ref={ref}
+      className={`card-shell ${compact ? "is-compact" : ""} ${isDragging ? "is-dragging" : ""} ${isDropTarget ? "is-target" : ""} ${selection?.checked ? "is-picked" : ""}`}
     >
       <button
         type="button"
-        ref={(element) => {
-          ref(element);
-          handleRef(element);
-        }}
+        ref={handleRef}
         data-tid={task.id}
         className={`card w-full text-left ${isDragging ? "drag" : ""}`}
         aria-label={`Open task ${task.id}: ${task.name}`}
-        onClick={onSelect}
+        onClick={selection ? selection.onToggle : onSelect}
+        aria-pressed={selection ? selection.checked : undefined}
       >
-        <CardContent task={task} />
+        <CardContent task={task} showGroup={showGroup} />
       </button>
-      <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
+      {selection ? (
+        <span
+          className={`card-check task-selection-check ${selection.checked ? "on" : ""}`}
+          aria-hidden="true"
+        >
+          {selection.checked ? "✓" : ""}
+        </span>
+      ) : (
+        <OpenButton onOpen={onSelect} label={`Open task sheet for ${task.name}`} />
+      )}
     </div>
   );
 }

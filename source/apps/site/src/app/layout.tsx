@@ -6,8 +6,9 @@ import "@/app/globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 
 export const metadata: Metadata = {
-  title: "Task — Work together",
+  title: "Taskcode — Work together",
   description: "Your hosted workspace for projects, teams, and collaboration.",
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

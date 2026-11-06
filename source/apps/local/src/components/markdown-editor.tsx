@@ -1,60 +1,96 @@
 "use client";
 
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  redo,
+  undo,
+} from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { EditorSelection, EditorState } from "@codemirror/state";
+import {
+  drawSelection,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { Crepe } from "@milkdown/crepe";
-import { useEffect, useRef, useState } from "react";
-import { CustomSelect } from "@/components/ui/select";
+import { redoCommand, undoCommand } from "@milkdown/kit/plugin/history";
+import {
+  createCodeBlockCommand,
+  insertHrCommand,
+  toggleEmphasisCommand,
+  toggleInlineCodeCommand,
+  toggleLinkCommand,
+  toggleStrongCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInHeadingCommand,
+  wrapInOrderedListCommand,
+} from "@milkdown/kit/preset/commonmark";
+import { insertTableCommand, toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
+import { callCommand, insert } from "@milkdown/kit/utils";
+import { type MutableRefObject, type ReactNode, useEffect, useRef } from "react";
 
-type MarkdownEditorProps = {
+export type EditorMode = "rich" | "code" | "split";
+export type EditorAction =
+  | "bold"
+  | "italic"
+  | "strike"
+  | "code"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "bullet"
+  | "ordered"
+  | "task"
+  | "quote"
+  | "codeblock"
+  | "link"
+  | "table"
+  | "rule";
+/** What the toolbar calls; each surface registers how it applies an action. */
+export type EditorController = { run(action: EditorAction): void; undo(): void; redo(): void };
+
+type SurfaceProps = {
   value: string;
   onChange: (markdown: string) => void;
   onError?: (message: string) => void;
-  className?: string;
+  mode: EditorMode;
+  controller: MutableRefObject<EditorController | null>;
+  /** Rendered next to the source in split mode. */
+  preview?: ReactNode;
 };
-
-type EditMode = "rich" | "code";
-type FormatAction =
-  | "bold"
-  | "italic"
-  | "heading"
-  | "list"
-  | "task"
-  | "quote"
-  | "code"
-  | "link"
-  | "wiki";
 
 const imageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const maxInlineImageBytes = 1_500_000;
 
-const actions: { key: FormatAction; label: string }[] = [
-  { key: "bold", label: "B" },
-  { key: "italic", label: "I" },
-  { key: "heading", label: "H2" },
-  { key: "list", label: "• List" },
-  { key: "task", label: "☑ Task" },
-  { key: "quote", label: "❝ Quote" },
-  { key: "code", label: "‹/› Code" },
-  { key: "link", label: "Link" },
-  { key: "wiki", label: "[[ ]] Link file" },
-];
-
-const wrappers: Partial<Record<FormatAction, readonly [string, string]>> = {
+const wrappers: Partial<Record<EditorAction, readonly [string, string]>> = {
   bold: ["**", "**"],
   italic: ["*", "*"],
+  strike: ["~~", "~~"],
   code: ["`", "`"],
-  wiki: ["[[", "]]"],
+  codeblock: ["```\n", "\n```"],
   link: ["[", "](https://)"],
 };
-const prefixes: Partial<Record<FormatAction, string>> = {
-  heading: "## ",
-  list: "- ",
+const prefixes: Partial<Record<EditorAction, string>> = {
+  h1: "# ",
+  h2: "## ",
+  h3: "### ",
+  bullet: "- ",
+  ordered: "1. ",
   task: "- [ ] ",
   quote: "> ",
 };
-
-function wordCount(markdown: string): number {
-  return (markdown.match(/\S+/g) ?? []).length;
-}
+const snippets: Partial<Record<EditorAction, string>> = {
+  table: "\n| Column | Column |\n| --- | --- |\n| Value | Value |\n",
+  rule: "\n---\n",
+};
 
 function imageAsDataUrl(file: File): Promise<string> {
   if (!imageTypes.has(file.type)) {
@@ -74,11 +110,7 @@ function imageAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function RichMarkdownEditor({
-  value,
-  onChange,
-  onError,
-}: Pick<MarkdownEditorProps, "value" | "onChange" | "onError">) {
+function RichSurface({ value, onChange, onError, controller }: SurfaceProps) {
   const root = useRef<HTMLDivElement>(null);
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
@@ -94,7 +126,7 @@ function RichMarkdownEditor({
       root: element,
       defaultValue: valueRef.current,
       features: {
-        [Crepe.Feature.TopBar]: true,
+        [Crepe.Feature.TopBar]: false,
         [Crepe.Feature.Toolbar]: true,
         [Crepe.Feature.ImageBlock]: true,
         [Crepe.Feature.Table]: true,
@@ -125,107 +157,204 @@ function RichMarkdownEditor({
       });
     });
     let disposed = false;
-    const ready = editor.create();
-    void ready.catch((error: unknown) => {
-      if (!disposed) {
-        onErrorRef.current?.(
-          error instanceof Error ? error.message : "Markdown editor failed to load.",
-        );
-      }
-    });
+    let ready = false;
+    const created = editor.create();
+    void created
+      .then(() => {
+        ready = true;
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          onErrorRef.current?.(
+            error instanceof Error ? error.message : "Markdown editor failed to load.",
+          );
+        }
+      });
+    controller.current = {
+      undo() {
+        if (ready) editor.editor.action(callCommand(undoCommand.key));
+      },
+      redo() {
+        if (ready) editor.editor.action(callCommand(redoCommand.key));
+      },
+      run(action) {
+        if (!ready) return;
+        const apply = (callback: Parameters<typeof editor.editor.action>[0]) =>
+          editor.editor.action(callback);
+        const heading = { h1: 1, h2: 2, h3: 3 } as const;
+        if (action === "h1" || action === "h2" || action === "h3")
+          apply(callCommand(wrapInHeadingCommand.key, heading[action]));
+        else if (action === "bold") apply(callCommand(toggleStrongCommand.key));
+        else if (action === "italic") apply(callCommand(toggleEmphasisCommand.key));
+        else if (action === "strike") apply(callCommand(toggleStrikethroughCommand.key));
+        else if (action === "code") apply(callCommand(toggleInlineCodeCommand.key));
+        else if (action === "bullet") apply(callCommand(wrapInBulletListCommand.key));
+        else if (action === "ordered") apply(callCommand(wrapInOrderedListCommand.key));
+        else if (action === "quote") apply(callCommand(wrapInBlockquoteCommand.key));
+        else if (action === "codeblock") apply(callCommand(createCodeBlockCommand.key));
+        else if (action === "rule") apply(callCommand(insertHrCommand.key));
+        else if (action === "table") apply(callCommand(insertTableCommand.key));
+        else if (action === "link") apply(callCommand(toggleLinkCommand.key, { href: "https://" }));
+        else if (action === "task") apply(insert("- [ ] Task\n"));
+      },
+    };
     return () => {
       disposed = true;
-      void ready.then(() => editor.destroy()).catch(() => undefined);
+      controller.current = null;
+      void created.then(() => editor.destroy()).catch(() => undefined);
     };
-  }, []);
+  }, [controller]);
 
-  return <div ref={root} className="task-markdown-editor" />;
+  return <div ref={root} className="md-rich" />;
 }
 
-function CodeMarkdownEditor({ value, onChange }: Pick<MarkdownEditorProps, "value" | "onChange">) {
-  const textarea = useRef<HTMLTextAreaElement>(null);
+const markdownHighlight = HighlightStyle.define([
+  { tag: tags.heading1, color: "var(--acc)", fontWeight: "700", fontSize: "1.25em" },
+  { tag: tags.heading2, color: "var(--acc)", fontWeight: "700", fontSize: "1.12em" },
+  {
+    tag: [tags.heading3, tags.heading4, tags.heading5, tags.heading6],
+    color: "var(--acc)",
+    fontWeight: "700",
+  },
+  { tag: tags.strong, fontWeight: "700", color: "var(--ink)" },
+  { tag: tags.emphasis, fontStyle: "italic", color: "var(--ink)" },
+  { tag: tags.strikethrough, textDecoration: "line-through", color: "var(--mut)" },
+  { tag: tags.link, color: "oklch(0.62 0.15 250)", textDecoration: "underline" },
+  { tag: tags.url, color: "oklch(0.62 0.15 250)" },
+  {
+    tag: tags.monospace,
+    color: "oklch(0.64 0.14 40)",
+    fontFamily: "ui-monospace, Menlo, monospace",
+  },
+  { tag: tags.quote, color: "oklch(0.6 0.1 150)", fontStyle: "italic" },
+  { tag: tags.list, color: "oklch(0.65 0.16 320)" },
+  { tag: [tags.processingInstruction, tags.meta, tags.contentSeparator], color: "var(--mut)" },
+]);
 
-  function format(action: FormatAction): void {
-    const field = textarea.current;
-    if (!field) return;
-    const start = field.selectionStart;
-    const end = field.selectionEnd;
-    const selected = value.slice(start, end);
-    const wrapper = wrappers[action];
-    const prefix = prefixes[action];
-    if (wrapper) {
-      const text = `${wrapper[0]}${selected || "text"}${wrapper[1]}`;
-      onChange(`${value.slice(0, start)}${text}${value.slice(end)}`);
-      window.requestAnimationFrame(() => {
-        field.focus();
-        field.setSelectionRange(start, start + text.length);
-      });
-      return;
-    }
-    if (!prefix) return;
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-    onChange(`${value.slice(0, lineStart)}${prefix}${value.slice(lineStart)}`);
-    window.requestAnimationFrame(() => {
-      field.focus();
-      const caret = start + prefix.length;
-      field.setSelectionRange(caret, caret);
+const sourceTheme = EditorView.theme({
+  "&": { height: "100%", backgroundColor: "transparent", color: "var(--ink)", fontSize: "13.5px" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    lineHeight: "1.7",
+    overflow: "auto",
+  },
+  ".cm-content": { padding: "16px 0 80px", caretColor: "var(--acc)" },
+  ".cm-line": { padding: "0 24px 0 8px" },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    color: "var(--mut)",
+    border: "none",
+    opacity: "0.7",
+  },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--soft) 70%, transparent)" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--ink)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "color-mix(in srgb, var(--acc) 28%, transparent)",
+  },
+});
+
+/** A VS Code-style Markdown source editor: highlighting, line numbers, word wrap and undo history. */
+function CodeSurface({ value, onChange, controller }: SurfaceProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
+  const onChangeRef = useRef(onChange);
+  const initialValue = useRef(value);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const editor = new EditorView({
+      parent: element,
+      state: EditorState.create({
+        doc: initialValue.current,
+        extensions: [
+          history(),
+          drawSelection(),
+          lineNumbers(),
+          highlightActiveLine(),
+          EditorView.lineWrapping,
+          markdown(),
+          syntaxHighlighting(markdownHighlight),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          sourceTheme,
+          EditorView.contentAttributes.of({ "aria-label": "Markdown source editor" }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
     });
-  }
+    view.current = editor;
+    controller.current = {
+      undo: () => {
+        undo(editor);
+        editor.focus();
+      },
+      redo: () => {
+        redo(editor);
+        editor.focus();
+      },
+      run(action) {
+        const wrapper = wrappers[action];
+        const prefix = prefixes[action];
+        const snippet = snippets[action];
+        editor.dispatch(
+          editor.state.changeByRange((range) => {
+            if (wrapper) {
+              const text = editor.state.sliceDoc(range.from, range.to) || "text";
+              const insertion = `${wrapper[0]}${text}${wrapper[1]}`;
+              return {
+                changes: { from: range.from, to: range.to, insert: insertion },
+                range: EditorSelection.range(
+                  range.from + wrapper[0].length,
+                  range.from + wrapper[0].length + text.length,
+                ),
+              };
+            }
+            if (prefix) {
+              const line = editor.state.doc.lineAt(range.from);
+              return {
+                changes: { from: line.from, insert: prefix },
+                range: EditorSelection.range(
+                  range.anchor + prefix.length,
+                  range.head + prefix.length,
+                ),
+              };
+            }
+            if (snippet) return { changes: { from: range.to, insert: snippet }, range };
+            return { range };
+          }),
+        );
+        editor.focus();
+      },
+    };
+    return () => {
+      controller.current = null;
+      view.current = null;
+      editor.destroy();
+    };
+  }, [controller]);
 
-  const words = wordCount(value);
-  return (
-    <div className="markdown-code-editor">
-      <div className="tb">
-        {actions.map(({ key, label }) => (
-          <button
-            type="button"
-            key={key}
-            aria-label={`Insert ${label}`}
-            onClick={() => format(key)}
-          >
-            {key === "bold" ? <b>B</b> : key === "italic" ? <i>I</i> : label}
-          </button>
-        ))}
-      </div>
-      <textarea
-        ref={textarea}
-        id="ed"
-        aria-label="Markdown source editor"
-        spellCheck={false}
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      <small className="sub">
-        {words} words · {Math.max(1, Math.round(words / 200))} min read
-      </small>
-    </div>
-  );
+  // Keep the document in step when the value is replaced from outside, for example by Revert.
+  useEffect(() => {
+    const editor = view.current;
+    if (editor && editor.state.doc.toString() !== value)
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
+  }, [value]);
+
+  return <div ref={host} className="md-source" />;
 }
 
-export function MarkdownEditor({ value, onChange, onError, className = "" }: MarkdownEditorProps) {
-  const [mode, setMode] = useState<EditMode>("rich");
+/** The editing area itself: it fills its container and has no padding, border or card. */
+export function MarkdownSurface(props: SurfaceProps) {
+  if (props.mode === "rich") return <RichSurface {...props} />;
+  if (props.mode === "code") return <CodeSurface {...props} />;
   return (
-    <div className={`markdown-editor ${className}`.trim()}>
-      <div className="markdown-mode-row">
-        <span className="markdown-mode-label">Edit as</span>
-        <CustomSelect
-          value={mode}
-          onValueChange={(nextMode) => {
-            if (nextMode === "rich" || nextMode === "code") setMode(nextMode);
-          }}
-          options={[
-            { value: "rich", label: "Rich text" },
-            { value: "code", label: "Markdown code" },
-          ]}
-          label="Markdown editing mode"
-          className="markdown-mode-select"
-        />
-      </div>
-      {mode === "rich" ? (
-        <RichMarkdownEditor value={value} onChange={onChange} onError={onError} />
-      ) : (
-        <CodeMarkdownEditor value={value} onChange={onChange} />
-      )}
+    <div className="md-split">
+      <CodeSurface {...props} />
+      <div className="md-preview">{props.preview}</div>
     </div>
   );
 }

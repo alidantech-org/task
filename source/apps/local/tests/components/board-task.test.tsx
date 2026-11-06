@@ -40,10 +40,39 @@ describe("BoardTask", () => {
     expect(markup).toContain('aria-valuenow="25"');
   });
 
-  test("falls back to project then Ungrouped and hides the bar without checklist items", () => {
+  test("compact cards omit group text while retaining the task title", () => {
+    const markup = renderToStaticMarkup(
+      <DragDropProvider>
+        <BoardTask task={task} index={0} onSelect={() => undefined} compact showGroup={false} />
+      </DragDropProvider>,
+    );
+    expect(markup).toContain("is-compact");
+    expect(markup).toContain(task.name);
+    expect(markup).not.toContain('class="cg"');
+    expect(markup).not.toContain("Release group");
+  });
+
+  test("falls back to project then No wave and hides the bar without checklist items", () => {
     expect(render({ groupName: undefined, project: "Website" })).toContain("Website");
     const bare = render({ groupName: undefined, checklist: undefined });
-    expect(bare).toContain("Ungrouped");
+    expect(bare).toContain("No wave");
     expect(bare).not.toContain("progressbar");
+  });
+
+  test("in selection mode the card shows a check mark instead of the open button", () => {
+    const markup = renderToStaticMarkup(
+      <DragDropProvider>
+        <BoardTask
+          task={task}
+          index={0}
+          onSelect={() => undefined}
+          selection={{ checked: true, onToggle: () => undefined }}
+        />
+      </DragDropProvider>,
+    );
+    expect(markup).toContain('class="card-check task-selection-check on"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("is-picked");
+    expect(markup).not.toContain("card-open");
   });
 });

@@ -1,25 +1,51 @@
-# Task CLI
+# taskcode
 
-The `taskcode`, `task`, and `tc` executables share one CLI entry point and operate directly on the selected local workspace through `@task/workspace`. The prepared npm package is named `taskcode`; Bun 1.3.14 or later is required to execute it.
+Manage tasks and project documents from your terminal. The package provides `taskcode`, `task`, and `tc` commands for the same local workspace.
 
-Run `task` in a terminal for an interactive workspace menu with overview, task listing/creation, group creation, search, document browsing, and validation. In scripts or non-interactive shells, bare `task` prints the workspace overview and exits; `task --json` returns the same overview as JSON. You can also invoke commands directly. From the repository, run with `bun run dev:cli`.
+## Requirements
 
-For checkout-only `taskcode-dev` and `tc-dev` commands, run `bun run cli:link`; remove them with `bun run cli:unlink`. These commands invoke this checkout's source while leaving any installed `taskcode`, `task`, and `tc` commands unchanged. Ensure `$(bun pm bin -g)` is on `PATH`. For example, `taskcode-dev --version` runs the checkout and `taskcode --version` runs the published install. The development commands resolve the current workspace from the caller's directory using `--workspace`, `TASK_WORKSPACE_ROOT`, then the nearest ancestor `task.yaml` or `tasks/` directory.
+- Bun 1.3.14 or later to run the CLI.
+- Node.js 20.9 or later for `task run` (the local dashboard).
 
-The CLI supports workspace overview and diagnostics, task group creation/listing, task list/show/search/create/update/edit, task and group archive/restore, workspace validation, document list/show/search/tree/open/create, index status/rebuild/verify, static project inspection, and reviewed agent-guidance setup. New tasks use `TSK-` IDs, group plans use `GRP-` IDs, task status defaults to `planned`, and priority defaults to `medium`. Groups are organized in `todo/work/Www/<slug>--<stable-id-suffix>/` using ISO Monday weeks by default; `task.yaml` can configure week starts and auto-archive timing. Individual task archives are status changes in place. Resolved groups auto-archive under `todo/_archived/YYYY/MM/` after two days by default, can be archived manually, and can be restored. Legacy `_completed/` and `_archive/` folders remain readable. Setup should ask whether managed task folders should be committed or ignored and never change `.gitignore` without the user's choice.
+## Install and start
 
-`task project inspect [--json]` scans project files without executing code. `task setup` presents detected evidence, optional Task documents and rules, and Codex, Claude, Copilot, Cursor, and portable Skill adapters. It previews selected changes and asks before applying. Noninteractive automation can create a plan with `task setup plan --json --docs repository-map --rules testing --agents codex`, then apply a saved plan with `task setup apply --path <plan.json>`. Inspection and planning do not write files. Existing README and agent guidance is preserved outside marked Task sections; existing unmarked generated document/Skill targets are reported as conflicts rather than replaced. Git behavior is guidance only: setup never changes Git configuration or installs hooks.
+```sh
+npm install --global taskcode
+mkdir my-project && cd my-project
+task init
+task
+```
 
-For a new repository, run `task init` to create a managed `tasks/` directory and a repository-local `task.yaml`. Use `task init --workspace .tasks` to select another relative directory. Existing `task.yaml` files are never overwritten; configure a repository that already has Task metadata manually and resolve its workspace with `task.yaml` or `--workspace`.
+`task init` creates a workspace in the current project. `task` opens the interactive menu for creating and managing tasks.
 
-`task run` starts the prebuilt local Next.js dashboard together with its loopback-only Bun runtime, waits for both to be ready, then opens `http://127.0.0.1:5173` in the system browser. The dashboard is bound to loopback and receives only the selected project workspace. It stays in the foreground; Ctrl+C stops both services. Use `task run --no-open` for scripts or remote terminal sessions. The fixed dashboard port matches the runtime’s same-origin mutation protection. If that port already serves this workspace, `task run` opens the existing dashboard; if it belongs to another app or workspace, stop that service first. Run `task init` first in a new project.
+In an initialized project, `task init` offers to refresh Task's generated workspace guide and managed `AGENTS.md` instructions. Use `task init update` directly in scripts. The project-root README and custom workspace guides are left unchanged.
 
-Development checkout users can build the dashboard with `bun run --filter @task/local build`, then use `task run` from `taskcode-dev`. Release packaging stages a bundled CLI and TUI, the production dashboard, and the local runtime in the `taskcode` package. The package removes internal `@task/*` runtime dependencies by bundling them. Bun 1.3.14 or later is required for CLI, TUI, and local runtime execution; Node.js 20.9 or later is required for the Next.js dashboard. npm, pnpm, and Bun are installer choices, not alternative runtimes. Version `0.1.1` fixes dashboard asset lookup. Version `0.1.2` is reserved for the TUI React runtime fix; rebuild and verify the release package before publishing it.
+## Common commands
 
-Run `task -f`, `task --full-screen`, or `task tui` to open the OpenTUI workspace browser. The CLI resolves the workspace first and passes that root to the TUI. The TUI provides read-only task, group, and document browsing; `r` reconciles from disk. Use regular CLI commands for changes.
+```sh
+task list
+task group list
+task search "release"
+task docs list
+task validate
+```
 
-Human output is compact by default: task lists use width-aware tables, details use a short metadata summary, and validation groups issues by file. `--verbose` adds document paths and metadata; unexpected internal errors include a stack in verbose mode. `--quiet` suppresses routine confirmations and the bare overview, while explicit list, show, search, validation, help, and version output remains available. `--plain` and `--no-color` both disable ANSI color. `NO_COLOR` disables color; `FORCE_COLOR=1` enables it, and `TASK_SYMBOLS=ascii|unicode` selects markers. Color is detected separately for stdout and stderr, and piped output defaults to plain ASCII.
+Open the full-screen terminal browser with `task -f`. Start the local dashboard with `task run`; use `task run --no-open` in scripts or remote terminals. Press Ctrl+C to stop it.
 
-Use `--json` for machine-readable output. JSON success data goes to stdout; errors go to stderr, and success payload shapes are stable. Non-interactive task/group creation requires explicit options. Set `EDITOR` or `VISUAL` for `task edit` and `task docs open`. The CLI does not expose a `--watch` option; `bun run dev:cli:watch -- <command>` is a development helper that reruns a command when source changes.
+## Automation
 
-The CLI has no delete/copy/checklist/comment commands, hosted authentication, sync, or browser-facing workspace API. Reads and writes use shared workspace APIs with safe-path preflight; they are not claimed to be race-safe against hostile concurrent filesystem changes.
+Use `--json` for machine-readable output:
+
+```sh
+task --json
+task list --json
+task validate --json
+```
+
+Choose a workspace explicitly with `--workspace`:
+
+```sh
+task --workspace ./tasks list
+```
+
+Run `task --help` to see all commands and options.
