@@ -260,7 +260,8 @@ export async function runLocalDashboard(
 
 export function resolveTuiEntry(): string {
   const cliRoot = packageRootFrom(dirname(fileURLToPath(import.meta.url)));
-  if (repositoryRootFrom(cliRoot)) return fileURLToPath(import.meta.resolve("@task/tui"));
+  const repositoryRoot = repositoryRootFrom(cliRoot);
+  if (repositoryRoot) return join(repositoryRoot, "source/apps/tui/src/index.tsx");
   const bundledEntry = join(cliRoot, "dist/tui-entry.js");
   if (existsSync(bundledEntry)) return bundledEntry;
   throw new WorkspaceError("filesystem_error", "The packaged Task TUI is not available");

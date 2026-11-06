@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveLocalAssets, resolveTuiEntry } from "#/run";
 
+const repositoryRoot = join(import.meta.dir, "../../../..");
+
 describe("local dashboard launcher", () => {
   test("prefers the bundled dashboard and runtime assets for installed packages", async () => {
     const packageRoot = await mkdtemp(join(tmpdir(), "task-cli-package-"));
@@ -32,6 +34,6 @@ describe("local dashboard launcher", () => {
 
 describe("TUI launcher", () => {
   test("uses the workspace TUI source in a repository checkout", () => {
-    expect(resolveTuiEntry()).toBe(fileURLToPath(import.meta.resolve("@task/tui")));
+    expect(resolveTuiEntry()).toBe(join(repositoryRoot, "source/apps/tui/src/index.tsx"));
   });
 });
