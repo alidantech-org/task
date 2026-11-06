@@ -611,7 +611,8 @@ function CodeExplorer() {
                         className={!editable ? "on" : ""}
                         aria-pressed={!editable}
                         onClick={() => {
-                          if (dirty && !window.confirm("Discard your unsaved code changes?")) return;
+                          if (dirty && !window.confirm("Discard your unsaved code changes?"))
+                            return;
                           if (dirty) setDraft(file?.content ?? "");
                           setEditable(false);
                           setContentError("");

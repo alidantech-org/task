@@ -54,14 +54,16 @@ export function sortTaskView<T extends TaskViewSortable>(
     if (sort === "group") return compareText(left.groupName, right.groupName) * multiplier;
     if (sort === "status")
       return (
-        (statusRank[left.status ?? ""] ?? Number.MAX_SAFE_INTEGER) -
-        (statusRank[right.status ?? ""] ?? Number.MAX_SAFE_INTEGER)
-      ) * multiplier;
+        ((statusRank[left.status ?? ""] ?? Number.MAX_SAFE_INTEGER) -
+          (statusRank[right.status ?? ""] ?? Number.MAX_SAFE_INTEGER)) *
+        multiplier
+      );
     if (sort === "priority")
       return (
-        (priorityRank[left.priority ?? ""] ?? Number.MAX_SAFE_INTEGER) -
-        (priorityRank[right.priority ?? ""] ?? Number.MAX_SAFE_INTEGER)
-      ) * multiplier;
+        ((priorityRank[left.priority ?? ""] ?? Number.MAX_SAFE_INTEGER) -
+          (priorityRank[right.priority ?? ""] ?? Number.MAX_SAFE_INTEGER)) *
+        multiplier
+      );
     return (updatedTimestamp(left) - updatedTimestamp(right)) * multiplier;
   });
 }

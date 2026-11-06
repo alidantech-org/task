@@ -43,13 +43,7 @@ describe("BoardTask", () => {
   test("compact cards omit group text while retaining the task title", () => {
     const markup = renderToStaticMarkup(
       <DragDropProvider>
-        <BoardTask
-          task={task}
-          index={0}
-          onSelect={() => undefined}
-          compact
-          showGroup={false}
-        />
+        <BoardTask task={task} index={0} onSelect={() => undefined} compact showGroup={false} />
       </DragDropProvider>,
     );
     expect(markup).toContain("is-compact");

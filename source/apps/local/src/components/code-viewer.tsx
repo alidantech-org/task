@@ -100,7 +100,12 @@ export function CodeViewer({
       <div className="code-viewer-bar">
         <span>{language}</span>
         <div className="code-viewer-actions">
-          {onSearch && <button type="button" onClick={onSearch} aria-label="Search this code in the project"><Search className="size-3.5" />Search project</button>}
+          {onSearch && (
+            <button type="button" onClick={onSearch} aria-label="Search this code in the project">
+              <Search className="size-3.5" />
+              Search project
+            </button>
+          )}
           <button type="button" onClick={() => void copy()} aria-label="Copy code">
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             {copied ? "Copied" : "Copy"}

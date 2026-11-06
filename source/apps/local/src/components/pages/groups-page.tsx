@@ -45,8 +45,7 @@ export function GroupsPage() {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return summaries
       .filter(
-        (group) =>
-          !normalizedQuery || group.name.toLocaleLowerCase().includes(normalizedQuery),
+        (group) => !normalizedQuery || group.name.toLocaleLowerCase().includes(normalizedQuery),
       )
       .filter((group) => {
         if (filter === "active") return group.total > 0 && group.completed < group.total;
@@ -81,14 +80,24 @@ export function GroupsPage() {
     <div className="groups-page">
       <header className="head groups-page-head">
         <div>
-          <p className="sub">{activeCount} active · {completedCount} complete</p>
+          <p className="sub">
+            {activeCount} active · {completedCount} complete
+          </p>
           <h1>Waves</h1>
         </div>
         <div className="seg groups-display" role="group" aria-label="Wave presentation">
-          <button type="button" className={display === "cards" ? "on" : ""} onClick={() => setDisplay("cards")}>
+          <button
+            type="button"
+            className={display === "cards" ? "on" : ""}
+            onClick={() => setDisplay("cards")}
+          >
             <LayoutGrid aria-hidden="true" /> Cards
           </button>
-          <button type="button" className={display === "list" ? "on" : ""} onClick={() => setDisplay("list")}>
+          <button
+            type="button"
+            className={display === "list" ? "on" : ""}
+            onClick={() => setDisplay("list")}
+          >
             <List aria-hidden="true" /> List
           </button>
         </div>
@@ -97,12 +106,26 @@ export function GroupsPage() {
       <div className="groups-toolbar">
         <label className="groups-search">
           <Search aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search waves" aria-label="Search waves" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search waves"
+            aria-label="Search waves"
+          />
         </label>
         <div className="groups-filter" role="group" aria-label="Filter waves">
           {(["all", "active", "complete", "empty"] as const).map((value) => (
-            <button type="button" key={value} className={filter === value ? "on" : ""} onClick={() => setFilter(value)}>
-              {value === "all" ? "All" : value === "complete" ? "Complete" : value[0]?.toLocaleUpperCase() + value.slice(1)}
+            <button
+              type="button"
+              key={value}
+              className={filter === value ? "on" : ""}
+              onClick={() => setFilter(value)}
+            >
+              {value === "all"
+                ? "All"
+                : value === "complete"
+                  ? "Complete"
+                  : value[0]?.toLocaleUpperCase() + value.slice(1)}
             </button>
           ))}
         </div>
@@ -121,17 +144,39 @@ export function GroupsPage() {
 
       <div className={`group-results ${display === "list" ? "is-list" : "is-cards"}`}>
         {visible.map((group) => (
-          <button type="button" className="group-result" key={group.id} onClick={() => openGroup(group.id)}>
+          <button
+            type="button"
+            className="group-result"
+            key={group.id}
+            onClick={() => openGroup(group.id)}
+          >
             <span className="group-result-icon">
-              {group.percent === 100 ? <CheckCircle2 aria-hidden="true" /> : <Folder aria-hidden="true" />}
+              {group.percent === 100 ? (
+                <CheckCircle2 aria-hidden="true" />
+              ) : (
+                <Folder aria-hidden="true" />
+              )}
             </span>
             <span className="group-result-copy">
               <b title={group.name}>{group.name}</b>
-              <small>{group.total === 0 ? "No tasks" : group.remaining === 0 ? "All tasks complete" : `${group.remaining} remaining`}</small>
+              <small>
+                {group.total === 0
+                  ? "No tasks"
+                  : group.remaining === 0
+                    ? "All tasks complete"
+                    : `${group.remaining} remaining`}
+              </small>
             </span>
             <span className="group-result-progress">
-              <span><b>{group.percent}%</b><small>{group.completed}/{group.total}</small></span>
-              <i><span style={{ width: `${group.percent}%` }} /></i>
+              <span>
+                <b>{group.percent}%</b>
+                <small>
+                  {group.completed}/{group.total}
+                </small>
+              </span>
+              <i>
+                <span style={{ width: `${group.percent}%` }} />
+              </i>
             </span>
           </button>
         ))}

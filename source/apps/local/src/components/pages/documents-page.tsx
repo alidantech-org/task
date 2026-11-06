@@ -247,7 +247,11 @@ export function DocumentsPage() {
     return (
       <span className="dchips">
         <Chip className="type doc-card-meta">{doc.type}</Chip>
-        <TagChips tags={doc.tags} activeTag={tag} onTag={(name) => setTag(tag === name ? "" : name)} />
+        <TagChips
+          tags={doc.tags}
+          activeTag={tag}
+          onTag={(name) => setTag(tag === name ? "" : name)}
+        />
         <Chip className="doc-card-meta">{formattedDate(doc.modifiedAt)}</Chip>
         {count === undefined ? (
           <span className="dchip shimmer doc-card-meta" aria-hidden="true" />
@@ -294,11 +298,7 @@ export function DocumentsPage() {
           className="docs-search"
         />
         {tag ? (
-          <button
-            type="button"
-            className="dchip tag on"
-            onClick={() => setTag("")}
-          >
+          <button type="button" className="dchip tag on" onClick={() => setTag("")}>
             #{tag} <X className="size-3" />
           </button>
         ) : null}
@@ -374,7 +374,11 @@ export function DocumentsPage() {
                   <code className="dpath">{doc.path}</code>
                 </td>
                 <td>
-                  <TagChips tags={doc.tags} activeTag={tag} onTag={(name) => setTag(tag === name ? "" : name)} />
+                  <TagChips
+                    tags={doc.tags}
+                    activeTag={tag}
+                    onTag={(name) => setTag(tag === name ? "" : name)}
+                  />
                 </td>
                 <td>{formattedDate(doc.modifiedAt)}</td>
                 <td>

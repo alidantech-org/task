@@ -118,10 +118,18 @@ export function TasksPageContent() {
     "list",
     isListDisplay,
   );
-  const [groupByGroup, setGroupByGroup] = usePersistentState("task:group-by-group", true, (value): value is boolean => typeof value === "boolean");
+  const [groupByGroup, setGroupByGroup] = usePersistentState(
+    "task:group-by-group",
+    true,
+    (value): value is boolean => typeof value === "boolean",
+  );
   const [listPage, setListPage] = useState(1);
   const [showAllCompletedBoard, setShowAllCompletedBoard] = useState(false);
-  const [sortBy, setSortBy] = usePersistentState<TaskViewSort>("task:list-sort", "recent", isTaskSort);
+  const [sortBy, setSortBy] = usePersistentState<TaskViewSort>(
+    "task:list-sort",
+    "recent",
+    isTaskSort,
+  );
   const [sortDirection, setSortDirection] = usePersistentState<TaskViewDirection>(
     "task:list-sort-direction",
     "descending",
@@ -181,10 +189,11 @@ export function TasksPageContent() {
     return sortBoard(matching, groupRank);
   }, [visibleTasks, groupFilter, allGroups, filters, me]);
   const displayed = useMemo(
-    () => showAllCompletedBoard ? filtered : limitRawCompletedTasks(filtered, groupByGroup, 10),
+    () => (showAllCompletedBoard ? filtered : limitRawCompletedTasks(filtered, groupByGroup, 10)),
     [filtered, groupByGroup, showAllCompletedBoard],
   );
-  const omittedCompleted = filtered.filter((task) => task.status === "completed").length -
+  const omittedCompleted =
+    filtered.filter((task) => task.status === "completed").length -
     displayed.filter((task) => task.status === "completed").length;
   const listTasks = useMemo(
     () =>
@@ -297,60 +306,61 @@ export function TasksPageContent() {
       pageTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
-  const viewControls = taskView === "Board" && taskFilter !== "archived" ? (
-    <div className="task-presentation-controls board-presentation-controls">
-      <div className="seg board-card-controls" role="group" aria-label="Board card detail">
-        {[
-          { value: "detailed" as const, label: "Detailed", Icon: Columns3 },
-          { value: "compact" as const, label: "Compact", Icon: List },
-        ].map(({ value, label, Icon }) => (
-          <button
-            type="button"
-            key={value}
-            className={boardDisplay === value ? "on" : ""}
-            aria-pressed={boardDisplay === value}
-            title={`${label} task cards`}
-            onClick={() => setBoardDisplay(value)}
-          >
-            <Icon className="size-3.5" aria-hidden="true" />
-            {label}
-          </button>
-        ))}
+  const viewControls =
+    taskView === "Board" && taskFilter !== "archived" ? (
+      <div className="task-presentation-controls board-presentation-controls">
+        <div className="seg board-card-controls" role="group" aria-label="Board card detail">
+          {[
+            { value: "detailed" as const, label: "Detailed", Icon: Columns3 },
+            { value: "compact" as const, label: "Compact", Icon: List },
+          ].map(({ value, label, Icon }) => (
+            <button
+              type="button"
+              key={value}
+              className={boardDisplay === value ? "on" : ""}
+              aria-pressed={boardDisplay === value}
+              title={`${label} task cards`}
+              onClick={() => setBoardDisplay(value)}
+            >
+              <Icon className="size-3.5" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
-  ) : taskView === "List" || taskFilter === "archived" ? (
-    <div className="task-presentation-controls list-presentation-controls">
-      <CustomSelect
-        label="Sort tasks"
-        value={sortBy}
-        onValueChange={(value) => setSortBy(value as TaskViewSort)}
-        className="task-sort-select"
-        options={[
-          { value: "recent", label: "Recently completed / updated" },
-          { value: "name", label: "Task name" },
-          { value: "group", label: "Wave" },
-          { value: "status", label: "Status" },
-          { value: "priority", label: "Priority" },
-          { value: "due", label: "Due date" },
-        ]}
-      />
-      <button
-        type="button"
-        className="task-sort-direction"
-        aria-label={`Sort ${sortDirection}`}
-        title={`Sort ${sortDirection}`}
-        onClick={() =>
-          setSortDirection(sortDirection === "ascending" ? "descending" : "ascending")
-        }
-      >
-        {sortDirection === "ascending" ? (
-          <ArrowUp className="size-4" aria-hidden="true" />
-        ) : (
-          <ArrowDown className="size-4" aria-hidden="true" />
-        )}
-      </button>
-    </div>
-  ) : undefined;
+    ) : taskView === "List" || taskFilter === "archived" ? (
+      <div className="task-presentation-controls list-presentation-controls">
+        <CustomSelect
+          label="Sort tasks"
+          value={sortBy}
+          onValueChange={(value) => setSortBy(value as TaskViewSort)}
+          className="task-sort-select"
+          options={[
+            { value: "recent", label: "Recently completed / updated" },
+            { value: "name", label: "Task name" },
+            { value: "group", label: "Wave" },
+            { value: "status", label: "Status" },
+            { value: "priority", label: "Priority" },
+            { value: "due", label: "Due date" },
+          ]}
+        />
+        <button
+          type="button"
+          className="task-sort-direction"
+          aria-label={`Sort ${sortDirection}`}
+          title={`Sort ${sortDirection}`}
+          onClick={() =>
+            setSortDirection(sortDirection === "ascending" ? "descending" : "ascending")
+          }
+        >
+          {sortDirection === "ascending" ? (
+            <ArrowUp className="size-4" aria-hidden="true" />
+          ) : (
+            <ArrowDown className="size-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    ) : undefined;
 
   function sortFromTable(column: TaskViewSort): void {
     if (sortBy === column) {
@@ -379,8 +389,19 @@ export function TasksPageContent() {
             {picked.includes(task.id) ? "✓" : ""}
           </span>
         ) : (
-          <span className={`task-row-status s-${task.status ?? "planned"}`} aria-label={labels[task.status ?? "planned"]}>
-            {task.status === "completed" ? <CircleCheck /> : task.status === "in-progress" ? <CircleDot /> : task.status === "blocked" ? <Ban /> : <Circle />}
+          <span
+            className={`task-row-status s-${task.status ?? "planned"}`}
+            aria-label={labels[task.status ?? "planned"]}
+          >
+            {task.status === "completed" ? (
+              <CircleCheck />
+            ) : task.status === "in-progress" ? (
+              <CircleDot />
+            ) : task.status === "blocked" ? (
+              <Ban />
+            ) : (
+              <Circle />
+            )}
           </span>
         )}
         <span className="task-list-copy">
@@ -388,10 +409,15 @@ export function TasksPageContent() {
           <small>{task.id}</small>
         </span>
         {task.priority && task.priority !== "medium" ? (
-          <span className={`task-list-priority priority-${task.priority}`} title={`${task.priority} priority`}>
+          <span
+            className={`task-list-priority priority-${task.priority}`}
+            title={`${task.priority} priority`}
+          >
             <Flag aria-hidden="true" /> {task.priority}
           </span>
-        ) : <span />}
+        ) : (
+          <span />
+        )}
         <span className="task-list-due">
           {task.due_at
             ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(
@@ -415,7 +441,9 @@ export function TasksPageContent() {
         <td className="task-table-name">
           <span className="task-table-title-line">
             {selecting && (
-              <span className={`card-check inline task-selection-check ${picked.includes(task.id) ? "on" : ""}`}>
+              <span
+                className={`card-check inline task-selection-check ${picked.includes(task.id) ? "on" : ""}`}
+              >
                 {picked.includes(task.id) ? "✓" : ""}
               </span>
             )}
@@ -463,13 +491,12 @@ export function TasksPageContent() {
               title={`Sort by ${label}`}
             >
               {label}
-              {sortBy === key && (
-                sortDirection === "ascending" ? (
+              {sortBy === key &&
+                (sortDirection === "ascending" ? (
                   <ArrowUp aria-hidden="true" />
                 ) : (
                   <ArrowDown aria-hidden="true" />
-                )
-              )}
+                ))}
             </button>
           </th>
         ))}
@@ -492,20 +519,23 @@ export function TasksPageContent() {
       <div className="task-table-scroll">
         <table className="task-table grouped-task-table">
           {tableHeader}
-          {taskGroups.map((group) => ({
-            ...group,
-            tasks: group.tasks.filter((task) => tasks.some((item) => item.id === task.id)),
-          })).filter((group) => group.tasks.length > 0).map((group) => (
-            <tbody key={group.key}>
-              <tr className="task-table-group-row">
-                <th colSpan={6}>
-                  <span>{group.name}</span>
-                  <small>{group.tasks.length} tasks</small>
-                </th>
-              </tr>
-              {group.tasks.map(renderTableRow)}
-            </tbody>
-          ))}
+          {taskGroups
+            .map((group) => ({
+              ...group,
+              tasks: group.tasks.filter((task) => tasks.some((item) => item.id === task.id)),
+            }))
+            .filter((group) => group.tasks.length > 0)
+            .map((group) => (
+              <tbody key={group.key}>
+                <tr className="task-table-group-row">
+                  <th colSpan={6}>
+                    <span>{group.name}</span>
+                    <small>{group.tasks.length} tasks</small>
+                  </th>
+                </tr>
+                {group.tasks.map(renderTableRow)}
+              </tbody>
+            ))}
         </table>
       </div>
     );
@@ -513,7 +543,12 @@ export function TasksPageContent() {
 
   function renderListPresentation(tasks: typeof listTasks) {
     const grouped = groupByGroup
-      ? taskGroups.map((group) => ({ ...group, tasks: group.tasks.filter((task) => tasks.some((item) => item.id === task.id)) })).filter((group) => group.tasks.length > 0)
+      ? taskGroups
+          .map((group) => ({
+            ...group,
+            tasks: group.tasks.filter((task) => tasks.some((item) => item.id === task.id)),
+          }))
+          .filter((group) => group.tasks.length > 0)
       : [{ key: "all", name: "", tasks }];
     if (listDisplay === "table") return renderTaskTable(tasks);
     return (
@@ -528,9 +563,7 @@ export function TasksPageContent() {
                 <small>{group.tasks.length} tasks</small>
               </header>
             )}
-            <div className="task-list">
-              {group.tasks.map(renderListRow)}
-            </div>
+            <div className="task-list">{group.tasks.map(renderListRow)}</div>
           </section>
         ))}
       </div>
@@ -541,7 +574,11 @@ export function TasksPageContent() {
       <div className="tasks-match">
         <header className="head">
           <div>
-            <p className="sub">{taskView === "Board" ? "Drag cards to change status or schedule them." : `${activeListTasks.length} open · ${completedListTasks.length} done`}</p>
+            <p className="sub">
+              {taskView === "Board"
+                ? "Drag cards to change status or schedule them."
+                : `${activeListTasks.length} open · ${completedListTasks.length} done`}
+            </p>
             <h1>Tasks</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -550,13 +587,29 @@ export function TasksPageContent() {
                 <button
                   type="button"
                   key={view}
-                  className={taskFilter !== "archived" && (view === "Board" ? taskView === "Board" : taskView === "List" && listDisplay === view.toLowerCase()) ? "on" : ""}
+                  className={
+                    taskFilter !== "archived" &&
+                    (view === "Board"
+                      ? taskView === "Board"
+                      : taskView === "List" && listDisplay === view.toLowerCase())
+                      ? "on"
+                      : ""
+                  }
                   onClick={() => {
                     if (view === "Board") setTaskView("Board");
-                    else { setTaskView("List"); setListDisplay(view.toLowerCase() as ListDisplay); }
+                    else {
+                      setTaskView("List");
+                      setListDisplay(view.toLowerCase() as ListDisplay);
+                    }
                   }}
                 >
-                  {view === "Board" ? <Columns3 className="size-4" /> : view === "Table" ? <Table2 className="size-4" /> : <List className="size-4" />}
+                  {view === "Board" ? (
+                    <Columns3 className="size-4" />
+                  ) : view === "Table" ? (
+                    <Table2 className="size-4" />
+                  ) : (
+                    <List className="size-4" />
+                  )}
                   {view}
                 </button>
               ))}
@@ -566,10 +619,20 @@ export function TasksPageContent() {
         {selecting ? (
           <BulkBar
             count={picked.length}
-            total={taskView === "Board" && taskFilter !== "archived" ? displayed.length : listTasks.length}
+            total={
+              taskView === "Board" && taskFilter !== "archived"
+                ? displayed.length
+                : listTasks.length
+            }
             groups={groups}
             busy={bulkBusy}
-            onSelectAll={() => setPicked((taskView === "Board" && taskFilter !== "archived" ? displayed : listTasks).map((task) => task.id))}
+            onSelectAll={() =>
+              setPicked(
+                (taskView === "Board" && taskFilter !== "archived" ? displayed : listTasks).map(
+                  (task) => task.id,
+                ),
+              )
+            }
             onClearSelection={() => setPicked([])}
             onClear={() => {
               setSelecting(false);
@@ -609,9 +672,23 @@ export function TasksPageContent() {
             {taskView === "List" && taskFilter !== "archived" && waveSummaries.length > 0 && (
               <nav className="task-wave-strip" aria-label="Task waves">
                 {waveSummaries.map((wave) => (
-                  <button type="button" key={wave.id} className={groupFilter === wave.id ? "on" : ""} onClick={() => setGroupFilter(groupFilter === wave.id ? "" : wave.id)}>
-                    <span><b>{wave.name}</b><small>{wave.completed}/{wave.total}</small></span>
-                    <i><span style={{ width: `${Math.round((wave.completed / wave.total) * 100)}%` }} /></i>
+                  <button
+                    type="button"
+                    key={wave.id}
+                    className={groupFilter === wave.id ? "on" : ""}
+                    onClick={() => setGroupFilter(groupFilter === wave.id ? "" : wave.id)}
+                  >
+                    <span>
+                      <b>{wave.name}</b>
+                      <small>
+                        {wave.completed}/{wave.total}
+                      </small>
+                    </span>
+                    <i>
+                      <span
+                        style={{ width: `${Math.round((wave.completed / wave.total) * 100)}%` }}
+                      />
+                    </i>
                   </button>
                 ))}
               </nav>
@@ -754,7 +831,8 @@ export function TasksPageContent() {
                       className="board-view-all"
                       onClick={() => setShowAllCompletedBoard(true)}
                     >
-                      View all {filtered.filter((task) => task.status === "completed").length} completed tasks
+                      View all {filtered.filter((task) => task.status === "completed").length}{" "}
+                      completed tasks
                       <ChevronRight aria-hidden="true" />
                     </button>
                   )}
@@ -775,11 +853,26 @@ export function TasksPageContent() {
                 {pageCount > 1 && (
                   <nav className="task-pagination" aria-label="Task pages">
                     <span>
-                      {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, listTasks.length)} of {listTasks.length}
+                      {(currentPage - 1) * pageSize + 1}–
+                      {Math.min(currentPage * pageSize, listTasks.length)} of {listTasks.length}
                     </span>
-                    <button type="button" disabled={currentPage === 1} onClick={() => goToListPage(currentPage - 1)}>Previous</button>
-                    <b>Page {currentPage} of {pageCount}</b>
-                    <button type="button" disabled={currentPage === pageCount} onClick={() => goToListPage(currentPage + 1)}>Next</button>
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => goToListPage(currentPage - 1)}
+                    >
+                      Previous
+                    </button>
+                    <b>
+                      Page {currentPage} of {pageCount}
+                    </b>
+                    <button
+                      type="button"
+                      disabled={currentPage === pageCount}
+                      onClick={() => goToListPage(currentPage + 1)}
+                    >
+                      Next
+                    </button>
                   </nav>
                 )}
               </div>

@@ -45,7 +45,10 @@ function statusFor(code: string): ProjectTreeFile["status"] {
   return "other";
 }
 
-function parseStatus(output: string, prefix: string): Map<string, { status: ProjectTreeFile["status"]; oldPath?: string }> {
+function parseStatus(
+  output: string,
+  prefix: string,
+): Map<string, { status: ProjectTreeFile["status"]; oldPath?: string }> {
   const parts = output.split("\0");
   const statuses = new Map<string, { status: ProjectTreeFile["status"]; oldPath?: string }>();
   for (let index = 0; index < parts.length; ) {
@@ -156,11 +159,18 @@ export async function listProjectTree(context: WorkspaceContext): Promise<Projec
       ...(change.oldPath ? { oldPath: change.oldPath } : {}),
     });
   }
-  return { files: fileEntries.sort((left, right) => left.path.localeCompare(right.path)), folders: [...folders.values()].sort((left, right) => left.path.localeCompare(right.path)), ...(gitRoot ? { gitRoot } : {}) };
+  return {
+    files: fileEntries.sort((left, right) => left.path.localeCompare(right.path)),
+    folders: [...folders.values()].sort((left, right) => left.path.localeCompare(right.path)),
+    ...(gitRoot ? { gitRoot } : {}),
+  };
 }
 
 /** Reads the committed HEAD version of one safe project file for Monaco's side-by-side diff view. */
-export async function readProjectFileOriginal(context: WorkspaceContext, path: string): Promise<string> {
+export async function readProjectFileOriginal(
+  context: WorkspaceContext,
+  path: string,
+): Promise<string> {
   if (!path || path.includes("\0") || isAbsolute(path) || isDeniedPath(path))
     throw new WorkspaceError("path_not_safe", "This project path cannot be shown");
   const root = await projectRoot(context);
@@ -170,7 +180,9 @@ export async function readProjectFileOriginal(context: WorkspaceContext, path: s
   const rootGit = await realpath(gitResult.stdout.trim());
   const prefix = relative(rootGit, root).split(sep).join("/");
   const gitPath = prefix ? `${prefix}/${path}` : path;
-  const result = await runGit(rootGit, ["show", `HEAD:${gitPath}`], { maxBytes: maxProjectDiffBytes });
+  const result = await runGit(rootGit, ["show", `HEAD:${gitPath}`], {
+    maxBytes: maxProjectDiffBytes,
+  });
   if (result.code !== 0) return "";
   if (result.truncated)
     throw new WorkspaceError("validation_failed", "The committed file is too large to compare");
@@ -186,14 +198,16 @@ export async function writeProjectFile(
 ): Promise<Awaited<ReturnType<typeof readProjectFile>>> {
   if (!path || path.includes("\0") || isAbsolute(path) || isDeniedPath(path))
     throw new WorkspaceError("path_not_safe", "This project path cannot be edited");
-  if (content.includes("\0")) throw new WorkspaceError("invalid_input", "Text files cannot contain null bytes");
+  if (content.includes("\0"))
+    throw new WorkspaceError("invalid_input", "Text files cannot contain null bytes");
   const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > 1_000_000)
     throw new WorkspaceError("validation_failed", "Code files are limited to 1 MB");
   const root = await projectRoot(context);
   const projectContext = { ...context, root, projectRoot: root };
   const current = await readProjectFile(projectContext, path);
-  if (current.binary) throw new WorkspaceError("invalid_input", "Binary files cannot be edited here");
+  if (current.binary)
+    throw new WorkspaceError("invalid_input", "Binary files cannot be edited here");
   await replaceFile(projectContext, path, content, expectedHash);
   return readProjectFile(projectContext, path);
 }

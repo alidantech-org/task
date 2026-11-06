@@ -741,8 +741,7 @@ export function TaskSheet() {
                       </>
                     )}
                     <p className="sub">
-                      The wave's goal and plan documents are checked too when a task leaves
-                      Planned.
+                      The wave's goal and plan documents are checked too when a task leaves Planned.
                     </p>
                   </div>
                 )}

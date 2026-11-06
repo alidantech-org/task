@@ -156,7 +156,10 @@ export function BoardTask({
         <CardContent task={task} showGroup={showGroup} />
       </button>
       {selection ? (
-        <span className={`card-check task-selection-check ${selection.checked ? "on" : ""}`} aria-hidden="true">
+        <span
+          className={`card-check task-selection-check ${selection.checked ? "on" : ""}`}
+          aria-hidden="true"
+        >
           {selection.checked ? "✓" : ""}
         </span>
       ) : (

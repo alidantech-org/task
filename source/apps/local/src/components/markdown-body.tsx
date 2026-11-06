@@ -113,13 +113,21 @@ export function MarkdownBody({
               className="md-project-link"
               title={`Open folder ${target.path}`}
               onClick={(event) => {
-                if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                if (
+                  !onNavigate ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey
+                )
+                  return;
                 event.preventDefault();
                 onNavigate(folderHref);
               }}
               {...props}
             >
-              {children}<small>folder</small>
+              {children}
+              <small>folder</small>
             </a>
           );
         }
@@ -142,7 +150,14 @@ export function MarkdownBody({
               className="md-project-link"
               title={`${target.path}${file.status ? ` · ${file.status}` : " · unchanged"}`}
               onClick={(event) => {
-                if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                if (
+                  !onNavigate ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey
+                )
+                  return;
                 event.preventDefault();
                 onNavigate(internal ?? `/code?path=${encodeURIComponent(target.path)}`);
               }}
@@ -184,13 +199,23 @@ export function MarkdownBody({
     },
     code: ({ className, children, node: _node, ...props }) => {
       const value = headingText(children).trim();
-      if (!value || !linkContext) return <code className={["md-code", className].filter(Boolean).join(" ")} {...props}>{children}</code>;
+      if (!value || !linkContext)
+        return (
+          <code className={["md-code", className].filter(Boolean).join(" ")} {...props}>
+            {children}
+          </code>
+        );
       const projectFile = knownProjectPaths.find((candidate) => candidate.path === value);
       const projectFolder = knownProjectFolders.includes(value);
       const pathLike = /[./\\]/.test(value) && !/\s/.test(value);
       if (pathLike && !projectFile && !projectFolder)
         return (
-          <button type="button" className="md-code-search md-missing-path" title={`Path not found: ${value}`} onClick={() => onMissingPath?.(value)}>
+          <button
+            type="button"
+            className="md-code-search md-missing-path"
+            title={`Path not found: ${value}`}
+            onClick={() => onMissingPath?.(value)}
+          >
             <code className={["md-code", className].filter(Boolean).join(" ")}>{children}</code>
           </button>
         );
@@ -198,12 +223,18 @@ export function MarkdownBody({
         ? `/code?path=${encodeURIComponent(value)}`
         : projectFolder
           ? `/code?folder=${encodeURIComponent(value)}`
-        : `/code?q=${encodeURIComponent(value)}`;
+          : `/code?q=${encodeURIComponent(value)}`;
       return (
         <button
           type="button"
           className="md-code-search"
-          title={projectFile ? `Open ${value}${projectFile.status ? ` · ${projectFile.status}` : " · unchanged"}` : projectFolder ? `Browse folder ${value}` : `Search project for ${value}`}
+          title={
+            projectFile
+              ? `Open ${value}${projectFile.status ? ` · ${projectFile.status}` : " · unchanged"}`
+              : projectFolder
+                ? `Browse folder ${value}`
+                : `Search project for ${value}`
+          }
           onClick={() => onNavigate?.(href)}
         >
           <code className={["md-code", className].filter(Boolean).join(" ")}>{children}</code>
@@ -217,13 +248,22 @@ export function MarkdownBody({
       if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
         const language = /language-([\w+-]+)/.exec(child.props.className ?? "")?.[1] ?? "text";
         const code = headingText(child.props.children).replace(/\n$/, "");
-        const searchable = code.split("\n").find((line) => line.trim())?.trim().slice(0, 120) ?? "";
+        const searchable =
+          code
+            .split("\n")
+            .find((line) => line.trim())
+            ?.trim()
+            .slice(0, 120) ?? "";
         return (
           <CodeViewer
             code={code}
             language={language}
             compact
-            onSearch={searchable ? () => onNavigate?.(`/code?q=${encodeURIComponent(searchable)}`) : undefined}
+            onSearch={
+              searchable
+                ? () => onNavigate?.(`/code?q=${encodeURIComponent(searchable)}`)
+                : undefined
+            }
           />
         );
       }

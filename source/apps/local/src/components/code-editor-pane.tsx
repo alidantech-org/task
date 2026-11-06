@@ -63,23 +63,48 @@ export function CodeEditorPane({
   useEffect(() => {
     const update = () => {
       const styles = getComputedStyle(document.documentElement);
-      const token = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
-      const light = themeMode === "light" || (themeMode === "system" && document.documentElement.dataset.theme === "light");
+      const token = (name: string, fallback: string) =>
+        styles.getPropertyValue(name).trim() || fallback;
+      const light =
+        themeMode === "light" ||
+        (themeMode === "system" && document.documentElement.dataset.theme === "light");
       const colors = light
-        ? { panel: "#ffffff", ink: "#131a2b", muted: "#6b7488", line: "#e3e7ef", soft: "#f4f6fa", accent: "#4a63f5" }
-        : { panel: "#151a26", ink: "#eef1f8", muted: "#8e98ae", line: "#252c3d", soft: "#202635", accent: "#7489ff" };
+        ? {
+            panel: "#ffffff",
+            ink: "#131a2b",
+            muted: "#6b7488",
+            line: "#e3e7ef",
+            soft: "#f4f6fa",
+            accent: "#4a63f5",
+          }
+        : {
+            panel: "#151a26",
+            ink: "#eef1f8",
+            muted: "#8e98ae",
+            line: "#252c3d",
+            soft: "#202635",
+            accent: "#7489ff",
+          };
       const palette = {
         "editor.background": themeMode === "system" ? token("--pn", colors.panel) : colors.panel,
         "editor.foreground": themeMode === "system" ? token("--ink", colors.ink) : colors.ink,
-        "editorLineNumber.foreground": themeMode === "system" ? token("--mut", colors.muted) : colors.muted,
-        "editorLineNumber.activeForeground": themeMode === "system" ? token("--ink", colors.ink) : colors.ink,
-        "editorGutter.background": themeMode === "system" ? token("--pn", colors.panel) : colors.panel,
-        "editor.lineHighlightBackground": themeMode === "system" ? token("--soft", colors.soft) : colors.soft,
-        "editorCursor.foreground": themeMode === "system" ? token("--acc", colors.accent) : colors.accent,
-        "editorIndentGuide.background1": themeMode === "system" ? token("--ln", colors.line) : colors.line,
-        "editorIndentGuide.activeBackground1": themeMode === "system" ? token("--acc", colors.accent) : colors.accent,
+        "editorLineNumber.foreground":
+          themeMode === "system" ? token("--mut", colors.muted) : colors.muted,
+        "editorLineNumber.activeForeground":
+          themeMode === "system" ? token("--ink", colors.ink) : colors.ink,
+        "editorGutter.background":
+          themeMode === "system" ? token("--pn", colors.panel) : colors.panel,
+        "editor.lineHighlightBackground":
+          themeMode === "system" ? token("--soft", colors.soft) : colors.soft,
+        "editorCursor.foreground":
+          themeMode === "system" ? token("--acc", colors.accent) : colors.accent,
+        "editorIndentGuide.background1":
+          themeMode === "system" ? token("--ln", colors.line) : colors.line,
+        "editorIndentGuide.activeBackground1":
+          themeMode === "system" ? token("--acc", colors.accent) : colors.accent,
         "minimap.background": themeMode === "system" ? token("--pn", colors.panel) : colors.panel,
-        "editorOverviewRuler.border": themeMode === "system" ? token("--ln", colors.line) : colors.line,
+        "editorOverviewRuler.border":
+          themeMode === "system" ? token("--ln", colors.line) : colors.line,
         "diffEditor.insertedTextBackground": light ? "#16a34a33" : "#22c55e38",
         "diffEditor.removedTextBackground": light ? "#dc262633" : "#ef444438",
         "diffEditor.insertedLineBackground": light ? "#16a34a16" : "#22c55e1b",
@@ -87,13 +112,26 @@ export function CodeEditorPane({
         "diffEditorGutter.insertedLineBackground": light ? "#16a34a55" : "#22c55e55",
         "diffEditorGutter.removedLineBackground": light ? "#dc262655" : "#ef444455",
       };
-      monaco.editor.defineTheme("taskcode-light", { base: "vs", inherit: true, rules: [], colors: palette });
-      monaco.editor.defineTheme("taskcode-dark", { base: "vs-dark", inherit: true, rules: [], colors: palette });
+      monaco.editor.defineTheme("taskcode-light", {
+        base: "vs",
+        inherit: true,
+        rules: [],
+        colors: palette,
+      });
+      monaco.editor.defineTheme("taskcode-dark", {
+        base: "vs-dark",
+        inherit: true,
+        rules: [],
+        colors: palette,
+      });
       setTheme(light ? "taskcode-light" : "taskcode-dark");
     };
     update();
     const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => observer.disconnect();
   }, [themeMode]);
   useEffect(() => {
@@ -123,7 +161,9 @@ export function CodeEditorPane({
           wordWrap: "off",
         }}
         loading={<div className="code-editor-loading">Starting local code editor…</div>}
-        onMount={(editor) => { diffEditorRef.current = editor; }}
+        onMount={(editor) => {
+          diffEditorRef.current = editor;
+        }}
       />
     );
   }
@@ -136,7 +176,13 @@ export function CodeEditorPane({
       language={language}
       value={content}
       theme={theme}
-      options={{ ...editorOptions, readOnly: !editable, wordWrap: wordWrap ? "on" : "off", minimap: { ...editorOptions.minimap, enabled: minimap }, fontSize }}
+      options={{
+        ...editorOptions,
+        readOnly: !editable,
+        wordWrap: wordWrap ? "on" : "off",
+        minimap: { ...editorOptions.minimap, enabled: minimap },
+        fontSize,
+      }}
       onChange={(value) => onChange?.(value ?? "")}
       onMount={(editor) => {
         editorRef.current = editor;

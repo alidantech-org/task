@@ -327,31 +327,45 @@ export function DocumentReaderPage() {
                     {link.label}
                     <small>{new URL(target.href).host || target.href}</small>
                   </a>
-              ) : (
+                ) : (
                   (() => {
-                    const file = target.kind === "file"
-                      ? projectTree?.files.find((candidate) => candidate.path === target.path)
-                      : undefined;
-                    const folder = target.kind === "file" && projectTree?.folders.some((candidate) => candidate.path === target.path);
+                    const file =
+                      target.kind === "file"
+                        ? projectTree?.files.find((candidate) => candidate.path === target.path)
+                        : undefined;
+                    const folder =
+                      target.kind === "file" &&
+                      projectTree?.folders.some((candidate) => candidate.path === target.path);
                     const missing = target.kind === "file" && !file && !folder;
-                    return <button
-                    className={`toc-link source ${missing ? "bad-link" : ""}`}
-                    key={link.href}
-                    type="button"
-                    title={target.kind === "file" ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}` : link.href}
-                    onClick={() => {
-                      if (missing && target.kind === "file") {
-                        setNotice(`Project path not found: ${target.path}`);
-                        return;
-                      }
-                      const internal = internalHref(target);
-                      if (target.kind === "file" && folder) router.push(`/code?folder=${encodeURIComponent(target.path)}`);
-                      else if (internal) router.push(internal);
-                    }}
-                  >
-                    {link.label}
-                    <small>{target.kind === "file" ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}` : "Document"}</small>
-                  </button>;
+                    return (
+                      <button
+                        className={`toc-link source ${missing ? "bad-link" : ""}`}
+                        key={link.href}
+                        type="button"
+                        title={
+                          target.kind === "file"
+                            ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}`
+                            : link.href
+                        }
+                        onClick={() => {
+                          if (missing && target.kind === "file") {
+                            setNotice(`Project path not found: ${target.path}`);
+                            return;
+                          }
+                          const internal = internalHref(target);
+                          if (target.kind === "file" && folder)
+                            router.push(`/code?folder=${encodeURIComponent(target.path)}`);
+                          else if (internal) router.push(internal);
+                        }}
+                      >
+                        {link.label}
+                        <small>
+                          {target.kind === "file"
+                            ? `${target.path} · ${file?.status ?? (folder ? "folder" : "not found")}`
+                            : "Document"}
+                        </small>
+                      </button>
+                    );
                   })()
                 ),
               )}

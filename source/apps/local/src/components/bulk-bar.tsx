@@ -17,7 +17,16 @@ type Props = {
 };
 
 /** Changes every selected task at once; each change reports its own result. */
-export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onClearSelection, onClear }: Props) {
+export function BulkBar({
+  count,
+  total,
+  groups,
+  busy,
+  onApply,
+  onSelectAll,
+  onClearSelection,
+  onClear,
+}: Props) {
   const { confirm } = useDialogs();
   const [assignee, setAssignee] = useState("");
   const idle = count === 0 || busy;
@@ -33,7 +42,11 @@ export function BulkBar({ count, total, groups, busy, onApply, onSelectAll, onCl
         title={count === total ? "Clear selection" : `Select all ${total} tasks`}
         onClick={count === total ? onClearSelection : onSelectAll}
       >
-        {count === total ? <Check aria-hidden="true" /> : count > 0 ? <Minus aria-hidden="true" /> : null}
+        {count === total ? (
+          <Check aria-hidden="true" />
+        ) : count > 0 ? (
+          <Minus aria-hidden="true" />
+        ) : null}
       </button>
       <CustomSelect
         label="Set status"
