@@ -196,41 +196,6 @@ function CodeExplorer() {
   }, [fullscreen]);
 
   useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        void saveFile();
-      } else if (event.key === "Escape" && editable) {
-        event.preventDefault();
-        if (dirty && !window.confirm("Discard your unsaved code changes?")) return;
-        discardDraft();
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    window.addEventListener("keydown", onKeyDown);
-    const guardNavigation = (event: MouseEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target || target.closest(".code-explorer")) return;
-      if (!target.closest(".nv, a[href]")) return;
-      if (!window.confirm("Discard your unsaved code changes and leave this file?")) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    };
-    document.addEventListener("click", guardNavigation, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      window.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("click", guardNavigation, true);
-    };
-  }, [dirty, editable, discardDraft]);
-
-  useEffect(() => {
     let active = true;
     setSearchHits([]);
     setSearchComplete(false);
@@ -300,7 +265,7 @@ function CodeExplorer() {
     [dirty, router],
   );
 
-  async function saveFile(): Promise<void> {
+  const saveFile = useCallback(async (): Promise<void> => {
     if (!file || !dirty || saving) return;
     setSaving(true);
     setContentError("");
@@ -326,7 +291,42 @@ function CodeExplorer() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [dirty, draft, file, saving]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveFile();
+      } else if (event.key === "Escape" && editable) {
+        event.preventDefault();
+        if (dirty && !window.confirm("Discard your unsaved code changes?")) return;
+        discardDraft();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("keydown", onKeyDown);
+    const guardNavigation = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || target.closest(".code-explorer")) return;
+      if (!target.closest(".nv, a[href]")) return;
+      if (!window.confirm("Discard your unsaved code changes and leave this file?")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    document.addEventListener("click", guardNavigation, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("click", guardNavigation, true);
+    };
+  }, [dirty, editable, discardDraft, saveFile]);
 
   async function reloadFile(): Promise<void> {
     if (!selectedPath) return;

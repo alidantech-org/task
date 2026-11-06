@@ -66,7 +66,7 @@ export function DocumentReaderPage() {
     return () => {
       active = false;
     };
-  }, [workspace?.projectRoot]);
+  }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Restart the entrance when the document view changes.
   useEffect(() => {
     restartSectionEntrance(document.querySelector<HTMLElement>(".body"));

@@ -3,7 +3,6 @@
 @import "@milkdown/crepe/theme/common/style.css";
 @import "@milkdown/crepe/theme/classic.css";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "./reference.css";
 
 @source "../../../../packages/ui/src";

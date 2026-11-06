@@ -558,7 +558,7 @@ export function App({
       setEditingDocument(false);
       setDocumentConflict(null);
     }
-  }, [pathname, records, selected]);
+  }, [docs, pathname, records, router.replace, selected]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("task-theme");

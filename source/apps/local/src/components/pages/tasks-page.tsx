@@ -17,7 +17,7 @@ import {
   Table2,
   Waves,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BoardTask } from "@/components/board-task";
 import { BulkBar } from "@/components/bulk-bar";
 import { StatusDropZone } from "@/components/calendar";
@@ -124,6 +124,7 @@ export function TasksPageContent() {
     (value): value is boolean => typeof value === "boolean",
   );
   const [listPage, setListPage] = useState(1);
+  const resetListPage = useCallback(() => setListPage(1), []);
   const [showAllCompletedBoard, setShowAllCompletedBoard] = useState(false);
   const [sortBy, setSortBy] = usePersistentState<TaskViewSort>(
     "task:list-sort",
@@ -213,9 +214,6 @@ export function TasksPageContent() {
   const pageCount = Math.max(1, Math.ceil(listTasks.length / pageSize));
   const currentPage = Math.min(listPage, pageCount);
   const pagedListTasks = listTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  useEffect(() => {
-    setListPage(1);
-  }, [filters, groupFilter, sortBy, sortDirection, listDisplay, groupByGroup]);
   const waveSummaries = useMemo(
     () =>
       allGroups
@@ -333,7 +331,10 @@ export function TasksPageContent() {
         <CustomSelect
           label="Sort tasks"
           value={sortBy}
-          onValueChange={(value) => setSortBy(value as TaskViewSort)}
+          onValueChange={(value) => {
+            setSortBy(value as TaskViewSort);
+            resetListPage();
+          }}
           className="task-sort-select"
           options={[
             { value: "recent", label: "Recently completed / updated" },
@@ -349,9 +350,10 @@ export function TasksPageContent() {
           className="task-sort-direction"
           aria-label={`Sort ${sortDirection}`}
           title={`Sort ${sortDirection}`}
-          onClick={() =>
-            setSortDirection(sortDirection === "ascending" ? "descending" : "ascending")
-          }
+          onClick={() => {
+            setSortDirection(sortDirection === "ascending" ? "descending" : "ascending");
+            resetListPage();
+          }}
         >
           {sortDirection === "ascending" ? (
             <ArrowUp className="size-4" aria-hidden="true" />
@@ -365,10 +367,12 @@ export function TasksPageContent() {
   function sortFromTable(column: TaskViewSort): void {
     if (sortBy === column) {
       setSortDirection(sortDirection === "ascending" ? "descending" : "ascending");
+      resetListPage();
       return;
     }
     setSortBy(column);
     setSortDirection(column === "recent" || column === "due" ? "descending" : "ascending");
+    resetListPage();
   }
 
   function renderListRow(task: (typeof listTasks)[number]) {
@@ -601,6 +605,7 @@ export function TasksPageContent() {
                     else {
                       setTaskView("List");
                       setListDisplay(view.toLowerCase() as ListDisplay);
+                      resetListPage();
                     }
                   }}
                 >
@@ -650,16 +655,25 @@ export function TasksPageContent() {
           <>
             <TaskFilterBar
               filters={filters}
-              onFilters={setFilters}
+              onFilters={(nextFilters) => {
+                setFilters(nextFilters);
+                resetListPage();
+              }}
               views={views}
               onViews={setViews}
               assignees={assignees}
               tags={labelNames}
               groups={allGroups.filter((group) => !group.archived)}
               groupId={groupFilter}
-              onGroup={setGroupFilter}
+              onGroup={(nextGroup) => {
+                setGroupFilter(nextGroup);
+                resetListPage();
+              }}
               archived={taskFilter === "archived"}
-              onArchived={(archived) => setTaskFilter(archived ? "archived" : null)}
+              onArchived={(archived) => {
+                setTaskFilter(archived ? "archived" : null);
+                resetListPage();
+              }}
               selecting={selecting}
               onSelecting={(next) => {
                 setSelecting(next);
@@ -667,7 +681,10 @@ export function TasksPageContent() {
               }}
               matching={filtered.length}
               organizeByWave={groupByGroup}
-              onOrganizeByWave={setGroupByGroup}
+              onOrganizeByWave={(nextGrouping) => {
+                setGroupByGroup(nextGrouping);
+                resetListPage();
+              }}
               viewControls={viewControls}
             />
             {taskView === "List" && taskFilter !== "archived" && waveSummaries.length > 0 && (
@@ -677,7 +694,10 @@ export function TasksPageContent() {
                     type="button"
                     key={wave.id}
                     className={groupFilter === wave.id ? "on" : ""}
-                    onClick={() => setGroupFilter(groupFilter === wave.id ? "" : wave.id)}
+                    onClick={() => {
+                      setGroupFilter(groupFilter === wave.id ? "" : wave.id);
+                      resetListPage();
+                    }}
                   >
                     <span>
                       <b>{wave.name}</b>
@@ -846,43 +866,39 @@ export function TasksPageContent() {
               );
             })}
           </div>
-        ) : (
-          <>
-            {listTasks.length > 0 ? (
-              <div className="task-paginated-view">
-                {renderListPresentation(pagedListTasks)}
-                {pageCount > 1 && (
-                  <nav className="task-pagination" aria-label="Task pages">
-                    <span>
-                      {(currentPage - 1) * pageSize + 1}–
-                      {Math.min(currentPage * pageSize, listTasks.length)} of {listTasks.length}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={currentPage === 1}
-                      onClick={() => goToListPage(currentPage - 1)}
-                    >
-                      Previous
-                    </button>
-                    <b>
-                      Page {currentPage} of {pageCount}
-                    </b>
-                    <button
-                      type="button"
-                      disabled={currentPage === pageCount}
-                      onClick={() => goToListPage(currentPage + 1)}
-                    >
-                      Next
-                    </button>
-                  </nav>
-                )}
-              </div>
-            ) : (
-              <p className="sub" style={{ padding: 30, textAlign: "center" }}>
-                Nothing here yet.
-              </p>
+        ) : listTasks.length > 0 ? (
+          <div className="task-paginated-view">
+            {renderListPresentation(pagedListTasks)}
+            {pageCount > 1 && (
+              <nav className="task-pagination" aria-label="Task pages">
+                <span>
+                  {(currentPage - 1) * pageSize + 1}–
+                  {Math.min(currentPage * pageSize, listTasks.length)} of {listTasks.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => goToListPage(currentPage - 1)}
+                >
+                  Previous
+                </button>
+                <b>
+                  Page {currentPage} of {pageCount}
+                </b>
+                <button
+                  type="button"
+                  disabled={currentPage === pageCount}
+                  onClick={() => goToListPage(currentPage + 1)}
+                >
+                  Next
+                </button>
+              </nav>
             )}
-          </>
+          </div>
+        ) : (
+          <p className="sub" style={{ padding: 30, textAlign: "center" }}>
+            Nothing here yet.
+          </p>
         )}
       </div>
       <TaskSheet />
