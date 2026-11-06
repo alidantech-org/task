@@ -9,7 +9,11 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"],
-    "paths": { "#/*": ["./src/*"] }
+    "paths": {
+      "#/*": ["./src/*"],
+      "@task/workspace": ["../../packages/workspace/src/index.ts"],
+      "@task/workspace/*": ["../../packages/workspace/src/*.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }
