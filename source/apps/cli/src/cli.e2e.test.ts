@@ -455,6 +455,8 @@ describe("workspace-connected CLI", () => {
     root = await mkdtemp(join(tmpdir(), "task-cli-init-"));
     const project = join(root, "custom-project");
     await mkdir(project);
+    await Bun.write(join(project, "README.md"), "# My carefully written project README\n");
+    await Bun.write(join(project, "CLAUDE.md"), "# My Claude instructions\n");
     const initialized = await Bun.spawnSync(
       ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--workspace", ".tasks", "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
@@ -470,6 +472,10 @@ describe("workspace-connected CLI", () => {
     const agents = await Bun.file(join(project, "AGENTS.md")).text();
     expect(agents).toContain("<!-- BEGIN TASK MANAGED TASK-TOOL -->");
     expect(agents).toContain(".tasks/README.md");
+    expect(await Bun.file(join(project, "README.md")).text()).toBe(
+      "# My carefully written project README\n",
+    );
+    expect(await Bun.file(join(project, "CLAUDE.md")).text()).toBe("# My Claude instructions\n");
     const overview = await Bun.spawnSync(
       ["bun", "run", join(import.meta.dir, "index.ts"), "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
@@ -477,24 +483,44 @@ describe("workspace-connected CLI", () => {
     expect(overview.exitCode).toBe(0);
     expect(JSON.parse(overview.stdout.toString()).workspace).toBe(join(project, ".tasks"));
     const repeated = await Bun.spawnSync(
-      ["bun", "run", join(import.meta.dir, "index.ts"), "init"],
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
     );
-    expect(repeated.exitCode).toBe(1);
-    expect(repeated.stderr.toString()).toContain("already exists");
+    expect(repeated.exitCode).toBe(0);
+    expect(JSON.parse(repeated.stdout.toString())).toMatchObject({
+      action: "already-initialized",
+      updateCommand: "task init update",
+    });
     expect(await Bun.file(join(project, "task.yaml")).text()).toBe(config);
     await Bun.write(join(project, "AGENTS.md"), `# Mine\n\n${agents}\n\nKeep this.\n`);
+    const guidePath = join(project, ".tasks", "README.md");
+    const generatedGuide = await Bun.file(guidePath).text();
+    await Bun.write(
+      guidePath,
+      generatedGuide.replace("task init update", "task init --refresh-docs"),
+    );
     const refreshed = Bun.spawnSync(
-      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--refresh-docs", "--json"],
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "update", "--json"],
       { cwd: project, stdout: "pipe", stderr: "pipe" },
     );
     expect(refreshed.exitCode).toBe(0);
     const refreshedAgents = await Bun.file(join(project, "AGENTS.md")).text();
     expect(refreshedAgents.match(/BEGIN TASK MANAGED TASK-TOOL/g)).toHaveLength(1);
     expect(refreshedAgents).toContain("Keep this.");
-    expect(JSON.parse(refreshed.stdout.toString()).documentation.skipped).toContain(
-      join(project, ".tasks", "README.md"),
+    expect(JSON.parse(refreshed.stdout.toString()).documentation.written).toContain(guidePath);
+    expect(await Bun.file(guidePath).text()).toContain("task init update");
+    expect(await Bun.file(join(project, "README.md")).text()).toBe(
+      "# My carefully written project README\n",
     );
+    expect(await Bun.file(join(project, "CLAUDE.md")).text()).toBe("# My Claude instructions\n");
+    await Bun.write(guidePath, "My custom guide\n");
+    const kept = Bun.spawnSync(
+      ["bun", "run", join(import.meta.dir, "index.ts"), "init", "--refresh-docs", "--json"],
+      { cwd: project, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(kept.exitCode).toBe(0);
+    expect(JSON.parse(kept.stdout.toString()).documentation.skipped).toContain(guidePath);
+    expect(await Bun.file(guidePath).text()).toBe("My custom guide\n");
   });
 
   test("accepts the project root as an explicit workspace", async () => {

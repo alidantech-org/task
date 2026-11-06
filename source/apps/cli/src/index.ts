@@ -138,8 +138,9 @@ function printHelp(): void {
     "",
     "Commands:",
     "  (no command)           Workspace overview",
-    "  init [--workspace <path>]  Initialize this project for Task and document it for agents",
-    "  init --refresh-docs    Refresh the workspace guide and AGENTS.md block of an existing workspace",
+    "  init [--workspace <path>] Initialize this project for Task",
+    "  init update             Update Task's workspace guide and AGENTS.md instructions",
+    "  init --refresh-docs     Refresh Task docs without prompting",
     "  project inspect       Inspect repository and suggest guidance (read-only)",
     "  setup                 Review and apply project documentation and agent guidance",
     "  setup plan --json     Emit a reviewed setup plan without writing files",
@@ -438,16 +439,66 @@ async function main(): Promise<void> {
   if (args.options.has("version") || args.command === "version")
     return line(`task ${metadata.version}`);
   if (args.command === "init") {
-    const refreshDocs = args.options.has("refresh-docs");
+    const updateCommand = args.positionals[0] === "update";
+    if (args.positionals.length > 1 || (args.positionals.length === 1 && !updateCommand)) {
+      throw new WorkspaceError("invalid_input", "Usage: task init [update] [--workspace <path>]");
+    }
+    let refreshDocs = args.options.has("refresh-docs") || updateCommand;
+    let existingWorkspace: Awaited<ReturnType<typeof resolveWorkspace>> | undefined;
+    if (refreshDocs) {
+      existingWorkspace = await resolveWorkspace({
+        workspaceOverride: optionString(args, "workspace"),
+        environmentWorkspaceRoot: process.env.TASK_WORKSPACE_ROOT,
+      });
+    } else {
+      try {
+        const candidate = await resolveWorkspace({ cwd: process.cwd() });
+        if (candidate.source === "task-yaml") existingWorkspace = candidate;
+      } catch (error) {
+        if (!(error instanceof WorkspaceError) || error.code !== "workspace_not_found") throw error;
+      }
+    }
+    if (existingWorkspace && !refreshDocs) {
+      if (isInteractive() && !json) {
+        const action = await select({
+          message: `Task is already set up · ${existingWorkspace.root}`,
+          options: [
+            { value: "update", label: "Update Task documentation" },
+            { value: "keep", label: "Keep the current setup" },
+          ],
+        });
+        if (isCancel(action) || action === "keep") {
+          line("No changes made.", "requested");
+          return;
+        }
+        refreshDocs = true;
+      } else {
+        const result = {
+          workspace: existingWorkspace.root,
+          config: join(existingWorkspace.projectRoot, "task.yaml"),
+          createdWorkspace: false,
+          action: "already-initialized",
+          updateCommand: "task init update",
+        };
+        if (json) output(result);
+        else {
+          line(`Task is already set up · ${existingWorkspace.root}`, "requested");
+          line("  Update Task documentation with: task init update", "requested");
+        }
+        return;
+      }
+    }
     let projectRoot: string;
     let workspaceRoot: string;
     let createdWorkspace = false;
     let existingQuality: QualityConfig | undefined;
     if (refreshDocs) {
-      const existing = await resolveWorkspace({
-        workspaceOverride: optionString(args, "workspace"),
-        environmentWorkspaceRoot: process.env.TASK_WORKSPACE_ROOT,
-      });
+      const existing =
+        existingWorkspace ??
+        (await resolveWorkspace({
+          workspaceOverride: optionString(args, "workspace"),
+          environmentWorkspaceRoot: process.env.TASK_WORKSPACE_ROOT,
+        }));
       projectRoot = existing.projectRoot;
       workspaceRoot = existing.root;
       existingQuality = existing.config.quality;

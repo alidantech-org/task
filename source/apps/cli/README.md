@@ -18,6 +18,8 @@ task
 
 `task init` creates a workspace in the current project. `task` opens the interactive menu for creating and managing tasks.
 
+In an initialized project, `task init` offers to refresh Task's generated workspace guide and managed `AGENTS.md` instructions. Use `task init update` directly in scripts. The project-root README and custom workspace guides are left unchanged.
+
 ## Common commands
 
 ```sh
