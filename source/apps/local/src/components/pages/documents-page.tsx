@@ -2,12 +2,12 @@
 
 import { Button } from "@task/ui";
 import { ChevronRight, Folder, LayoutGrid, List, Plus, Rows3, X } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { CustomSelect } from "@/components/ui/select";
-import { usePersistentState } from "@/lib/persistent-state";
 import { directChildFolders, parentDocumentFolder } from "@/lib/markdown";
+import { usePersistentState } from "@/lib/persistent-state";
 
 type DocumentSearchHit = { id: string; snippet: string; type: string };
 type DocView = "list" | "table" | "grid";
@@ -81,7 +81,7 @@ function TagChips({
         </button>
       ))}
       {hidden.length > 0 && (
-        <details className="doc-tag-more" onClick={(event) => event.stopPropagation()}>
+        <details className="doc-tag-more">
           <summary>+{hidden.length} more</summary>
           <span className="doc-tag-menu">
             {hidden.map((name) => (
@@ -431,16 +431,13 @@ export function DocumentsPage() {
                 </h2>
               )}
               {group.documents.map((doc) => (
-                <div key={doc.id} onClick={() => openRecord(doc as never)} className="drow">
+                <div key={doc.id} className="drow">
                   <DocIcon />
                   <span className="dtext">
                     <button
                       type="button"
                       className="dopen"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openRecord(doc as never);
-                      }}
+                      onClick={() => openRecord(doc as never)}
                     >
                       <b>{doc.name}</b>
                     </button>

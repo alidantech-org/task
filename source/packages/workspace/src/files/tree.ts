@@ -1,7 +1,7 @@
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { WorkspaceError } from "@task/workspace/errors";
 import { shouldIgnoreDirectory } from "@task/workspace/discovery/ignore";
+import { WorkspaceError } from "@task/workspace/errors";
 import { languageForPath } from "@task/workspace/files/language";
 import { readProjectFile } from "@task/workspace/files/read";
 import { isDeniedPath } from "@task/workspace/git/deny";

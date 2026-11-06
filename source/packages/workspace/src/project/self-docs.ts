@@ -1,8 +1,12 @@
 import { lstat, open, readFile, realpath } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
-import { hashContent, parseFrontmatter, serializeMarkdown } from "#/indexing/metadata";
-import { replaceDocumentBody } from "#/operations/mutate";
+import {
+  hashContent,
+  parseFrontmatter,
+  serializeMarkdown,
+} from "@task/workspace/indexing/metadata";
 import type { QualityConfig } from "@task/workspace/indexing/types";
+import { replaceDocumentBody } from "@task/workspace/operations/mutate";
 import { resolveQuality } from "@task/workspace/operations/quality";
 import {
   applyProjectSetupPlan,
@@ -69,7 +73,10 @@ export async function writeSelfDocumentation(options: {
     }
     const extra = parsed?.values.extra;
     const generatedBy =
-      typeof extra === "object" && extra !== null && !Array.isArray(extra)
+      typeof extra === "object" &&
+      extra !== null &&
+      !Array.isArray(extra) &&
+      "generated_by" in extra
         ? extra.generated_by
         : undefined;
     if (

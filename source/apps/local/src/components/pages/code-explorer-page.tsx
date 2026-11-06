@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProjectSearchHit, ProjectTree } from "@task/workspace/files/tree";
 import {
   ChevronDown,
   ChevronRight,
@@ -9,16 +10,16 @@ import {
   FileDiff,
   Folder,
   FolderOpen,
+  GitBranch,
   Maximize2,
+  Map as Minimap,
   Minimize2,
   Minus,
   Pencil,
   Plus,
-  GitBranch,
+  Save,
   Search,
   WrapText,
-  Map as Minimap,
-  Save,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -26,7 +27,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { CustomSelect } from "@/components/ui/select";
 import { usePersistentState } from "@/lib/persistent-state";
-import type { ProjectSearchHit, ProjectTree } from "@task/workspace/files/tree";
 
 const CodeEditorPane = dynamic(
   () => import("@/components/code-editor-pane").then((module) => module.CodeEditorPane),
@@ -538,7 +538,12 @@ function CodeExplorer() {
             <>
               <nav className="code-file-breadcrumb" aria-label="File location">
                 {selectedPath.split("/").map((segment, index, all) => (
-                  <span key={`${index}-${segment}`}>
+                  <span
+                    key={selectedPath
+                      .split("/")
+                      .slice(0, index + 1)
+                      .join("/")}
+                  >
                     {segment}
                     {index < all.length - 1 ? <i>/</i> : null}
                   </span>
@@ -557,7 +562,7 @@ function CodeExplorer() {
                   </small>
                 </div>
                 <div className="code-file-actions">
-                  <div className="seg" role="group" aria-label="File display">
+                  <fieldset className="seg" aria-label="File display">
                     <button
                       type="button"
                       className={mode === "file" ? "on" : ""}
@@ -583,9 +588,9 @@ function CodeExplorer() {
                     >
                       <FileDiff /> Diff
                     </button>
-                  </div>
+                  </fieldset>
                   {mode === "diff" && (
-                    <div className="seg code-diff-layout" role="group" aria-label="Diff layout">
+                    <fieldset className="seg code-diff-layout" aria-label="Diff layout">
                       <button
                         type="button"
                         className={diffLayout === "side-by-side" ? "on" : ""}
@@ -602,10 +607,10 @@ function CodeExplorer() {
                       >
                         Inline
                       </button>
-                    </div>
+                    </fieldset>
                   )}
                   {mode === "file" ? (
-                    <div className="seg code-edit-mode" role="group" aria-label="Editor mode">
+                    <fieldset className="seg code-edit-mode" aria-label="Editor mode">
                       <button
                         type="button"
                         className={!editable ? "on" : ""}
@@ -633,7 +638,7 @@ function CodeExplorer() {
                       >
                         <Pencil /> Write
                       </button>
-                    </div>
+                    </fieldset>
                   ) : null}
                   {mode === "file" && editable ? (
                     <>
@@ -690,10 +695,7 @@ function CodeExplorer() {
                       >
                         <Minimap />
                       </button>
-                      <div
-                        className="code-font-size code-secondary-tool"
-                        aria-label={`Editor font size ${fontSize}px`}
-                      >
+                      <div className="code-font-size code-secondary-tool">
                         <button
                           type="button"
                           onClick={() => setFontSize((value) => Math.max(10, value - 1))}

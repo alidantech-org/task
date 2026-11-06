@@ -115,6 +115,8 @@ Audit dependency advisories:
 
     bun run audit
 
+The root dependency override keeps DOMPurify at `3.4.17` or later because Monaco 0.57.0 pins an older vulnerable release. Remove the override after Monaco updates its dependency.
+
 Run lint plus the automated test suite and dependency audit:
 
     bun run security

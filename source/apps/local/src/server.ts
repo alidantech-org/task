@@ -43,7 +43,6 @@ import {
   readDocumentChecklist,
   readProjectFile,
   readProjectFileOriginal,
-  searchProjectFiles,
   readWorkspaceIndex,
   removeAttachment,
   reorderTask,
@@ -54,6 +53,7 @@ import {
   restoreFromTrash,
   restoreTask,
   restoreTaskGroup,
+  searchProjectFiles,
   searchWorkspace,
   setDocumentChecklist,
   type TaskLink,
@@ -61,13 +61,13 @@ import {
   type TaskStatus,
   type TemplateDefaults,
   updateTask,
-  writeProjectFile,
   updateWorkspaceOrganization,
   validateWorkspace,
   WorkspaceError,
   type WorkspaceIndex,
   type WorkspaceWatcher,
   watchWorkspaceIndex,
+  writeProjectFile,
 } from "@task/workspace";
 import { parseFrontmatter } from "@task/workspace/indexing/metadata";
 

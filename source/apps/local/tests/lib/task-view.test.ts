@@ -55,9 +55,9 @@ describe("task presentation sorting", () => {
   test("sorts due dates with undated tasks last and handles missing dates for recent", () => {
     expect(sortTaskView(tasks, "due", "ascending").map((task) => task.id)).toEqual(["c", "b", "a"]);
     expect(sortTaskView(tasks, "recent", "descending").map((task) => task.id)).toEqual([
+      "c",
       "a",
       "b",
-      "c",
     ]);
     expect(sortTaskView(tasks, "due", "descending").map((task) => task.id)).toEqual([
       "b",

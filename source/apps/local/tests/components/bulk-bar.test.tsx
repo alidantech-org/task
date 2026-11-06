@@ -23,7 +23,7 @@ describe("BulkBar", () => {
     for (const label of [
       "Set status",
       "Set priority",
-      "Move to group",
+      "Move to wave",
       "Assign to",
       "Archive",
       "Delete",
@@ -38,6 +38,7 @@ describe("BulkBar", () => {
   test("disables actions with nothing selected or while working", () => {
     expect((render(0).match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(6);
     expect((render(3, true).match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect(render(5)).toContain("disabled");
+    expect(render(5)).not.toContain("disabled");
+    expect(render(5)).toContain("Clear task selection");
   });
 });

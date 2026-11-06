@@ -85,7 +85,7 @@ export function GroupsPage() {
           </p>
           <h1>Waves</h1>
         </div>
-        <div className="seg groups-display" role="group" aria-label="Wave presentation">
+        <fieldset className="seg groups-display" aria-label="Wave presentation">
           <button
             type="button"
             className={display === "cards" ? "on" : ""}
@@ -100,7 +100,7 @@ export function GroupsPage() {
           >
             <List aria-hidden="true" /> List
           </button>
-        </div>
+        </fieldset>
       </header>
 
       <div className="groups-toolbar">
@@ -113,7 +113,7 @@ export function GroupsPage() {
             aria-label="Search waves"
           />
         </label>
-        <div className="groups-filter" role="group" aria-label="Filter waves">
+        <fieldset className="groups-filter" aria-label="Filter waves">
           {(["all", "active", "complete", "empty"] as const).map((value) => (
             <button
               type="button"
@@ -128,7 +128,7 @@ export function GroupsPage() {
                   : value[0]?.toLocaleUpperCase() + value.slice(1)}
             </button>
           ))}
-        </div>
+        </fieldset>
         <CustomSelect
           label="Sort waves"
           value={sort}

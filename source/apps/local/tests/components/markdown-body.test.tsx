@@ -48,11 +48,12 @@ describe("MarkdownBody reference rendering", () => {
           workspacePrefix: "tasks",
           documents: [{ id: "DOC-9", path: "docs/guides/setup.md" }],
         }}
+        knownProjectPaths={[{ path: "source/app.ts" }]}
       />,
     );
     expect(markup).toContain('href="/documents/DOC-1"');
     expect(markup).toContain('href="/documents/DOC-9#install"');
-    expect(markup).toContain('href="/files?path=source%2Fapp.ts&amp;L=10-20"');
+    expect(markup).toContain('href="/code?path=source%2Fapp.ts&amp;L=10-20"');
     expect(markup).not.toContain("javascript:");
     expect(markup).not.toContain("etc%2Fpasswd");
     expect(markup).toContain('class="bad-link"');

@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { DocumentReaderPage } from "@/components/pages/document-reader-page";
 import { DocumentsPage } from "@/components/pages/documents-page";
-import { useWorkspaceApp } from "@/components/layout/app-layout";
 import { resolveDocumentRoute } from "@/lib/document-route";
 
 /** Displays a file at its workspace path or the folder browser at a directory path. */

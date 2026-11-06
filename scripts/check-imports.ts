@@ -18,8 +18,12 @@ async function visit(path: string): Promise<void> {
     // Next.js generates this declaration file and owns its relative type imports.
     if (entry.name === "next-env.d.ts") continue;
     const source = await readFile(fullPath, "utf8");
-    const pattern = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(["'])(\.\.?\/)[^"']+\1/g;
-    if (pattern.test(source)) violations.push(fullPath);
+    const pattern = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(["'])(\.\.?\/)([^"']+)\1/g;
+    const hasRelativeTypeScriptImport = [...source.matchAll(pattern)].some((match) => {
+      const modulePath = match[3] ?? "";
+      return !/\.(?:css|scss|sass|less)$/i.test(modulePath);
+    });
+    if (hasRelativeTypeScriptImport) violations.push(fullPath);
   }
 }
 

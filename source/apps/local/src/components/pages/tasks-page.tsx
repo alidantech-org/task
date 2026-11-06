@@ -309,7 +309,7 @@ export function TasksPageContent() {
   const viewControls =
     taskView === "Board" && taskFilter !== "archived" ? (
       <div className="task-presentation-controls board-presentation-controls">
-        <div className="seg board-card-controls" role="group" aria-label="Board card detail">
+        <fieldset className="seg board-card-controls" aria-label="Board card detail">
           {[
             { value: "detailed" as const, label: "Detailed", Icon: Columns3 },
             { value: "compact" as const, label: "Compact", Icon: List },
@@ -326,7 +326,7 @@ export function TasksPageContent() {
               {label}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
     ) : taskView === "List" || taskFilter === "archived" ? (
       <div className="task-presentation-controls list-presentation-controls">
@@ -391,6 +391,7 @@ export function TasksPageContent() {
         ) : (
           <span
             className={`task-row-status s-${task.status ?? "planned"}`}
+            role="img"
             aria-label={labels[task.status ?? "planned"]}
           >
             {task.status === "completed" ? (

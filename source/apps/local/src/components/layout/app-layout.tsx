@@ -1,15 +1,15 @@
 "use client";
 
 import { PointerActivationConstraints } from "@dnd-kit/dom";
-import { DragDropProvider, KeyboardSensor, PointerSensor, type DragEndEvent } from "@dnd-kit/react";
+import { DragDropProvider, type DragEndEvent, KeyboardSensor, PointerSensor } from "@dnd-kit/react";
 import { isSortable } from "@dnd-kit/react/sortable";
 import { Button, Input } from "@task/ui";
 import { Command as CommandMenu } from "cmdk";
 import {
   AlertTriangle,
   Calendar,
-  Code2,
   type CircleDot,
+  Code2,
   File,
   Folder as FolderIcon,
   LayoutGrid,
@@ -1875,10 +1875,10 @@ export function App({
                       <code className="cli live-command">task move TASK-17 in-progress</code>
                       <div className="live-history" aria-live="polite">
                         {liveChanges.length ? (
-                          liveChanges.map((change, index) => (
+                          liveChanges.map((change) => (
                             <div
                               className="live-change"
-                              key={`${change.changedAt}:${change.id}:${index}`}
+                              key={`${change.changedAt}:${change.id}:${change.source}:${change.summary}`}
                             >
                               <span className="source-badge">{change.source}</span>
                               <span className="live-change-summary">{change.summary}</span>

@@ -2301,11 +2301,11 @@ button.more:hover {
   padding: 0;
   color: var(--pn);
 }
-.bulk-bar > .bulk-select-all[aria-checked="true"],
-.bulk-bar > .bulk-select-all[aria-checked="mixed"] {
+.bulk-bar > .bulk-select-all[aria-pressed="true"] {
   border-color: var(--acc);
   background: var(--acc);
 }
+.bulk-count { color: var(--mut); font-size: 12px; font-weight: 600; }
 .bulk-select-all svg { width: 11px; height: 11px; stroke-width: 3; }
 .bulk-bar :disabled {
   opacity: 0.45;
@@ -2592,7 +2592,7 @@ button.more:hover {
 .docs-bar > .custom-select { width: 156px; }
 .docs-list { display: grid; gap: 6px; }
 .docs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-.drow { display: flex; align-items: center; gap: 12px; height: 62px; padding: 0 14px; border: 1px solid var(--ln); border-radius: 12px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; overflow: visible; }
+.drow { position: relative; display: flex; align-items: center; gap: 12px; height: 62px; padding: 0 14px; border: 1px solid var(--ln); border-radius: 12px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; overflow: visible; }
 .drow:hover { background: var(--soft); }
 .folder-row { border-style: dashed; }
 .docs-folder-icon { width: 26px; height: 26px; flex: none; color: var(--acc); }
@@ -2609,6 +2609,8 @@ button.more:hover {
 .docs-grid .dchip.tag { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
 .dtext { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .dopen { display: block; width: 100%; min-width: 0; overflow: hidden; border: 0; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.dopen::after { position: absolute; inset: 0; content: ""; }
+.dline { position: relative; z-index: 1; }
 .dtext b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
 .dline { display: flex; align-items: center; gap: 8px; min-width: 0; height: 20px; overflow: visible; }
 .dpath { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 6px; background: var(--soft); color: var(--mut); font: 11px/16px ui-monospace, Menlo, monospace; }
@@ -2817,6 +2819,12 @@ button.more:hover {
   border-radius: 9px;
   background: var(--pn);
   padding: 3px;
+}
+fieldset.seg,
+fieldset.groups-filter {
+  min-width: 0;
+  margin: 0;
+  border: 0;
 }
 .groups-filter button {
   min-height: 26px;

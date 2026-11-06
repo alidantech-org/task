@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@task/ui";
+import type { ProjectTree } from "@task/workspace/files/tree";
 import { resolveLink } from "@task/workspace/links/resolve";
 import { ArrowLeft, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -14,7 +15,6 @@ import { detailRows } from "@/lib/document-details";
 import { restartSectionEntrance } from "@/lib/entrance";
 import { buildLinkContext, internalHref } from "@/lib/link-context";
 import { extractLinks, headingEntries, toggleMarkdownCheckbox } from "@/lib/markdown";
-import type { ProjectTree } from "@task/workspace/files/tree";
 
 type LinkedSearchResult = { id: string };
 

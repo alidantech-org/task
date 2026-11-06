@@ -4,7 +4,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/react";
 import { ChevronLeft, PanelRight, PanelRightOpen, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type CalendarTask } from "@/components/board-task";
+import type { CalendarTask } from "@/components/board-task";
 import { DaySheet, WeekSheet } from "@/components/schedule-sheets";
 import { dateKey, monthGrid, weekGrid } from "@/lib/calendar";
 import { restartSectionEntrance } from "@/lib/entrance";

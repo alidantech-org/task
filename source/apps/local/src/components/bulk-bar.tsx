@@ -36,8 +36,7 @@ export function BulkBar({
       <button
         type="button"
         className="bulk-select-all"
-        role="checkbox"
-        aria-checked={count === total ? true : count > 0 ? "mixed" : false}
+        aria-pressed={count > 0}
         aria-label={count === total ? "Clear task selection" : `Select all ${total} tasks`}
         title={count === total ? "Clear selection" : `Select all ${total} tasks`}
         onClick={count === total ? onClearSelection : onSelectAll}
@@ -48,6 +47,7 @@ export function BulkBar({
           <Minus aria-hidden="true" />
         ) : null}
       </button>
+      <span className="bulk-count">{count} selected</span>
       <CustomSelect
         label="Set status"
         value=""

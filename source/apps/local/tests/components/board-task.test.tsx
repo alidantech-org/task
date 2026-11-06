@@ -52,10 +52,10 @@ describe("BoardTask", () => {
     expect(markup).not.toContain("Release group");
   });
 
-  test("falls back to project then Ungrouped and hides the bar without checklist items", () => {
+  test("falls back to project then No wave and hides the bar without checklist items", () => {
     expect(render({ groupName: undefined, project: "Website" })).toContain("Website");
     const bare = render({ groupName: undefined, checklist: undefined });
-    expect(bare).toContain("Ungrouped");
+    expect(bare).toContain("No wave");
     expect(bare).not.toContain("progressbar");
   });
 
@@ -70,7 +70,7 @@ describe("BoardTask", () => {
         />
       </DragDropProvider>,
     );
-    expect(markup).toContain('class="card-check on"');
+    expect(markup).toContain('class="card-check task-selection-check on"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("is-picked");
     expect(markup).not.toContain("card-open");

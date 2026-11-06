@@ -103,7 +103,7 @@ describe("task sheet tabs", () => {
       "Assignee",
       "Estimate",
       "Start date",
-      "Group",
+      "Wave",
       "Parent task",
       "Repeat",
       "Labels",

@@ -25,7 +25,8 @@ describe("local dashboard", () => {
     );
     expect(markup).toContain("Search or jump to…");
     expect(markup).toContain("Route content");
-    expect(markup).not.toContain("Live");
+    expect(markup).toContain("Live");
+    expect(markup).toContain("Connected");
     expect(markup).toContain('data-slot="task-app-shell"');
     expect(markup).toContain('data-slot="main-toolbar"');
     expect(markup).toContain('aria-label="Workspace navigation"');
